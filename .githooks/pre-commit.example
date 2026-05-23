@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# =============================================================================
+# .githooks/pre-commit.example — opt-in local pre-commit hook.
+#
+# Husky is intentionally NOT installed (too much friction across IDEs / Tauri
+# desktop builds). To enable this hook locally:
+#
+#   cp .githooks/pre-commit.example .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Or wire `git config core.hooksPath .githooks` (note: that path is shared
+# across all hooks; only do this if you understand the implications).
+# =============================================================================
+
+set -e
+
+echo "[pre-commit] eslint --cache"
+pnpm lint --cache
+
+echo "[pre-commit] sync-config ↔ RLS coherence"
+pnpm lint:rules
+
+echo "[pre-commit] OK"

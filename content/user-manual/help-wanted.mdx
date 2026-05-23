@@ -1,0 +1,148 @@
+---
+title: "Help Wanted"
+slug: "help-wanted"
+section: "per-page"
+lastReviewed: "2026-04-22"
+---
+
+# Help Wanted
+
+The hiring tenant's view of HotSeatHub. Post subcontractor needs to the marketplace, review incoming applications, accept or decline proposals, manage favorites, and track the full lifecycle of postings from open through filled or cancelled. This is the "post" side of the HSH marketplace.
+
+## Visibility and access
+
+- Renders only when `tenant_firms.marketplace_post_jobs = true`.
+- Visible to all tenant roles when enabled.
+- HSH-themed background with the orbit header treatment.
+
+## Header and controls
+
+- **Title:** "Help Wanted" with HSH primary accent.
+- **Search:** filters the tenant's own postings by service name, description, location, or case name.
+- **View toggle:** Kanban, Card, List — persisted to `user_profiles.preferences.help_wanted_view_type`.
+
+## Favorites banner
+
+When the tenant has `favorite_subcontractors` rows, a banner renders below the search bar:
+
+- Star icon plus "Your Favorite Subcontractors" heading.
+- Badge pills for each favorited tenant name and individual consultant name.
+- Favorites are added from the application-review workflow (see Favoriting below), not from this banner.
+
+## Data loading
+
+- **myPostings** — all `hsh_postings` for the current tenant, enriched with `billing_rate` (from the matching `trial_services` row), daily-minimum hours (from `trials`), case name, and `pipeline_stage_id`. Sorted by `created_at` descending.
+- **receivedApplications** — all `hsh_applications` for the tenant's postings, enriched with subcontractor tenant name, consultant name, posting details, service details, trial details, and daily-minimum hours. Live via Supabase Realtime.
+- **allTrialServices** — `trial_services` for the tenant, enriched with trial data, service data, assignment status (count and `is_assigned`), whether the service is already on HSH, and daily-minimum info. Used by the unassigned-services lists.
+- **favorites / favoriteTenants / favoriteUsers** — `favorite_subcontractors` resolved to tenant and user-profile rows for display.
+- **timeEntriesByPosting** — map of `trial_id` + `service_id` → boolean, used to decide whether a cancelled posting can be permanently deleted (blocked when any linked `time_entries` exist).
+
+## Three kanban columns plus cancelled
+
+Postings are grouped by `hsh_postings.status`. Each column uses the shared postings kanban/card/list components.
+
+### Column 1: Open Postings
+
+Postings with `status = 'open'` — actively published and accepting applications.
+
+- **Posting card:**
+  - Header: case name with deal or trial icon, pipeline-stage badge, and a visibility badge ("Public" green globe or "Private" amber lock with invited count).
+  - Body: service name (HSH accent), daily-minimum badge when applicable, description, and the metadata row (dates, location, estimated rate with type, daily-minimum calculation, application count).
+  - **Cancel** button opens a confirmation dialog → sets `status = 'cancelled'`, fires `createHSHNotifications` with `type = posting_cancelled` to notify invited subcontractors.
+- **Application sub-cards (nested per received `hsh_applications` row):**
+  - HSH-tinted wrapper with accent border.
+  - Respondent: tenant name, consultant name, proposed rate (green when matching, amber when counter-offer).
+  - Status badge: "Pending (Agreed)" or "Pending (Counter)".
+  - Message text when present.
+  - Rate comparison: estimated vs. proposed side-by-side; daily-minimum calculation for hourly services with minimums.
+  - Favorite indicator: star icon (filled when tenant or consultant already favorited) opens the favorite-choice dialog.
+  - **Action buttons:**
+    - **Accept** (green) opens the accept-confirmation modal with two paths:
+      - **Accept & Close Posting** — accepts the application and sets the posting to `filled`. All other pending applications on that posting move to `status = 'lost'`. Calls the `acceptHSHApplication` Edge Function, which writes the `hsh_contracts` row.
+      - **Accept & Keep Open** — accepts the application but leaves `status = 'open'` so additional subcontractors can be hired for the same service need. Other pending applications stay pending.
+    - **Decline** (red outline) — sets the application to `status = 'declined'`. If the subcontractor's notification preference allows it, a decline notification is sent.
+
+### Column 2: Filled Postings
+
+Postings with `status = 'filled'` — a subcontractor was accepted and the posting was closed.
+
+- Same posting card layout as Open.
+- Accepted application sub-card shows the green "Accepted" badge, tenant, consultant, and agreed rate.
+- Other applications marked `lost` render dimmed with a gray "Lost" badge.
+- No action buttons on the posting itself.
+
+### Cancelled Postings
+
+Postings with `status = 'cancelled'`. Rendered as a collapsible section in list view or a column in kanban view, at 60% opacity.
+
+- Same card layout, dimmed.
+- **Delete** button permanently deletes the posting via the `deleteHSHPosting` Edge Function. Blocked when linked `time_entries` exist. The function cascades deletion of related `hsh_applications` and `hsh_contracts`.
+- Cancelled date is surfaced.
+
+## Accept confirmation modal
+
+Opens when clicking **Accept** on an application sub-card. Shows the posting and application details with two actions:
+
+- **Accept & Close Posting** — calls `useAcceptHSHApplication.mutateAsync({ id, status: 'accepted', postingId, closePosting: true })`. The `acceptHSHApplication` Edge Function:
+  - Sets the application status to `accepted`.
+  - Inserts an `hsh_contracts` row (`hiring_tenant_id`, `subcontractor_tenant_id`, `trial_id`, `trial_service_id`, `consultant_id`, `agreed_rate`, etc.).
+  - Inserts an `assignments` row linking the consultant to the `trial_services` row.
+  - Sets the `hsh_postings` row to `filled`.
+  - Sets all other pending applications for that posting to `lost`.
+  - Sends notifications to the accepted subcontractor and each "lost" respondent via Resend.
+- **Accept & Keep Open** — same flow except the posting remains `open` and other pending applications are not moved to `lost`.
+
+## Favoriting workflow
+
+While reviewing applications, clicking the star on a sub-card opens the favorite-choice dialog:
+
+- **Tenant only** — inserts `favorite_subcontractors` with `favorite_tenant_id` set.
+- **Individual only** — inserts `favorite_subcontractors` with `favorite_user_id` set.
+- **Both** — inserts two `favorite_subcontractors` rows.
+- Duplicates are prevented; the star renders filled when already favorited.
+- Favorites populate the banner at the top of Help Wanted and on the Favorites page, and power the invited-party quick-pick when posting private jobs.
+
+## Unassigned services lists (owner only)
+
+Below the columns, when the current user is a tenant owner, two side-by-side unassigned-services lists appear:
+
+- **Left — Unassigned Trial Services:** `trial_services` where `assignment_count = 0`, not subcontracted, pipeline-stage type is `operations`, and the trial is not completed/settled/lost. Sorted by start date ascending. Clicking a service opens the service-assignment modal (internal assignment or post to HSH).
+- **Right — Unassigned Deal Services:** same as above but filtered to pipeline-stage type `sales`. Enables proactive sourcing before the deal closes.
+
+Each row shows the case name, service name, dates, rate, assignment status, and whether the service is already on HSH ("On HSH" badge).
+
+## Post to HotSeatHub dialog
+
+Triggered from:
+
+- The service-assignment modal's **Post to HotSeatHub** action.
+- The unassigned-services list item actions.
+
+The `useCreateHSHPosting` hook writes an `hsh_postings` row with `tenant_id`, `trial_id`, `service_id`, `service_name`, `start_date`, `end_date`, `description`, `estimated_rate`, `location` (from trial city/state), `is_public`, `invited_tenant_ids`, `invited_user_ids`, and `posted_by_user_id`. The hook also fires `createHSHNotifications` and `notifyMarketplace` Edge Functions.
+
+## Cancel and delete rules
+
+- **Cancel (open → cancelled):** available on any open posting. Confirmation dialog. Sets `status = 'cancelled'` and `cancelled_at`. Sends cancellation notifications to invited users. Does not delete the posting or its applications.
+- **Delete (cancelled → permanent):** only available on cancelled postings. **Blocked** when any `time_entries` exist for the posting's trial + service. When allowed, the `deleteHSHPosting` Edge Function cascades deletion of the posting's `hsh_applications`, related `hsh_contracts`, linked `assignments`, and finally the `hsh_postings` row itself.
+
+## End-to-end HSH workflow
+
+1. An owner sees an unassigned service and opens the service-assignment modal.
+2. Owner posts to HotSeatHub — an `hsh_postings` row is created (`status = open`) and appears on Help Wanted under Open, and on other tenants' Potential Gigs under New Opportunities.
+3. A subcontractor responds from Potential Gigs — an `hsh_applications` row is created and surfaces as a sub-card on Help Wanted.
+4. Owner reviews applications and accepts (confirmation modal) or declines each.
+5. On accept, `hsh_contracts` and `assignments` rows are created and the consultant is linked to the service. "Close Posting" moves the posting to Filled and other applications to Lost; "Keep Open" leaves the posting open for additional hires.
+6. The subcontractor's consultant logs time in their tenant. Time entries mirror into the hiring tenant automatically via the `hshSyncTimeEntry` Edge Function, linked by `entry_group_id` and `hsh_contract_id`.
+7. The hiring tenant invoices the end client with the subcontractor's time. The subcontractor invoices the hiring tenant via HSH invoices (`is_hsh_invoice = true`).
+
+## Related
+
+- [Potential Gigs](/user-manual/potential-gigs)
+- [Favorites](/user-manual/favorites)
+- [Backend Functions](/user-manual/backend-functions)
+- [Notification System](/user-manual/notification-system)
+- [Trials](/user-manual/trials)
+
+## Download this document
+
+Download as markdown: [`/user-manual/help-wanted/download.md`](/user-manual/help-wanted/download.md).

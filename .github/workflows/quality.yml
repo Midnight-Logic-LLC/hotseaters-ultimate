@@ -1,0 +1,138 @@
+# =============================================================================
+# .github/workflows/quality.yml — Code quality gates for hotseaters-ultimate.
+#
+# Enforces:
+#   - RULE 3 (arch invariants) via `eslint-plugin-boundaries`
+#   - RULE 5 (sync ↔ RLS coherence) via the custom `hotseaters/...` rules
+#   - Bundle budgets (size-limit)
+#   - Lighthouse (opt-in via PR label `lh`)
+#   - DB drift check against the self-hosted Supabase stack
+#   - User-manual MDX validation
+#
+# Self-hosted Supabase only — db:diff targets `${{ secrets.SUPABASE_DB_URL }}`,
+# which MUST point at the docker-compose dev stack or
+# `hotbase.prometheusags.ai`. Never `*.supabase.co`.
+# =============================================================================
+
+name: quality
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'eslint-rules/**'
+      - 'eslint.config.js'
+      - 'size-limit.config.cjs'
+      - '.lighthouserc.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'supabase/migrations/**'
+      - '../latest-data/supabase/migrations/**'
+      - 'content/user-manual/**'
+      - '.github/workflows/quality.yml'
+
+jobs:
+  lint-and-typecheck:
+    name: lint + typecheck + custom rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: typecheck
+        run: pnpm typecheck
+
+      - name: eslint (boundaries + custom rules)
+        run: pnpm lint
+
+      - name: sync-config ↔ RLS coherence smoke test
+        run: pnpm lint:rules
+
+  size:
+    name: bundle size budget
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm size
+
+  lighthouse:
+    name: lighthouse (opt-in via `lh` label)
+    if: contains(github.event.pull_request.labels.*.name, 'lh')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: lighthouse autorun
+        run: pnpm lh
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+  db-drift:
+    name: db drift check (self-hosted Supabase)
+    if: contains(join(github.event.pull_request.changed_files.*.filename, ' '), 'supabase/migrations')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: db diff against self-hosted stack
+        env:
+          # SUPABASE_DB_URL MUST point at the self-hosted instance:
+          # postgresql://postgres:...@hotbase.prometheusags.ai:5432/postgres
+          # or the docker-compose dev URL. NEVER *.supabase.co.
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [[ "$SUPABASE_DB_URL" == *".supabase.co"* ]]; then
+            echo "::error::SUPABASE_DB_URL points at Supabase Cloud. RULE 1 violation."
+            exit 1
+          fi
+          supabase db diff --db-url "$SUPABASE_DB_URL" --schema public > /tmp/diff.sql || true
+          if [ -s /tmp/diff.sql ]; then
+            echo "::warning::Schema drift detected. Review the diff:"
+            cat /tmp/diff.sql
+          fi
+
+  manual-validate:
+    name: user-manual validate
+    if: contains(join(github.event.pull_request.changed_files.*.filename, ' '), 'content/user-manual')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm manual:validate

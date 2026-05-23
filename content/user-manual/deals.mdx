@@ -1,0 +1,162 @@
+---
+title: "Deals"
+slug: "deals"
+section: "per-page"
+lastReviewed: "2026-04-22"
+---
+
+# Deals
+
+The Deals page displays the sales pipeline for managing deal flow. It renders the same pipeline component in "deals" mode that the Trials page uses in "trials" mode.
+
+## Overall Function
+
+Shows all `deals` / `trials` in sales pipeline stages. Excludes items that have been moved to operations stages or completed (lost/settled). Provides Kanban, List, and Card views. Supports opening a specific deal via `?trialId=...` URL parameter. All queries filter by `tenant_id`.
+
+## Header Controls
+
+- **Add Deal button** — Opens the Deal Wizard to create a new deal. Requires selecting a client firm, then entering case details, services, and dates.
+- **View Toggle (Kanban / Card / List)** — Switches between three layouts. Preference is saved to user preferences as `pipelineDealsViewType`.
+- **Completed toggle** — Shows/hides deals with a `completion_type` (won, lost, settled). When enabled, displays a separate completed items list below the main view.
+
+## Kanban View
+
+Columns represent `deal_stages` rows for the sales pipeline (sorted by stage order). Each deal card is draggable between columns via @dnd-kit. Dropping a card updates the trial's `pipeline_stage_id`. Cards show case name, client firm, estimated value, start date, and consultant badge.
+
+## Card View
+
+Grid of trial cards grouped by pipeline stage with collapsible section headers. Each card shows the same info as Kanban cards but in a grid layout.
+
+## List View
+
+Table rows grouped by pipeline stage. Each row shows case name, client firm, city/state, start date, estimated value, and pipeline stage badge. Clicking a row opens the Trial Details panel.
+
+## Trial Details Panel (shared)
+
+When a deal/trial is selected, a full detail panel opens with tabs for case info, services, contacts, documents, and completion actions. This panel is shared between Deals and Trials pages. Key features:
+
+- Edit case details (case name, style, number, courthouse, judge, side, dates, estimated value, retainer)
+- Service selector to add/remove services with rate calculations
+- Service assignment modal (assign consultants, post to HotSeatHub)
+- Contact management (primary contact + secondary contacts)
+- Document generation and sending (LOE, engagement letters) via DocuSeal and Resend
+- Completion actions: Win Deal (generates job number, moves to operations), Lose Deal, Settle
+- FRP (Financially Responsible Party) fields for billing to a different entity
+
+## Deal Wizard
+
+A 4-step wizard for creating new deals or editing existing deals/trials. Used in both "deal" and "trial" edit modes. The header shows a progress stepper with clickable steps (when editing). Each step has Next/Back navigation and validation gates.
+
+### Step 1: Client & Contact
+
+Three-column layout: Sales Lead, Client & Contacts, and Financially Responsible Party.
+
+- **Sales Lead selector** — Required. Dropdown of `owner`/`admin`/`sales` role consultants. Sales-role users only see themselves. Auto-defaults to the current user for sales roles.
+- **Client selector** — Required. Filters `client_firms` to those assigned to the selected sales lead. Disabled until a sales lead is selected. "New Client" button opens an inline form (firm name + client type) to create a client on the fly.
+- **Primary Contact selector** — Required. Shows `contacts` records for the selected client firm. "New Contact" button opens inline form (first name, last name, email). Disabled until client is selected.
+- **Secondary Contacts (optional)** — Checkbox list of remaining contacts for the client firm (excludes the primary). Creates trial-contact links for each selected secondary.
+- **Financially Responsible Party (optional)** — Checkbox to enable. When enabled, shows FRP Client selector (filtered to FRP client type) and FRP Contact selector. Supports inline "New FRP Client" and "New FRP Contact" creation. Stores `frp_client_id` and `frp_contact_id` on the `trials` row for separate billing.
+- **Validation** — Cannot proceed unless sales lead, client, and primary contact are selected. If FRP is enabled, both FRP client and FRP contact are also required.
+
+### Step 2: Case Details
+
+Three-column layout: Case Information, Trial Details, and Venue & Court.
+
+- **Case Name** — Required. Auto-syncs to Case Style if the user hasn't manually changed case style.
+- **Our Side** — Plaintiff / Defense / Unknown dropdown.
+- **Case Type** — Dropdown with 15 common legal case types (Personal Injury, Medical Malpractice, Commercial Litigation, etc.).
+- **Trial Date Range** — Required. Dual calendar picker with "Start Date" and "End Date" toggle tabs. Clicking start auto-advances to end picker. Disables past dates for new deals (but allows past dates for existing operations-stage trials).
+- **Case Style** — Free text (e.g., "John Smith, et al. v. Bob Jones LLC").
+- **Cause Number** — Free text case number.
+- **City / State** — City text input + State dropdown (all US states + DC).
+- **Courthouse** — AI-powered dropdown. After entering city/state, "Load Courthouses" button triggers a Supabase Edge Function with web search to find real courthouses. Dropdown shows AI suggestions + custom entry option. Selecting a courthouse auto-triggers court loading.
+- **Court Number** — AI-powered dropdown loaded after courthouse selection. Shows courtroom numbers/divisions with custom entry option. Selecting a court auto-triggers judge loading.
+- **Judge** — AI-powered dropdown loaded after court selection. Shows judges who preside in that court with custom entry option.
+- **Validation** — Cannot proceed unless case name, start date, and end date are provided.
+
+### Step 3: Pre-Trial Services
+
+Two-column layout: Available Services (left) and Selected Pre-Trial Cart (right).
+
+- **Available Services column** — Shows active `service_types` grouped by service category (collapsible). Filters to services with `service_availability` of `pre_trial_only` or `both`. Click + to add to the cart. Shows base rate and client-adjusted rate.
+- **Selected Cart** — Drag-and-drop reorderable (sets `display_order`). Each added service shows:
+  - Service name with optional "Split Billing" badge
+  - Custom description textarea
+  - Assigned consultants display (if editing existing deal with assignments)
+  - "Begin work X days before trial" — lead days input that calculates the start date
+  - Hours quantity × rate = total calculation
+  - Rate override button — opens dialog to set a custom rate for this specific deal. Shows warning if a signed/sent contract exists.
+  - Team assign button — opens Service Assignment Modal (only for saved services with database IDs)
+  - Remove button
+- **Rate Calculation Priority**
+  1. Deal-level override (overriddenRates)
+  2. Client-specific service override (`client_service_rates`)
+  3. Base rate × client type multiplier
+- **Split Billing Preview** — If a service is split-billed (spans pre-trial and in-trial), the pre-trial cart shows the hourly portion with a grayed-out preview of the in-trial daily minimum portion below it.
+- **Pre-Trial Subtotal** — Running total of all pre-trial service costs.
+- **Validation** — Optional step (can proceed with zero services).
+
+### Step 4: In-Trial Services
+
+Two-column layout: Available Services (left) and Selected In-Trial Cart + Summary (right).
+
+- **Available Services column** — Filters to services with `has_daily_minimum = true` or `service_availability` of `in_trial_only` or `both`. Split-billed services from Step 3 also appear here.
+- **Selected Cart** — Drag-and-drop reorderable. Each service shows:
+  - For daily minimum services: Arrival Date picker + calculation (days × daily min hours × rate/hour = total). Arrival date defaults to trial start but can be set earlier.
+  - For hourly services (non-daily-min): hours × rate = total (same as pre-trial)
+  - Travel Time settings: "Allow Travel Time Billing" checkbox + estimated travel hours input
+  - Custom description, rate override, team assign, and remove buttons (same as Step 3)
+  - Split billing preview: if the service is split-billed, shows a grayed-out preview of the pre-trial hourly portion above the editable in-trial portion
+- **Settings section** — Daily Min Hours override (defaults to tenant setting), Bill Weekends toggle (affects day count calculations).
+- **Grand Total section** — Shows Pre-Trial subtotal, In-Trial subtotal, combined Estimated Total, and configurable Retainer amount. Retainer can be toggled on/off and auto-calculated using the tenant's retainer formula (`Math.max(minimum, Math.floor(budget / divisor) × multiplier)`). Refresh button recalculates retainer from current total.
+- **On Submit** — Builds all `trial_services` rows with calculated rates, dates, billing methods, service phase, `display_order`, and projected daily revenue. Creates/updates the `trials` row with `estimated_value`, `retainer_value`, `pipeline_stage_id` (first sales stage for new deals), and all related records. Must have at least one service selected.
+
+### Edit Mode Behaviors
+
+- Steps are clickable in any order (stepper dots become buttons).
+- "Save Changes" button appears on Steps 1–3 (in addition to "Next") to save without navigating through all steps.
+- If trial dates change during edit, a Supabase Edge Function cascades date changes to all child services and sends notifications to assigned consultants via Resend.
+- Existing `trial_services` records are loaded with their database IDs so that updates are performed (not duplicates created).
+- Services removed from the cart are deleted from the database on save.
+- Contract warning: if a signed, sent, or draft document exists and the user attempts to override a rate, an alert warns about invalidating the existing contract.
+
+## Auto-Advancing Pipeline Stages
+
+Deals and trials can automatically move between pipeline stages based on configurable triggers. Each `deal_stages` row can have up to four optional auto-move rules.
+
+### Document-Based Auto-Moves
+
+Configured in Settings → Pipeline Stages. Each stage can reference a document template category for two triggers:
+
+- **On document sent** (`auto_move_on_document_sent_category_id`) — When a document of the specified category is sent to the client (via DocuSeal + Resend), the deal automatically moves to this stage. Triggered by a Supabase Edge Function called from the document sending flow.
+- **On document signed** (`auto_move_on_document_signed_category_id`) — When a document of the specified category is fully signed by all signers (DocuSeal webhook), the deal automatically moves to this stage. If the target stage is an operations stage and no job number exists, one is automatically generated (transitioning the deal into a trial).
+
+### Date-Based Auto-Moves
+
+These apply to operations-stage trials only. Checked by a Supabase Edge Function scheduled via `pg_cron`:
+
+- **On earliest service start** (`auto_move_on_earliest_task_start`) — When the earliest `trial_services.start_date` for a trial reaches today or has passed, the trial moves to this stage.
+- **On trial start** (`auto_move_on_trial_start`) — When the trial's own `start_date` reaches today or has passed, the trial moves to this stage.
+
+### Auto-Move Behavior Rules
+
+- Moves only happen forward in the pipeline (target stage order must be greater than current stage order). Never moves backward.
+- If multiple rules match simultaneously, the rule pointing to the highest-order stage wins.
+- A notification is created when a trial is auto-moved, with type `trial_stage_auto_moved` including old and new stage names.
+- Manual drag-and-drop in Kanban view can still move deals/trials to any stage regardless of auto-move rules.
+
+## Role Visibility
+
+Visible to `owner`, `admin`, and `sales` roles. Trial consultants cannot see the Deals page (hidden from sidebar). Sales users can only edit deals where they are the assigned consultant.
+
+## Related
+
+- [Sales Hub](/user-manual/sales-hub)
+- [Trials](/user-manual/trials)
+- [Clients](/user-manual/clients)
+- [Settings](/user-manual/settings)
+- [Database Schema](/user-manual/database-schema)
+
+## Download this document
+
+Download as markdown: [`/user-manual/deals/download.md`](/user-manual/deals/download.md).

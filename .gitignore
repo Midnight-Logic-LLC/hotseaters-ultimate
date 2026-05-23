@@ -1,0 +1,62 @@
+# Node
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+dist-manual
+*.tsbuildinfo
+build
+
+# Vite
+.vite
+
+# Test outputs
+coverage
+test-results
+playwright-report
+playwright/.cache
+
+# Tauri
+src-tauri/target
+src-tauri/Cargo.lock
+src-tauri/gen
+
+# Environment — NEVER commit secrets (see RULE 10 in constraints.md)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Cache
+.eslintcache
+.cache
+.parcel-cache
+
+# Misc
+.turbo
+
+# Transient KBD artifacts (per-session error inventories, etc.)
+.kbd-type-errors.txt
+
+# vendor/ is NOT ignored — `vendor/prometheus-entity-management/` holds the
+# pre-built library dist that the docker build resolves via the package.json
+# `file:./vendor/...` reference (see scripts/dockerize-deps.mjs). Once the
+# library is published to a private npm registry, this directory can be
+# removed and the package.json can switch to a semver dep — until then,
+# checking it in is intentional.

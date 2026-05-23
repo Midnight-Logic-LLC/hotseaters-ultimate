@@ -1,0 +1,81 @@
+---
+title: "Clients"
+slug: "clients"
+section: "per-page"
+lastReviewed: "2026-04-22"
+---
+
+# Clients & Contacts
+
+Manages client organizations (`client_firms`) and their contacts (attorneys, stored as `contacts`). Supports grouping by client type, list/card views, search, filtering, client type management, and CSV import. All queries filter by `tenant_id`.
+
+## Header Controls
+
+- **Add Client Type button** — Opens inline form to create a new client type with name and default pricing multiplier (`owner`/`admin` only).
+- **Add New Client button** — Opens the New Client wizard (select/create client type → enter firm name, phone, website, notes → initial address → sales lead).
+- **Import button** — Opens the Client Import Wizard for CSV/Excel upload with AI-powered data extraction (via Supabase Edge Function) and bulk client firm creation.
+
+## Filter Bar
+
+- **Search** — Filters by firm name, contact first/last name, or contact email.
+- **List / Card toggle** — Switches view type. Persisted to user preferences as `clientsViewType`.
+- **Active / Inactive switch** — Toggles between showing active or inactive client firms (via `is_active` flag).
+- **Hide Empty Types switch** — Hides client type groups that have zero matching client firms.
+- **Sales Person dropdown** — Filters client firms by assigned sales lead (`user_profiles` with owner or sales roles).
+
+## Client Type Groups
+
+Client firms are grouped under their assigned client type. Groups are drag-and-drop reorderable via @dnd-kit (persists `order`). Each group header shows type name, client count, and edit/delete buttons (`owner`/`admin` only). Default types show a lock icon instead of delete. Collapsible via chevron.
+
+## List View
+
+Each client card shows: firm name, phone, primary address (city/state), up to 2 contacts with email, and the assigned sales lead. Responsive grid collapses columns at smaller breakpoints. Clicking a card opens the Client Details panel.
+
+## Card View
+
+3-column grid of cards showing firm name, client type badge, phone, and address. Clicking opens the Client Details panel.
+
+## Client Details Panel
+
+Full detail view when a client firm is selected. Includes:
+
+- Editable client info (firm name, type, phone, website, status, sales lead, notes)
+- Address management (multiple addresses per client firm with primary flag)
+- Contact/Attorney management (add, edit, delete `contacts` rows with email, phone, title, address assignment)
+- Service rate overrides (`client_service_rates` — custom rates per client firm per service type)
+- Associated trials list
+- URL parameter support: `?client=ID&contact=ID` auto-opens client and pre-selects contact for editing
+
+## Client Type Form
+
+Inline card for creating/editing client types. Fields: Type Name (disabled for default types) and Default Pricing Multiplier (1.0 = standard, 0.85 = 15% discount). Info banner explains the purpose of client types.
+
+## Contact Transfer
+
+Contacts (attorneys) can be transferred between client firms via a dedicated dialog, preserving historical data at the original firm while creating a new active record at the destination.
+
+- **Trigger** — "Transfer" button on the Attorney form (only shown when editing an existing contact).
+- **Destination Firm Selection** — Search/filter existing active client firms (excludes the contact's current firm). Or click "New Firm" to create a client firm inline.
+- **Address Selection** — If the destination firm has addresses, auto-selects the single address or primary address. Multiple addresses show a dropdown.
+- **New Contact Details** — Title (pre-populated from original contact), New Email, Work Phone (auto-formatted as phone number). Mobile number is carried over automatically from the original record.
+- **On Transfer**
+  - Creates a new `contacts` record at the destination firm with `contact_status: "active"`, carrying over first name, last name, mobile, and a transfer note.
+  - Updates the original `contacts` record: appends transfer note to existing notes (preserving historical notes) and sets `contact_status: "transferred"`.
+- **Search Exclusion** — Contacts with `contact_status = "transferred"` are excluded from the client firm search results on the Clients page, preventing confusion.
+
+## Deletion Rules
+
+- Default client types cannot be deleted (shows lock icon).
+- Client types with assigned client firms show a blocking message requiring reassignment first.
+- Deleting a client firm also deletes all associated `contacts` rows (cascade handled at the database level).
+
+## Related
+
+- [Deals](/user-manual/deals)
+- [Sales Hub](/user-manual/sales-hub)
+- [Trials](/user-manual/trials)
+- [Database Schema](/user-manual/database-schema)
+
+## Download this document
+
+Download as markdown: [`/user-manual/clients/download.md`](/user-manual/clients/download.md).

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!--
+      Favicon — chameleon brand logo from the in-org brand assets pipeline.
+      Source: midnight/hotseaters/public/logo.svg + favicon.ico.
+      No third-party CDN; assets ship from our own origin (RULE 1).
+    -->
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="alternate icon" href="/favicon.ico" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#0891B2" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!--
+      black-translucent gives us edge-to-edge with content extending under the
+      status bar. Combine with `viewport-fit=cover` and `env(safe-area-inset-*)`
+      in CSS for proper notch handling on iOS.
+    -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="HotSeaters" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="apple-touch-icon" href="/apple-icon-180.png" />
+
+    <!--
+      Google Fonts preconnect + preload — DEFAULT_CUSTOM_FONTS from the bible:
+      Zen Dots (brand title), Michroma (brand subtitle), Montserrat (body),
+      Syncopate (sidebar). The marketing pages depend on these; loading them
+      globally keeps the in-app + marketing surfaces consistent.
+
+      Mirrors HotSeatersMVP/src/pages/Landing.jsx lines 95-100 (which builds
+      the same URL on a per-page basis). HotSeatersMVP is the bible.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Zen+Dots&family=Michroma&family=Montserrat:wght@400;500;600;700&family=Syncopate:wght@400;700&display=swap"
+    />
+
+    <!--
+      Apple touch startup images (PWA splash). These must be real PNGs
+      sized for each device family. Generate via:
+        npx pwa-asset-generator ./public/brand-source.svg ./public \
+          -i ./index.html --splash-only --background "#f6fbfe"
+      Until a real brand source exists the placeholders are commented out
+      to avoid 404 noise. See /public/manifest-icons-README.md.
+    -->
+    <!-- iPhone 15 Pro / 15 / 14 Pro (393x852) @3x -->
+    <!-- <link rel="apple-touch-startup-image" href="/splash/iphone-15-pro-portrait.png"
+      media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" /> -->
+    <!-- iPhone 15 Pro Max / 15 Plus (430x932) @3x -->
+    <!-- <link rel="apple-touch-startup-image" href="/splash/iphone-15-pro-max-portrait.png"
+      media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" /> -->
+    <!-- iPhone SE / 8 (375x667) @2x -->
+    <!-- <link rel="apple-touch-startup-image" href="/splash/iphone-se-portrait.png"
+      media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" /> -->
+    <!-- iPad Pro 11" (834x1194) @2x -->
+    <!-- <link rel="apple-touch-startup-image" href="/splash/ipad-pro-11-portrait.png"
+      media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" /> -->
+
+    <title>HotSeaters</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

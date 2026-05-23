@@ -1,0 +1,319 @@
+---
+title: Technical Reference
+section: core
+lastReviewed: 2026-04-22
+legacyFile: Doc04TechnicalReference.jsx
+summary: Page inventory, component architecture, custom hooks, utility functions, data-fetching patterns, and theme conventions for HotSeaters on Supabase.
+---
+
+# Technical Reference
+
+Components, pages, utilities, and code structure.
+
+## Page Components
+
+### Public / Unauthenticated Pages
+
+- **Landing** — Marketing landing page with features and CTA.
+- **Onboarding** — First-time setup: tenant creation, Google Calendar connection.
+- **AcceptInvite** — Team invitation acceptance with auth redirect handling.
+- **ReferralLanding** — Public referral landing page for companies invited to join HotSeaters / HotSeatHub.
+- **SignDocument** — Public e-signature interface via DocuSeal embed.
+- **ViewDocument** — Public document viewing without signature requirement.
+- **HSHDirectory** — Public browsable directory of marketplace tenants and consultants.
+- **PrivacyPolicy / TermsOfService** — Legal pages (public).
+
+### Dashboard & Core
+
+- **Dashboard** — Main dashboard with KPIs, revenue charts, quick actions. See [Dashboard](/user-manual/dashboard).
+- **SalesHub** — Sales-focused view with deals pipeline, revenue projections, client insights. See [Sales Hub](/user-manual/sales-hub).
+
+### Sales & Client Management
+
+- **Deals** — Sales pipeline (renders `PipelinePageContent` with `mode='deals'`). See [Deals](/user-manual/deals).
+- **Clients** — Client CRM with attorneys, addresses, service overrides, contact transfer. See [Clients](/user-manual/clients).
+
+### Operations Management
+
+- **Trials** — Active trials (renders `PipelinePageContent` with `mode='trials'`). See [Trials](/user-manual/trials).
+- **Schedule** — Timeline view with drag-drop, grouped by trial or consultant, revenue chart. See [Schedule](/user-manual/schedule).
+
+### Time & Financial Management
+
+- **TimeTracking** — Time clock, manual entry, travel time, spreadsheet, expense management with receipt/mileage wizard. See [Time Tracking](/user-manual/time-tracking).
+- **Approvals** — Dedicated approval hub for time entries and expenses with bulk actions, status filtering, composable group-by toggles. See [Approvals](/user-manual/approvals).
+- **Billing** — Single-view 4-column kanban (Approve Time, Approve Expenses, Create Invoices, Send Invoices). See [Billing](/user-manual/billing).
+- **Collections** — Standalone 3-column kanban (Open / Overdue / Paid) with invoice preview and payment tracking. See [Collections](/user-manual/collections).
+
+### HotSeatHub Marketplace
+
+- **PotentialGigs** — Browse marketplace requests with kanban/list/card views, submit responses. See [Potential Gigs](/user-manual/potential-gigs).
+- **HelpWanted** — Manage posted requests, review/accept/negotiate responses. See [Help Wanted](/user-manual/help-wanted).
+- **HSHDirectory** — Public directory of marketplace tenants and consultants with profiles, ratings, skills.
+- **HotSeatHubMarketing** — Marketing page shown to tenants without HSH subscription.
+
+### Team & Settings
+
+- **Consultants** — Team roster with card/list views, invitations, referral invitations, roles, tiers, qualifications. See [Consultants](/user-manual/consultants).
+- **Settings** — Multi-tab config: General, Services, Pipeline, Documents, Marketplace, Theme, Tiers, Subscription, Time Tracking, Admin. See [Settings](/user-manual/settings).
+
+### Documentation
+
+- **UserManual** — End-user help and feature guide.
+- **Docs + Doc01–Doc18** — Developer documentation (admin only).
+
+## Component Architecture
+
+### Layout System
+
+**Layout** — Master layout wrapping all authenticated pages:
+
+- Sidebar navigation (`SidebarProvider` from shadcn/ui)
+- Role-based menu items (owner / admin / sales / consultant visibility)
+- Tenant branding (logo, theme colors)
+- User profile with logout and profile link
+- `NotificationsMenu` with Supabase Realtime subscription
+- `TrialBanner` for platform alerts
+- `TenantMigration` for data migration prompts
+- `NavigationTracker` for page preference saving
+- Theme CSS generation via `generateThemeCSS` + Google Fonts loading (single-theme v1; dual-theme deferred)
+
+### Pipeline Components
+
+- **PipelinePageContent** — Reusable controller with 3 view modes + filters + search + completed items
+- **PipelineKanban / PipelineList / PipelineCards** — Three view implementations
+- **TrialCard** — Individual trial/deal card with metrics and quick actions
+- **PipelineViewToggle** — Switch between kanban/list/card views
+
+### Trial Management
+
+- **DealWizard** — 4-step deal creation (client → case → services → review)
+- **TrialDetails** — Comprehensive editor with tabs: Case Info, Services, Contacts, Documents, Notes
+- **ServiceSelector** — Add services with date pickers and rate calculation
+- **AssignmentDisplay** — Shows assigned consultants (internal vs HSH badges)
+- **ContinuedDialog** — Trial continuation with precision options
+- **DealDocumentsSection** — Document CRUD within trial
+- **HSHAssignmentsSection** — HSH subcontractor assignments within trial
+- **BulkAssignModal / BulkAssignConfirmDialog** — Assign multiple consultants at once
+
+### Schedule / Timeline Components
+
+- **TimelineGrid** — Main timeline with zoom, grouping, drag-drop
+- **TrialBar** — Draggable trial bar (owners/admins/sales)
+- **ServiceBar / SplitServiceBar** — Service bars (hourly, daily min, or split)
+- **TravelBar** — Travel time indicators (±1 day before/after service)
+- **TimeOffBarRow / TimeOffSidebarRow** — Time-off display on timeline
+- **ServiceAssignmentModal** — Assign consultants or post to HSH
+- **SplitBillingDialog** — Configure pre-trial / in-trial split
+- **TimelineRevenueChart** — Revenue chart overlay on schedule
+- **TimeScaleSlider** — Zoom control (day / week / month / quarter / year)
+
+### Time Tracking Components
+
+- **TimeClockInterface** — Active timer with start/stop per trial/service
+- **InlineTimerDisplay / InlineTimerForm** — Compact timer controls
+- **CombinedSpreadsheet** — Timesheet table with inline editing, bulk actions, mode support (internal / HSH)
+- **TimeSpreadsheet** — Individual timesheet with grouping (person / trial / day)
+- **TimesheetApproval** — Admin approval UI grouped by consultant
+- **TimeEntryForm / NewTimeEntryRow** — Manual time entry
+- **TimeEntryEditDialog** — Edit time entry from billing page
+
+### Expense Components
+
+- **ExpenseApproval** — Expense display/approval with 3 composable group-by toggles (Team / Trial / Person), bulk actions, `BaseDocumentViewer` for receipts. Used by T&E Expenses tab and Approvals Expenses tab.
+- **ExpensesTab** — Dashboard for expenses with KPIs, receipt upload, approval
+- **ExpenseDialog** — Dialog wrapper with creation mutation (handles HSH dual-entry)
+- **ExpenseWizard** — 2-step wizard: Receipt/Mileage toggle → form. Handles OCR and Google Maps routing.
+- **ExpenseForm** — Form UI for expense data entry
+- **AddressAutocomplete** — Google Places Autocomplete for mileage start/end addresses
+- **ReceiptPreviewDialog / ReceiptCropper / ZoomableImage** — Receipt viewing and processing
+- **ProcessingSteps** — Visual step indicator for receipt processing pipeline
+
+### Document Components
+
+- **DocumentFormModal** — Template selection and preview
+- **DocumentPreviewModal / DocumentPagePreview** — Live preview with variable substitution
+- **BaseDocumentViewer** — PDF/image viewer (iframe for PDF, zoom/rotate for images). Used for documents and receipt previews.
+- **DocumentDisplay** — Public document display with case info
+- **DocuSealEmbed** — Hosted signature workflow via DocuSeal (replaces legacy canvas pad)
+- **DocumentSendDialog** — Multi-recipient email composer (Resend delivery)
+- **PdfPreviewDialog** — PDF preview in modal
+
+### Marketplace Components
+
+- **PostToHotSeatHubForm** — 3-step HSH request creation wizard
+- **RequestCard / RequestCardHeader / RequestCardInfo** — HSH request display
+- **HSHResponseCard** — Response with profit calc, accept/decline/counter
+- **NegotiationThread** — Full counter-offer history display
+- **AcceptConfirmationModal** — Accept response confirmation with HSH agreement PDF generation
+- **DeclineRequestDialog / DateChangeNotificationDialog** — Decline and date-change modals
+- **RemapServiceDialog** — Map subcontractor service to requested service
+- **AudienceSelector / SentToSection** — Choose public/private and invited parties
+- **RequestsKanban / RequestsList / RequestsCards** — Help Wanted view modes
+- **GigsKanban / GigsList / GigsCards** — Potential Gigs view modes
+- **HSHCompanyCard / HSHDirectoryListRow / HSHDirectoryListSection** — HSH Directory components
+- **HSHProfileModal** — Tenant/consultant profile modal
+- **HSHStarRating / HSHReviewsList** — Rating display and reviews list
+- **HSHFavoritesTab** — Favorites management
+
+### Billing / Invoice Components
+
+- **ApproveTimeColumn** — Billing page time approval column
+- **ApproveExpensesColumn** — Billing page expense approval column
+- **InvoiceForm** — Invoice creation/editing with line items
+- **KanbanColumn / KanbanColumnBase** — Reusable kanban column
+- **CollectionInvoiceCard / CollectionsCards / CollectionsList** — Collections page components
+
+### Notification Components
+
+- **NotificationsMenu** — Bell icon dropdown with unread count
+- **NotificationRouter** — Routes notification types to specific modal dialogs
+- **AssignmentNotificationDialog / UnassignmentNotificationDialog** — Assignment notifications
+- **TrialStageChangedNotificationDialog** — Pipeline auto-move notification
+- **HSHRequestNotificationDialog / HSHResponseNotificationDialog** — Marketplace notifications
+- **HSHRequestCancelledDialog / HSHDeclinesAggregatedDialog** — HSH cancellation/decline notifications
+- **ExpenseNotificationDialog** — Expense approval/rejection notifications
+
+See [Notification System](/user-manual/notification-system) for architecture details.
+
+### Settings Components
+
+- **DocumentTemplateManagement / TemplateSectionEditor** — Template builder
+- **ThemeManagement / FontSelector** — Visual theme editor (single-theme v1)
+- **ServiceForm / CategoryManagement** — Services configuration
+- **PipelineStageManagement** — Stage config with auto-move triggers
+- **TeamManagement / TierManagement** — Team and tier config
+- **SubscriptionManagement** — Stripe subscription handling
+- **RichTextEditor** — TipTap wrapper with placeholder/signature insertion
+- **BaseTableEditor** — Table builder for templates
+- **DatabaseDebug / DatabaseExport** — Admin database tools
+- **QuickBooksSettings** — Deferred; configured path is a graceful-degradation stub until enabled. See [QuickBooks Integration](/user-manual/quickbooks-integration).
+
+### Shared Components
+
+- **ConsultantForm / ReferralInviteForm** — Team member editing and referral invitations
+- **TransferContactDialog** — Attorney transfer between client firms
+- **NavigateConfirmationDialog** — Unsaved changes warning
+- **PipelineStageBadge** — Colored stage badge with click-to-change
+- **MetadataRow** — Reusable metadata display (icon, label, value)
+- **HSHCardWrapper** — Styled wrapper for HSH-related cards
+- **YearSelector** — Fiscal year picker
+- **App styleguide components** — `AppButton`, `AppCard`, `AppBadge`, `AppModal`, `AppSection`, `AppMetricCard`, `AppEmptyState`
+
+## Custom Hooks
+
+- **useCurrentUserAndInfo** — Fetches Supabase user + `user_profiles` on mount via TanStack Query. Query key: `'currentUserAndInfo'`.
+- **useNotifications** — Subscribes to Supabase Realtime for unread notifications with count.
+- **useAcceptHSHResponse** — Reusable hook for accepting marketplace responses (creates assignment, generates PDF, syncs calendar).
+- **useCreateHSHRequest** — Reusable hook for creating marketplace requests.
+- **useHSHNegotiation** — Hook for counter-offer and decline actions on HSH responses.
+- **useTrialDateUpdate** — Handles trial/service date updates with notifications and calendar sync.
+- **useContinuedMutation** — Hook for trial continuation workflow.
+- **useReceiptProcessor** — Hook for receipt upload, OCR extraction, and image deskew pipeline (see [External Integrations](/user-manual/external-integrations)).
+- **useSubUserExpiry** — Tracks 14-day `pg_cron` expiry window for email + Google OAuth sub-user signups.
+
+## Utility Functions
+
+- **`utils.ts`** — `createPageUrl(pageName)`, `formatCurrency(amount, showCents)`, `formatPhoneNumber(phone)`
+- **`pdrCalculations.ts`** — `calculateProjectedDailyRevenue(trialService, trial, billWeekends)` — PDR for hourly, daily min, or split
+- **`clientAddressUtils.ts`** — `getContactAddress(attorney, clientAddresses)`, `formatFullAddress(address)`
+- **`themeUtils.ts`** — `generateThemeCSS(theme)` → CSS variables string; `getThemeValue(theme, path)` → value with fallback
+- **`defaultTheme.ts`** — Default theme configuration object with all CSS variable defaults
+- **`timeOffColors.ts`** — Color mappings for time-off types (vacation, sick, personal, other)
+- **`pipelineUtils.ts`** — Pipeline stage utility functions
+
+## Data Fetching Patterns
+
+All data access goes through TanStack Query against Supabase (via the typed client) or Supabase Edge Functions / Next.js Route Handlers. Scheduled work runs via `pg_cron` — there is no Vercel Cron and no `vercel.json`.
+
+### Standard Query Pattern
+
+```ts
+const { data: trials = [], isLoading } = useQuery({
+  queryKey: ['trials', tenantId],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from('trials')
+      .select('*')
+      .eq('tenant_id', tenantId);
+    if (error) throw error;
+    return data;
+  },
+  enabled: !!tenantId,
+});
+```
+
+### Mutation with Optimistic Update
+
+```ts
+const mutation = useMutation({
+  mutationFn: async (data: Partial<Trial>) => {
+    const { error } = await supabase.from('trials').update(data).eq('id', id);
+    if (error) throw error;
+  },
+  onMutate: async (data) => {
+    await queryClient.cancelQueries({ queryKey: ['trials'] });
+    const previous = queryClient.getQueryData(['trials', tenantId]);
+    queryClient.setQueryData(['trials', tenantId], (old: Trial[] = []) =>
+      old.map((t) => (t.id === id ? { ...t, ...data } : t)),
+    );
+    return { previous };
+  },
+  onError: (_err, _data, context) => {
+    queryClient.setQueryData(['trials', tenantId], context?.previous);
+  },
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['trials'] }),
+});
+```
+
+### Edge Function Invocation
+
+```ts
+const { data, error } = await supabase.functions.invoke('functionName', {
+  body: { param: 'value' },
+});
+if (error) throw error;
+```
+
+Route Handlers under `app/api/*/route.ts` follow the same shape for work that belongs to the Next.js runtime rather than Supabase Edge.
+
+## Styling Conventions & Theme System
+
+HotSeaters v1 ships a single theme. Dual-theme (dark-mode) support is deferred — see the theme stance note in change-510.
+
+### CSS Variables
+
+All styling uses CSS variables from `generateThemeCSS`:
+
+```text
+--theme-brand-primary, --theme-brand-secondary, --theme-accent-cool, --theme-accent-warm
+--theme-stone-50 through --theme-stone-900
+--theme-text-page-title, --theme-text-card-title, --theme-text-body, --theme-text-label, --theme-text-caption
+--theme-page-padding, --theme-card-padding, --theme-card-gap, --theme-element-gap
+--theme-card-radius, --theme-button-radius, --theme-input-radius
+--theme-card-shadow, --theme-button-shadow
+--theme-font-body, --theme-font-sidebar, --theme-font-brand-title, --theme-font-brand-subtitle
+--theme-success, --theme-warning, --theme-danger, --theme-info
+--theme-sidebar-bg, --theme-page-bg, --theme-card-bg, --theme-card-header-bg, --theme-input-bg
+--theme-hsh-background (purple tint for HSH items)
+```
+
+### Usage Convention
+
+Use inline `style={{ color: 'var(--theme-stone-600)' }}` for themed values. Tailwind is used for layout (flex, grid, spacing). Theme variables cover all colors, fonts, borders, and shadows.
+
+## Related Documentation
+
+- [App Overview](/user-manual/app-overview)
+- [Database Schema](/user-manual/database-schema)
+- [User Workflows](/user-manual/user-workflows)
+- [Design Patterns](/user-manual/design-patterns)
+- [Backend Functions](/user-manual/backend-functions)
+- [External Integrations](/user-manual/external-integrations)
+- [Environment Setup](/user-manual/environment-setup)
+- [Style Guide](/user-manual/style-guide)
+
+## Download
+
+A plain-Markdown copy of this document is available at
+[`/user-manual/technical-reference/download.md`](/user-manual/technical-reference/download.md).

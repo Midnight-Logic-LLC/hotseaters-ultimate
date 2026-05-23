@@ -1,0 +1,64 @@
+---
+title: "Trials"
+slug: "trials"
+section: "per-page"
+lastReviewed: "2026-04-22"
+---
+
+# Trials
+
+The Trials page manages the operations pipeline — trials that have been won from the sales pipeline and are now being planned, staffed, and executed. It reuses the same Kanban / Card / List layout as the [Deals](/user-manual/deals) page, but scoped to operations pipeline stages.
+
+All data is persisted in the Supabase `trials` table and scoped by `tenant_id`. Related: [Schedule](/user-manual/schedule), [Time Tracking](/user-manual/time-tracking), [Billing](/user-manual/billing), [Database Schema](/user-manual/database-schema).
+
+## Overall function
+
+<p>The Trials page renders the operations view of the pipeline. It shows trials whose deal has been won (or that were created directly in an operations stage) and excludes records that are still in sales stages. Layout is identical to Deals — Kanban by default, with Card and List toggles — but the underlying dataset is filtered by pipeline stage type.</p>
+
+## Key differences from the Deals page
+
+<ul>
+  <li>Pipeline stages shown are scoped to <code>deal_stages.type = 'operations'</code> only.</li>
+  <li>Completion actions are operations-centric: <strong>Verdict For</strong>, <strong>Verdict Against</strong>, <strong>Case Settled</strong>, and <strong>Case Continued</strong>.</li>
+  <li><strong>Case Continued</strong> supports three precision levels — <em>definite dates</em>, <em>month only</em>, or <em>no known date</em> — each rendered differently on the [Schedule](/user-manual/schedule) Gantt.</li>
+  <li>Job numbers are displayed; they are auto-generated when the deal is won and recorded on the <code>trials</code> record.</li>
+  <li>Visible to all roles: owner, admin, sales, and trial consultant. Consultants see read-only context for trials they are assigned to.</li>
+</ul>
+
+## Completion types
+
+When a trial is completed, one of the four completion types is recorded on <code>trials.completion_type</code> along with <code>completion_date</code>:
+
+<ul>
+  <li><code>verdict_for</code> — verdict reached in the client's favor.</li>
+  <li><code>verdict_against</code> — verdict reached against the client.</li>
+  <li><code>case_settled</code> — matter resolved without a verdict.</li>
+  <li><code>case_continued</code> — trial postponed or continued; see precision levels below.</li>
+</ul>
+
+### Case Continued precision levels
+
+<ul>
+  <li><strong>Definite</strong> — exact new start and end dates; all <code>trial_services</code> are auto-shifted and assignees are re-notified.</li>
+  <li><strong>Month Only</strong> — continuation is placed on the first business day of the target month; the Gantt renders a shaded month span.</li>
+  <li><strong>None</strong> — no known date; the trial is marked continued and dropped from timeline date calculations until a definite or month-only value is set.</li>
+</ul>
+
+All precision levels trigger notifications to assigned consultants and any HSH subcontractors via Supabase Realtime and a Resend email, so that downstream schedules and subcontractor gigs stay in sync.
+
+## Completed Trials view
+
+A "Completed" toggle replaces the active pipeline with a list of trials whose <code>completion_type</code> is one of <code>verdict_for</code>, <code>verdict_against</code>, <code>case_settled</code>, or <code>case_continued</code>. Each entry displays a completion badge, the completion date, and the job number, and remains available for invoicing and reporting.
+
+## Entity mappings
+
+<ul>
+  <li><code>Trial</code> → <code>trials</code></li>
+  <li><code>TrialService</code> → <code>trial_services</code></li>
+  <li><code>TrialServiceAssignment</code> → <code>assignments</code></li>
+  <li><code>company_id</code> → <code>tenant_id</code> (enforced by RLS on every query)</li>
+</ul>
+
+## Download this document
+
+Download as markdown: [`/user-manual/trials/download.md`](/user-manual/trials/download.md).

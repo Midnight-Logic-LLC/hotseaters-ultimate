@@ -1,0 +1,417 @@
+---
+title: "Settings"
+slug: "settings"
+section: "per-page"
+lastReviewed: "2026-04-22"
+---
+
+# Settings
+
+The Settings page is a single `/settings` route with a tabbed UI. Each tab configures one slice of tenant-scoped behavior. The active tab is controlled by `?tab=...` in the URL.
+
+All data is persisted in Supabase, scoped by `tenant_id` with RLS enforcement. Related: [Database Schema](/user-manual/database-schema), [Backend Functions](/user-manual/backend-functions), [Style Guide](/user-manual/style-guide), [External Integrations](/user-manual/external-integrations).
+
+## Tab visibility
+
+| Tab | Visibility |
+| --- | --- |
+| Company, Time Tracking, Billing Config, Services, Pipeline, Tiers, Documents | All authenticated members |
+| Team | Cross-link to [Consultants](/user-manual/consultants) |
+| Subscription | Owner only (`user_roles` = `owner`) |
+| Marketplace | Owner only, and only when `tenant_firms.has_hsh_addon = true` |
+| Theme, Database, Admin | Platform admin only |
+
+All tenant-config fields below are columns on `tenant_firms` unless otherwise noted.
+
+## Company
+
+Company identity, financial targets, and debug toggle. Save persists all identity + financial fields in a single `tenant_firms` update.
+
+### Identity
+
+| Field | Column | Notes |
+| --- | --- | --- |
+| Company Name | `name` | Text |
+| Website | `website` | URL |
+| Phone | `phone` | Auto-masked `(XXX) XXX-XXXX` on input |
+| Street Address | `address` | Text |
+| City / State / ZIP | `city` / `state` / `zip` | State is a 50-state + DC dropdown |
+| Logo | `logo_url` | 240×240 container; upload via Supabase Storage (`branding` bucket); PNG/SVG ≤ 500KB recommended |
+
+### Financial
+
+| Field | Column | Use |
+| --- | --- | --- |
+| Fiscal Year Start Month | `fiscal_year_start_month` (1-12) | Yearly number resets, revenue projections |
+| Annual Revenue Target | `annual_revenue_target` | SalesHub / Dashboard charts |
+| Monthly Breakeven | `monthly_breakeven` | Reference line in revenue charts |
+
+### Debug toggle
+
+- **Show Debug Info** — platform admin only. Sets `show_debug_info`. Saves immediately on toggle (not gated by the Save button). When on, diagnostic cards with JSON state appear on various pages.
+
+## Time Tracking
+
+Rounding rules and retainer formula. Save persists all fields in one update; toggles save immediately.
+
+### Rounding
+
+| Field | Column | Options |
+| --- | --- | --- |
+| Time Entry Rounding | `time_rounding_minutes` | 1, 6, 15, 30, 60 min |
+| Clock-In Rounding | `clock_in_rounding` | `down` / `nearest` / `up` |
+| Clock-Out Rounding | `clock_out_rounding` | `down` / `nearest` / `up` |
+| Hide Deals from Time Clock | `hide_deals_from_time_clock` | Owner/admin only; when on, only operations-stage items appear in the Time Clock task picker |
+
+See [Time Clock Workflows](/user-manual/time-clock-workflows) for the full rounding model.
+
+### Retainer formula
+
+Natural-language builder with inline inputs:
+
+> Every retainer has a minimum of `$[retainer_minimum]`. For every `$[retainer_divisor]` of estimated budget, add `$[retainer_multiplier]` to the retainer.
+
+Formula: `retainer = max(minimum, floor(budget / divisor) * multiplier)`.
+
+| Field | Column | Default |
+| --- | --- | --- |
+| Minimum | `retainer_minimum` | 1000 |
+| Divisor | `retainer_divisor` | 15000 |
+| Multiplier | `retainer_multiplier` | 5000 |
+
+An inline **Test Your Formula** calculator computes the retainer from a hypothetical budget in real time.
+
+## Billing Config
+
+Daily minimums, tax, numbering, billing period, and sender email. Period selectors, reset-yearly switches, and sender email save immediately; all other fields use the Save button.
+
+### Core billing
+
+| Field | Column | Notes |
+| --- | --- | --- |
+| Default Daily Minimum Hours | `default_daily_minimum_hours` | Trial-level override via `trials.daily_minimum_hours` |
+| Default Tax Rate (%) | `default_tax_rate` | If 0, invoice tax field is hidden |
+| Invoice Due Date | `invoice_due_days` | Net 7 / 14 / 30 / 45 / 60 / 90 |
+
+### Number formatting
+
+Both invoice and job numbers share the same three-field pattern.
+
+| Entity | Format column | Start column | Reset column |
+| --- | --- | --- | --- |
+| Invoice | `invoice_number_format` | `invoice_number_start` | `invoice_number_reset_yearly` |
+| Job | `job_number_format` | `job_number_start` | `job_number_reset_yearly` |
+
+**Format tokens:** `YY`, `YYYY`, `MM`, and consecutive `0`s for the auto-increment width (e.g., `INV-0000` → `INV-0001`). `generateInvoiceNumber` / `generateJobNumber` Edge Functions compute the next value by taking `max(existing) + 1` within the tenant, resetting at fiscal year start when the corresponding reset flag is on.
+
+### Invoice period
+
+| Frequency | Column | Extra field |
+| --- | --- | --- |
+| Weekly | `invoice_period = 'weekly'` | `weekly_billing_day` (Mon–Sun, default Fri) |
+| Monthly | `invoice_period = 'monthly'` | `monthly_billing_date` (1-31, default 1) |
+| Per Trial | `invoice_period = 'per_trial'` | `per_trial_billing_days_after_end` (default 7) |
+
+`pg_cron` jobs drive scheduled invoice generation at these cadences; see [Backend Functions](/user-manual/backend-functions).
+
+### Sender email
+
+`sender_email` is the From address used by Resend when sending invoices and documents. The domain must be verified in Resend.
+
+### Default template assignments
+
+Set here rather than inside the Documents tab:
+
+| Field | Column | Consumer |
+| --- | --- | --- |
+| Default Invoice Template | `default_invoice_template_id` | `generateInvoicePdf` |
+| Default Statement Template | `default_statement_template_id` | Statement generation |
+| Default Invoice Email Template | `default_invoice_email_template_id` | `sendInvoiceEmail` body |
+
+### QuickBooks (graceful degradation)
+
+QuickBooks Online sync is **deferred**. The UI exposes a disabled "Connect QuickBooks" control with a "Coming soon" helper. All billing features continue to operate without QuickBooks; nothing in the flow blocks on a missing connection. See [QuickBooks Integration](/user-manual/quickbooks-integration) for the planned shape.
+
+## Team
+
+Team management lives primarily on [Consultants](/user-manual/consultants). The Settings → Team tab is a thin cross-reference that links to that page. It embeds no redundant UI: invitations, role assignment, tier assignment, service qualifications, deactivation, and the HotSeatHub Favorites list are all managed there.
+
+## Services
+
+Service categories, service definitions, ordering, active/inactive state. Also hosts a duplicate of the Retainer Formula card from Time Tracking.
+
+### Header controls
+
+- **Show Inactive** toggle — reveals deactivated categories/services with an "Inactive" badge.
+- **Add Category** — inline form at the top of the list.
+- **Add Service** — opens the full service form.
+
+### Categories
+
+| Action | Behavior |
+| --- | --- |
+| Create | Inline row with grip, color bar, name input; Enter saves, Esc cancels; new categories take `order = 0` and bump others down |
+| Rename | Inline edit with same keyboard shortcuts |
+| Reorder | `@dnd-kit` drag; optimistic update, persist per-row, rollback on error |
+| Collapse | Category header toggles child service visibility; all start collapsed |
+| Delete | Confirms with three scenarios: active services (blocked), only inactive services (soft-deactivate), empty (hard delete). Default categories (`is_default = true`) cannot be deleted. |
+
+### Services
+
+Each service renders as a card with an orange left accent. Displays name, description, availability badges (Pre-Trial / In-Trial), rate pill (`$/hr`, `$/day`, `$ flat`), and a daily-minimum calculation when `has_daily_minimum = true`.
+
+| Action | Behavior |
+| --- | --- |
+| Inline edit | Click pencil; the row is replaced with the service form in place |
+| Reorder | Nested drag within the parent category; rollback on error |
+| Delete | If referenced by any `trial_services` row, offers soft-deactivate; otherwise hard delete |
+
+Travel Time is a built-in service (`is_default = true`) that stores its rate as a multiplier (displayed as a percentage, e.g. `50%`).
+
+### Uncategorized
+
+Services without a `category_id` collect into a final "Uncategorized" section, sorted alphabetically, with no drag reordering.
+
+### Data dependencies
+
+- `service_types` (catalog)
+- `service_categories` (sort order, active flag)
+- `trial_services` (used to gate hard-delete)
+
+## Pipeline
+
+Two side-by-side sections for `deal_stages.type = 'sales'` and `'operations'`.
+
+### Per-stage configuration
+
+| Field | Notes |
+| --- | --- |
+| Name | Display label |
+| Color | Badge color token (`stone`, `blue`, `green`, `indigo`, …) |
+| Order | Drag-and-drop; determines Kanban column order |
+| Revenue Probability | Decimal 0–1; drives Dashboard / SalesHub forecasts |
+
+### Auto-move triggers
+
+Per stage, any of the four triggers may be configured:
+
+| Trigger | Column | Event |
+| --- | --- | --- |
+| Document Sent | `auto_move_on_document_sent_category_id` | A document in this category is emailed |
+| Document Signed | `auto_move_on_document_signed_category_id` | All signers complete a document in this category |
+| Earliest Service Start | `auto_move_on_earliest_task_start` (bool) | Earliest `trial_services.start_date` reached |
+| Trial Start | `auto_move_on_trial_start` (bool) | `trials.start_date` reached |
+
+Signed-document advancement into an operations stage auto-generates a job number. Date-driven triggers fire from `pg_cron`.
+
+### Delete gating
+
+Deletion is blocked if any `trials` row currently references the stage.
+
+## Tiers
+
+CRUD for `consultant_tiers`. Tiers modify service base rates.
+
+| Field | Notes |
+| --- | --- |
+| Name | e.g., "Junior", "Senior", "Principal" |
+| Multiplier | Decimal (e.g., `0.8`, `1.0`, `1.3`) |
+| Active | Inactive tiers hidden from assignment dropdowns but preserved historically |
+
+Final rate calculation: `service.base_rate * client_type_multiplier * tier.multiplier`. Consultants are tier-assigned on [Consultants](/user-manual/consultants).
+
+## Documents
+
+WYSIWYG document template system organized into three tabs by `category_type`. A shared **Manage Fonts** modal (top-right) manages `tenant_firms.custom_fonts` (string array of Google Font names) and exposes them to all rich-text editors and table cell toolbars.
+
+### Template tabs
+
+| Tab | `category_type` | Default categories | Notes |
+| --- | --- | --- | --- |
+| Document | `document` | Proposals, Engagement Letters | Richest section palette. Engagement Letters with `is_contract = true` support e-signature placeholders; signing locks deal pricing. |
+| Billing | `billing` | Invoices, Statements | Consumed by `generateInvoicePdf` and statement generation |
+| Email | `email` | Invoice Emails, e-Signature Emails | Page size defaults to "email" (no pagination), 0" margins |
+
+### Category management
+
+- **Add / rename / delete** with inline editing. Default categories cannot be renamed or deleted; their description is editable.
+- **Reorder** via `@dnd-kit`.
+- **Delete** is blocked if the category contains active templates; otherwise soft-deletes.
+
+### Template editor
+
+A two-box form:
+
+1. **Settings box** — Name, Category (filtered to the current tab), Description, `is_contract` checkbox. Right column: Page Size (Letter / Legal / A4 / Email), margin presets (0, ½, ¾, 1 inch) and per-edge inputs.
+2. **Sections box** — ordered list of sections. Each section is a row on the `template_sections` table.
+
+### Section types
+
+| Section | `section_type` | Tab scope |
+| --- | --- | --- |
+| Rich Text | `rich_text` | All |
+| Table | `table` | All |
+| Services Table | `services_table` | Document only — auto-populated from `trial_services` at render time |
+| Invoice Line Items | `invoice_line_items` | Billing → Invoices only; 4 cols: Description / Qty / Rate / Amount |
+| Statement Line Items | `statement_line_items` | Billing → Statements only; 5 cols: Date / Invoice # / Description / Charges / Payments |
+| Full Page Start / End | `full_page_start`, `full_page_end` | Document only; sections between the markers render on a background image |
+
+Rich-text editing uses TipTap with a full toolbar (fonts, sizes, headers, color, alignment, lists, blockquote, links). The placeholder sidebar inserts tokens at cursor position.
+
+### Section features (all types)
+
+| Feature | Behavior |
+| --- | --- |
+| Reorder | `@dnd-kit` drag with recomputed 0-indexed `order` |
+| Collapse/expand | Header row toggles the inline editor |
+| Include Condition | `always` / `user_choice` / `has_services` / `no_services` / `has_retainer` / `no_retainer` / `has_frp` / `no_frp` |
+| Keep Together | PDF generator avoids splitting across pages |
+| Page Break After | Forces page break after the section |
+| Duplicate | Clones with `(Copy)` suffix appended |
+
+### Placeholder system
+
+Sidebar panel opened from the rich-text toolbar. Placeholders are organized by category, filterable by search. Which categories appear depends on tab, selected category, and `is_contract`.
+
+**Always-visible categories:** Case Information, Client Details, Primary Contact, Trial Information, Services & Pricing (including dynamic `category_subtotal_<slug>` placeholders generated from the tenant's service categories), Company & Sales.
+
+**Contract-only (is_contract = true):** `sales_esignature`, `client_signature`, `client_signer_{name,title,email}`, `frp_signature`, `frp_signer_{...}`, and matching signature-date tokens. Signature placeholders render as SVG stand-ins that are replaced with the actual signature image during generation.
+
+**Billing-only:** `bill_to_*` (resolves to FRP when one exists, else primary client), Invoice & Billing tokens (`invoice_number`, `invoice_date`, `due_date`, `subtotal`, `tax`, `total`, …), Statement tokens (`statement_number`, `period_start`, `period_end`, `balance_due`, …).
+
+### E-signatures via DocuSeal
+
+Signing is delivered through **DocuSeal**, not a canvas-based signer. The template marks which placeholders are signature fields; on "Send for Signature" the backend creates a DocuSeal submission and embeds the resulting signature image into the generated PDF. Email delivery of the signing link uses the **e-Signature Emails** template. See [External Integrations](/user-manual/external-integrations).
+
+### Save flow
+
+1. Validate name, category, at least one section.
+2. Sanitize content (strip blockquotes, zero-width spaces, BOM, nbsp).
+3. Detect signature fields and set `document_templates.has_signature_fields`.
+4. Upsert `document_templates` row (name, `category_id`, `page_settings`, `is_contract`, `has_signature_fields`).
+5. Diff and persist `template_sections` (delete removed, update existing, insert new).
+6. Post-save re-scan to confirm signature flag (catches table-level signatures).
+
+### Data model
+
+| Table | Columns |
+| --- | --- |
+| `document_template_categories` | `tenant_id`, `name`, `description`, `category_type`, `order`, `is_default`, `is_active` |
+| `document_templates` | `tenant_id`, `name`, `description`, `category_id`, `page_settings`, `has_signature_fields`, `is_contract`, `is_default`, `is_active` |
+| `template_sections` | `template_id`, `name`, `content`, `order`, `condition_type`, `condition_label`, `section_type`, `page_break_after`, `keep_together`, `background_image`, `table_data` (jsonb) |
+
+## Theme
+
+Platform-admin-only tab. **HotSeaters v1 ships a single theme; dual-theme (light/dark switching) is architected and deferred.** All values persist as a single JSON blob in `tenant_firms.theme`, applied as CSS custom properties by the root layout.
+
+### Behavior
+
+- On mount, merges `tenant_firms.theme` with the bundled default theme (deep-merge per category).
+- **Save Theme** writes to `tenant_firms.theme` and invalidates the tenant query so the layout re-renders with new variables.
+- **Reset All to Defaults** resets local state without persisting.
+- **Copy Theme Code** (super-admin only) exports the current theme as a JS object for updating bundled defaults.
+
+### Theme cards
+
+| # | Card | Stored under | Notable CSS vars |
+| --- | --- | --- | --- |
+| 1 | HotSeaters Brand Colors | `brand.*` | `--theme-brand-primary`, `--theme-brand-primary-hover`, `--theme-brand-operations`, `--theme-brand-emphasis`, `--theme-brand-accent-warm`, `--theme-brand-accent-urgent` |
+| 2 | HotSeatHub Brand Colors | `hsh.*` | `--theme-hsh-primary`, `--theme-hsh-primary-hover`, `--theme-hsh-accent-light`, `--theme-hsh-background`, `--theme-hsh-secondary`, `--theme-hsh-secondary-light` |
+| 3 | Semantic Colors | `semantic.*` | `--theme-success{,-light}`, `--theme-warning{,-light}`, `--theme-danger{,-light}`, `--theme-info{,-light}` |
+| 4 | Page & Sidebar Background | — | `--theme-page-background`, `--theme-sidebar-background` (supports literal `transparent`) |
+| 5 | Neutral Palette | `neutral.*` | `--theme-stone-{50,100,200,500,600,900}` |
+| 6 | Dialogs | `components.dialogs` | radius, shadow, border, backgrounds, paddings |
+| 7 | Cards | `components.cards` | same dimensions as dialogs |
+| 8 | Buttons | `components.buttons` | radius, shadow, text size, group shadow/background |
+| 9 | Tab Controls | `components.buttons.tab*` | dedicated styling for Kanban/Cards/List switchers |
+| 10 | Section Headers | `components.sectionHeaders` | font size, colors, padding, border, spacing |
+| 11 | List Containers | `components.listContainers` | radius, border, spacing, bg, padding |
+| 12 | List Items | `components.listItems` | radius, shadow, border, bg, padding |
+| 13 | Form Inputs | `components.forms` | radius, border, bg |
+| 14 | Spacing & Layout | `spacing.*` | page padding (mobile/desktop), max content width, section/card/element gaps |
+| 15 | Typography | `typography.*` | brand title/subtitle, body, sidebar fonts; 5 text-size tokens; shared **Manage Fonts** modal |
+
+### Dropdown option sets (reference)
+
+| Token | Options |
+| --- | --- |
+| Border radius | `0` / `0.25rem` / `0.5rem` / `0.75rem` / `1rem` |
+| Shadow | None / Subtle / Medium / Strong / Very Strong |
+| Border width | 0 / 1 / 2 / 3 px |
+| Spacing | 0.25 / 0.5 / 0.75 / 1 / 1.5 / 2 rem |
+| Font size | 0.625rem → 2.25rem (9 steps) |
+| Max width | 64 / 72 / 80 / 96 rem, or 100% |
+
+Each card provides a live preview that updates in real time. See [Style Guide](/user-manual/style-guide) for token usage conventions.
+
+## Subscription
+
+Owner-only. Stripe-backed subscription management.
+
+- **Current plan** — displays `tenant_firms.subscription_tier` (Single User / Multi-User).
+- **Billing portal** — opens Stripe's hosted portal via the `createPortalSession` Edge Function (payment methods, invoice history, plan changes).
+- **Upgrade** — `createUpgradeSession` / `createCheckoutSession` Edge Functions.
+- **HSH add-on** — toggles `has_hsh_addon`.
+- **Seat updates** — `updateSubscriptionQuantity` for per-seat billing.
+- **Details** — fetched via `getSubscriptionDetails`.
+
+Stripe webhooks authenticate via **HMAC signature verification** (no bearer tokens, no Vercel-specific auth). See [External Integrations](/user-manual/external-integrations).
+
+### Legal policies
+
+Two inline links render the Privacy Policy and Terms of Service in a modal.
+
+## Marketplace
+
+Owner-only, and only when `has_hsh_addon = true`. All toggles save immediately.
+
+### Feature toggles
+
+| Toggle | Column | When on |
+| --- | --- | --- |
+| Enable Help Wanted | `marketplace_post_jobs` | Help Wanted + Favorites nav items become visible; tenant can post `hsh_postings` |
+| Enable Potential Gigs | `marketplace_fill_jobs` | Potential Gigs nav item becomes visible; consultants can respond to others' postings |
+
+### Profit margin target
+
+Shown only when Help Wanted is on.
+
+| Field | Column | Default |
+| --- | --- | --- |
+| Margin Type | `profit_margin_type` | `percentage` |
+| Margin Value | `profit_margin_value` | 10 |
+
+**Applied payout:** percentage → `billing_rate * (1 - margin/100)`; dollar → `billing_rate - margin_amount`.
+
+### Decline notifications
+
+Controls bell-menu notifications when subcontractors decline public postings. Stored on `user_profiles.preferences` (per-user, not tenant-wide).
+
+| Option | Value |
+| --- | --- |
+| Only when they provide a reason (recommended) | `with_message_only` |
+| All declines (aggregated count) | `all` + `hsh_decline_notification_threshold` (default 10) |
+| No decline notifications | `none` |
+
+When `all` is selected, a Frequency input appears: "Send notification every [N] declines."
+
+## Database
+
+Platform-admin-only. Renders a direct entity browser for querying and troubleshooting Supabase records across all tenant tables. Intended for debugging only. Consider this view a read-mostly diagnostic surface; destructive ops go through the Admin tab.
+
+## Admin
+
+Platform-admin-only. Renders the AdminPanel.
+
+| Area | Function |
+| --- | --- |
+| Company Management | List all tenants; view user counts, subscription status |
+| Delete Company | `deleteCompanyWithProgress` Edge Function — tracked progress across FK-ordered cascades |
+| Migration Runners | `migrateClientTypes`, `migrateDocumentSends`, `migrateTrialServiceAssignments`, etc. — schema evolution and data backfills |
+| System Maintenance | `cleanupOrphanedAssignments`, `cleanupOrphanedCompanies`, etc. |
+
+All maintenance work runs as Supabase Edge Functions triggered from this UI; scheduled maintenance runs via `pg_cron`. See [Backend Functions](/user-manual/backend-functions).
+
+## Download this document
+
+Download as markdown: [`/user-manual/settings/download.md`](/user-manual/settings/download.md).

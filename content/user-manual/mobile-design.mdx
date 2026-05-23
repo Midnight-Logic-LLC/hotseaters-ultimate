@@ -1,0 +1,55 @@
+---
+title: "Mobile Design Plan"
+slug: "mobile-design"
+section: "detailed"
+lastReviewed: "2026-04-22"
+---
+
+## Overview
+
+A dedicated mobile-native client is **deferred** beyond v1 of HotSeaters. This document is a roadmap stub for the intended mobile strategy.
+
+In v1, the web application is fully responsive across 320–1920px viewports and is expected to work on phone and tablet browsers. Key high-frequency flows (time clock, expense capture, approvals) are designed to be usable on touch devices in the responsive web build.
+
+## v1 Responsive Web Coverage
+
+| Flow | Mobile-Optimized in v1 |
+| --- | --- |
+| Time clock (clock-in / clock-out / switch trial) | Yes |
+| Manual time entry | Yes |
+| Expense capture with receipt photo | Yes (uses device camera via `<input type="file" accept="image/*" capture>`) |
+| Approvals (time + expense) | Yes |
+| Schedule / Gantt drag-drop | Partial (read-only on phone; drag-drop works on tablet) |
+| Deals Kanban | Yes |
+| Document signing (via DocuSeal) | Yes (DocuSeal hosts the mobile-optimized signing UI) |
+| Invoice preview / send | Yes |
+
+## Deferred: Native Mobile App
+
+A future native client will be evaluated against:
+
+- Expo (React Native) — shares TypeScript models, hooks, and state with the web app
+- Swift (iOS) + Kotlin (Android) — separate native codebases, best-in-class platform integration
+- Progressive Web App (PWA) with offline-first service worker — lowest overhead
+
+Core native features under consideration:
+
+- Offline time entry queue with background sync when connectivity returns
+- Native push notifications (replacing email-only today)
+- Native camera integration for receipts (beyond HTML `capture`)
+- Bluetooth beacon auto-clock-in at recognized trial locations (exploratory)
+- Geofenced travel-time start/stop
+
+All of the above is **deferred in v1**. The responsive web build satisfies current mobile requirements.
+
+## Related
+
+- [Style Guide](/user-manual/style-guide)
+- [Time Clock Workflows](/user-manual/time-clock-workflows)
+- [Expense Workflows](/user-manual/expense-workflows)
+- [Travel Time Feature](/user-manual/travel-time)
+- [Notification System](/user-manual/notification-system)
+
+## Download this document
+
+Download as markdown: [`/user-manual/mobile-design/download.md`](/user-manual/mobile-design/download.md).

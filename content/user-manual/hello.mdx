@@ -1,0 +1,36 @@
+---
+title: Hello (pipeline smoke)
+section: foundation
+lastReviewed: 2026-04-22
+---
+
+# Hello from the MDX pipeline
+
+This page exists to prove the MDX compile path, manifest lookup, and HTMX
+fragment swap all work end-to-end. Real manual content begins in
+**change-534** (pilot port of `Doc01AppOverview`).
+
+## What this verifies
+
+- `content/user-manual/*.mdx` compiles through `next-mdx-remote`
+- `remark-gfm` table + checklist support renders
+- `rehype-slug` + `rehype-autolink-headings` generate anchor links
+- `rehype-highlight` tokenizes code blocks
+
+## Example GFM table
+
+| Surface | Status |
+| ------- | ------ |
+| Segment layout | scaffolded (change-532) |
+| MDX pipeline | this change (533) |
+| Pilot port | change-534 |
+
+## Example code
+
+```ts
+export function greet(name: string): string {
+  return `hello, ${name}`
+}
+```
+
+[Back to the manual landing](/user-manual).

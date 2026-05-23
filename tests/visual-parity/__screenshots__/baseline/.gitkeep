@@ -1,0 +1,7 @@
+# Visual-parity baselines live in this directory.
+#
+# Capture baselines with:
+#   pnpm test:visual-parity:update
+#
+# After capture, commit the resulting *.png files in this tree.
+# Self-hosted Supabase only. HotSeatersMVP is the bible.

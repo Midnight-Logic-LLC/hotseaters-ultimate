@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "HotSeaters",
+  "version": "0.0.1",
+  "identifier": "ai.prometheusags.hotseaters.ultimate",
+  "build": {
+    "devUrl": "http://localhost:5174",
+    "frontendDist": "../dist",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "HotSeaters",
+        "label": "main",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "minWidth": 360,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://localhost:8000 http://localhost:3133 https://hotbase.prometheusags.ai https://electricsql.prometheusags.ai ws://localhost:8000 wss://hotbase.prometheusags.ai ws://localhost:3133 wss://electricsql.prometheusags.ai; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'",
+      "headers": {
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp",
+        "Cross-Origin-Resource-Policy": "same-origin"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "appimage", "deb", "dmg", "ipa", "apk"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "Trial consulting management — local-first PGlite + Electric",
+    "longDescription": "HotSeaters is a trial consulting and subcontracting management platform built local-first on PGlite, ElectricSQL, and the Prometheus entity-graph engine. Self-hosted Supabase backend only.",
+    "category": "Business",
+    "copyright": "© Prometheus AGS",
+    "iOS": {
+      "developmentTeam": "REPLACE_ME",
+      "minimumSystemVersion": "16.0"
+    },
+    "android": {
+      "minSdkVersion": 26,
+      "versionCode": 1
+    }
+  },
+  "plugins": {}
+}

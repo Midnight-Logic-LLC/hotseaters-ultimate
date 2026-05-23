@@ -1,0 +1,169 @@
+---
+title: Backend Functions
+section: core
+lastReviewed: 2026-04-22
+legacyFile: Doc06BackendFunctions.jsx
+summary: Catalog of backend functions split between Supabase Edge Functions (Postgres-local work, AI, webhooks, HSH sync) and Next.js Route Handlers (user-facing APIs, PDFs, email, Stripe, DocuSeal).
+---
+
+# Backend Functions Reference
+
+HotSeaters backend work is split between two runtimes:
+
+- **Supabase Edge Functions** (Deno) — AI vision, HSH bidirectional sync, pg_cron-triggered jobs, webhook handlers close to Postgres.
+- **Next.js Route Handlers** (Node) — user-facing API calls, PDF generation (Puppeteer / API2PDF fallback), DocuSeal submission creation, Stripe checkout, Resend email.
+
+All scheduled work runs via Supabase `pg_cron` — there is no Vercel Cron and no `vercel.json`. All tenant-scoped queries filter by `tenant_id`.
+
+## Authentication & User Management
+
+- **`inviteTeamMember`** — Route Handler `/api/team/invite`. Generates token, creates `invitations` row, sends Resend email.
+- **`acceptInvitation`** — Route Handler `/api/team/accept`. Validates token, upserts `user_profiles` + `service_qualifications`.
+- **`sendReferralInvitation`** — Route Handler `/api/team/refer`. Rejects already-registered emails and matching domains; sends branded Resend email with referral landing link.
+- **`cancelInvitation`** — `DELETE /api/team/invite/[id]`.
+- **`listConsultants`** — `GET /api/consultants` with enriched email/role/tier data for the current `tenant_id`.
+- **Email OAuth sub-user** — coexists with the legacy invitation signup; new users may onboard via OAuth sub-user provisioning without losing the invitation flow.
+
+## Trial & Service Management
+
+- **`updateTrialDates`** — Route Handler `/api/trials/[id]/dates`. Batch-updates trial + `trial_services` dates, PDR, `hsh_contracts` dates, notifications, Google Calendar sync, auto-move checks.
+- **`updateServiceDates`** — `PATCH /api/trial-services/[id]/dates`. Validates within trial bounds, auto-converts billing method, recomputes PDR.
+- **`batchProcessServiceAssignments`** — `POST /api/trial-services/[id]/assignments/batch` for add/remove with Calendar sync.
+- **`sendTrialStatusNotifications`** — internal helper invoked on continued / un-continued trials.
+- **`handleTrialCompletion`** — deletes Google Calendar events on completion.
+- **`checkAutoMoveDates`** — **pg_cron job** (planned phase 26+) that evaluates date-based pipeline auto-move rules.
+- **`generateJobNumber`** — sequential job numbers in formats `JOB-0000`, `YY-MM-000`, `YYYY-0000`.
+- **`initializeCompanyDefaults`** — seeds service categories, pipeline stages, tiers, template categories, Travel Time service for a new `tenant_firms` row.
+- **`createOnboardingSampleData`** — seeds a sample client + deal + trial.
+- **`getTrialsById`** — cross-tenant read via service-role Edge Function (used by HSH).
+
+## Time Tracking
+
+- **`createTimeEntry`** / **`updateTimeEntry`** — `POST` / `PATCH /api/time-entries`. Updates with verification and linked-entry sync.
+- **`linkHSHTimeEntries`** — Edge Function `hsh-sync-time-entry`, triggered by `time_entries` INSERT. For `hiring_company` entries carrying a `hsh_contract_id`, locates the matching subcontractor entry and links via `linked_time_entry_id`.
+- **`getTimeTrackingMetadata`** — `GET /api/time-tracking/metadata` returning trials, clients, tenant, pipeline stages, HSH contracts, consultants, and mapping objects in a single payload.
+
+## Expense & Mileage
+
+- **`extractReceiptData`** (replaces `processReceiptVeryfi` / `processReceiptImage`) — Edge Function `extract-receipt`. Sends receipt to OpenAI/Anthropic vision API. Extracts vendor, amount, date, category.
+- **`deskewReceiptImage`** — Route Handler `/api/expenses/deskew`. Straightens/crops via Cloudinary.
+- **`calculateRoute`** — `/api/mileage/route`. Google Directions API proxy returning distance, duration, polyline.
+- **`generateRouteMap`** — `/api/mileage/map`. Static map PNG for receipts.
+- **`placesAutocomplete` / `placesDetails`** — Google Places API proxies.
+
+## Notifications
+
+- **`processNotification`** — internal helper. Validates recipient exists and is active; blocks self-notify; handles aggregated HSH decline notifications.
+- **`handleDocumentAutoMove`** — invoked by the DocuSeal webhook and the document-send route to advance deal stages on `sent` / `signed` triggers.
+
+## Document Management
+
+- **`generateDocumentPDF`** — Route Handler `/api/documents/[id]/pdf`. Primary path uses **Puppeteer**; falls back to API2PDF. Unicode cleanup, custom Google Fonts, 3x retry, 60s timeout, private Storage upload.
+- **`sendDocumentForSignature`** — Route Handler `/api/documents/[id]/send`. Creates a **DocuSeal submission** and delivers email through DocuSeal / Resend. Fires auto-move check when `document_id` is supplied.
+- **`sendDocumentEmail` / `sendDocumentEmailBatch`** — Resend delivery for non-signature documents.
+- **`docusealWebhook`** — Route Handler `/api/docuseal/webhook`, **shared-secret verified**. Updates `signature_requests`, regenerates PDF on completion, triggers pipeline auto-move.
+- **`getDocumentForSigning`** — public token-based endpoint used by legacy `/sign-document` page (DocuSeal hosted page is preferred going forward).
+- **`uploadSignatureImage`**, **`downloadDocument`**, **`deleteDocument`** — standard CRUD Route Handlers.
+- **`regenerateDocumentPdf`** — `POST /api/documents/[id]/regenerate`.
+- **`cleanTemplateContent`** — sanitizer invoked at template save: strips invisible Unicode, blockquotes, normalizes table cells.
+
+## HotSeatHub Marketplace
+
+- **`acceptHSHResponse`** — `/api/hsh/applications/[id]/accept`. Updates application, computes `estimated_total` (split / daily-min / hourly), generates subcontractor job number, creates `hsh_contracts` + assignment rows, generates Agreement PDF, syncs Calendar.
+- **`negotiateHSHRate`** — `/api/hsh/applications/[id]/negotiate`. Counter-offer or decline; updates negotiation history; notifies the other party.
+- **`generateHSHAgreementPdf`** — PDF route similar to documents; supports cancellation addendum merge.
+- **`cancelHSHSubcontractAgreement`** — cancels contract + posting, deactivates assignments, removes Calendar events, generates cancellation addendum, notifies both tenants.
+- **`notifyMarketplace`** — Resend email for `new_request`, `new_response`, `response_accepted`, `response_declined`.
+- **`createHSHNotifications`** — in-app notifications; honors user preferences; aggregates decline alerts.
+- **`hshSyncExpense`** — Edge Function `hsh-sync-expense`, mirrors expense entries across hiring and subcontracting tenants.
+- **`deleteHSHRequest`** — permanent delete, allowed only when status is `cancelled` and no time entries exist.
+
+## Invoicing
+
+- **`generateInvoiceNumber`** — `/api/invoices/next-number`. Formats `INV-0000`, `YY-MM-000`, `YYYY-0000` with auto-increment and yearly reset.
+- **`generateInvoicePDF`** — Route Handler `/api/invoices/[id]/pdf`. Fetches invoice + line items + template, generates HTML, renders via Puppeteer (API2PDF fallback), optionally merges receipts.
+- **`sendInvoiceEmail`** — Route Handler `/api/invoices/[id]/send`. Loads email template, creates signed URL for PDF, base64-encodes attachment, sends via Resend to/cc/bcc, transitions `status` to `sent`.
+- **`previewInvoiceEmail`** — `/api/invoices/[id]/preview` returns rendered HTML without sending.
+- **`deleteInvoice`** — `DELETE /api/invoices/[id]` (service-role elevated).
+- **`mergeReceiptsIntoPdf`** — helper: header page + PDF receipts (full page) + image receipts (4-up grid).
+
+## Subscription & Stripe
+
+- **`checkoutSession`** — Route Handler `/api/stripe/checkout`. Pricing: Single $85/mo, Multi $115/mo, HSH +$15/mo.
+- **`createUpgradeSession`** — `/api/stripe/upgrade`.
+- **`createPortalSession`** — `/api/stripe/portal`.
+- **`getSubscriptionDetails`** — `/api/stripe/subscription`.
+- **`updateSubscriptionQuantity`** — invoked on seat count changes.
+- **`stripeWebhook`** — Route Handler `/api/stripe/webhook`, **HMAC verified**. Handles `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`.
+
+## Google Calendar
+
+- **`syncGoogleCalendar`** (initiate) — `/api/calendar/oauth/start`.
+- **OAuth callback** — `/api/calendar/oauth/callback`. Exchanges code for tokens, stores on `user_profiles`, runs initial sync.
+- **`syncTaskToGoogleCalendar`** — `/api/calendar/sync/[assignment_id]`. Auto-refreshes tokens, creates all-day events, gracefully handles `CALENDAR_DISCONNECTED`.
+- **`testCalendarConnection`** — `/api/calendar/test`.
+- **`disconnectGoogleCalendar`** — `/api/calendar/disconnect`. Deletes events, clears event IDs, revokes tokens.
+
+## Deletion & Cleanup
+
+- **`deleteTrial`** — admin-only; cascades through `time_entries`, `expense_entries`, `invoices`, `trial_services`, `hsh_contracts`, trial contacts, assignments, generated documents, then the trial.
+- **`deleteUserComplete`** — super-admin-only user purge.
+- **`deleteCompanyWithProgress`** — super-admin-only `tenant_firms` purge.
+
+## Scheduled Jobs (pg_cron)
+
+- **`sub_user_request_expiry`** — runs daily; cleans up email-OAuth sub-user requests older than 14 days.
+- **`check_auto_move_dates`** — planned phase 26+; evaluates date-based pipeline auto-move rules.
+
+No job uses Vercel Cron. All schedules live in `pg_cron` and are managed through Supabase migrations.
+
+## Utility & Helpers
+
+- `getAppUrl`, `getContactAddress`, `getEmails`, `debugTrials`, `listRemovedAssignments` — small Route Handlers used across the app.
+
+## Data Cleanup & Migrations
+
+Active maintenance tasks (run as one-off scripts or service-role Route Handlers):
+
+- `fixTrialServiceEstimates`, `populateTrialServiceFields`, `cleanPhoneNumbers`, `cleanClientWebsites`
+- `cleanupOrphanedAssignments`, `cleanupOrphanedCompanies`
+- `deleteAllNotifications`, `addInvoiceEmailsCategory`
+
+Historical migrations (completed): `migrateClientAddresses`, `migrateClientTypes`, `migrateTemplateSections`, `migrateTrialServiceAssignments`, `migrateUserServiceIds`, `migrateDocumentSends`, `migrateDocumentViews`, `migrateSignaturesToUrls`, `migrateDocumentSignerViewOnly`, `migrateDocumentTables`.
+
+## Invocation Patterns
+
+### Client → Route Handler
+
+```ts
+// Components go through hooks; hooks call the API.
+const res = await fetch(`/api/invoices/${id}/send`, { method: 'POST' });
+const { success, email_id } = await res.json();
+```
+
+### Route Handler → Edge Function
+
+```ts
+import { createServerClient } from '@/lib/supabase/server';
+const supabase = await createServerClient();
+const { data, error } = await supabase.functions.invoke('extract-receipt', {
+  body: { file_url },
+});
+```
+
+### Service-Role Access
+
+Use the service-role client only inside Route Handlers or Edge Functions — never from the browser. Keep `tenant_id` enforcement in SQL via RLS; the service role bypasses RLS and must re-apply tenant filters explicitly.
+
+## Related Documents
+
+- [Technical Reference](/user-manual/technical-reference)
+- [External Integrations](/user-manual/external-integrations)
+- [Database Schema](/user-manual/database-schema)
+- [Notification System](/user-manual/notification-system)
+- [Environment Setup](/user-manual/environment-setup)
+
+## Download
+
+A plain-Markdown copy of this document is available at
+[`/user-manual/backend-functions/download.md`](/user-manual/backend-functions/download.md).

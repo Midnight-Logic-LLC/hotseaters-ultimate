@@ -1,0 +1,405 @@
+---
+title: User Workflows
+section: core
+lastReviewed: 2026-04-22
+legacyFile: Doc03UserWorkflows.jsx
+summary: Step-by-step guides for common HotSeaters tasks — onboarding, sales pipeline, operations, time and expenses, invoicing, documents, clients, and settings.
+---
+
+# User Workflows & Business Processes
+
+Step-by-step guides for common user tasks. For the platform's data model, see the [database schema](/user-manual/database-schema); for technical details, see the [technical reference](/user-manual/technical-reference).
+
+## Initial Setup & Onboarding
+
+### First Time User Flow
+
+1. User creates a Supabase account (email/password or Google OAuth) — redirected to the Landing page.
+2. Click **Get Started** — Supabase authentication flow runs.
+3. After auth — the [Onboarding](/user-manual/app-overview) page loads.
+4. Enter company details (name, website, contact info).
+5. Optional: connect Google Calendar for schedule sync.
+6. System creates a `tenant_firms` record and a `user_profiles` row with role `owner`.
+7. `initializeCompanyDefaults` runs and seeds:
+   - Default sales pipeline stages (Lead → Proposal → Negotiation → Won/Lost)
+   - Operations stages (Pre-Trial → Trial → Verdict/Settlement)
+   - Service categories (Trial Consulting, Graphics, etc.)
+   - Consultant tiers (Junior, Standard, Senior, etc.)
+   - Document template categories
+   - Travel Time service with configurable multiplier
+8. Redirect to the [dashboard](/user-manual/dashboard).
+
+Both the legacy email signup and the Google OAuth sub-user signup paths coexist. Unaccepted invitations expire after 14 days via a `pg_cron` cleanup job.
+
+### Accepting a Team Invitation
+
+1. User receives an email (sent via Resend) with a unique token link.
+2. Click link — AcceptInvite page loads.
+3. If not authenticated, login flow runs and returns to AcceptInvite.
+4. `acceptInvitation` Edge Function:
+   - Validates token and invitation status
+   - Creates `user_profiles` + `user_roles` rows with the invited role
+   - Creates `service_qualifications` rows for qualified services
+   - Marks the invitation as accepted
+5. Redirect to the [dashboard](/user-manual/dashboard) as a team member.
+
+### Referral Invitation (Inviting Another Company)
+
+1. Owner/Admin navigates to [Consultants](/user-manual/consultants) and clicks **Refer a Company**.
+2. Enter email, first name, and last name of the contact at the other company.
+3. `sendReferralInvitation` Edge Function:
+   - Validates that the email is not already registered on the platform
+   - Validates that the domain does not match an existing tenant
+   - Creates an `invitations` row with `type: "referral"`
+   - Sends a branded email via Resend pointing to the ReferralLanding page
+4. Recipient clicks the link — ReferralLanding page shows HotSeaters / HotSeatHub marketing.
+5. Recipient clicks **Get Started** and enters standard onboarding.
+
+## Sales Pipeline (Deals)
+
+### Creating a Deal
+
+1. Navigate to [Deals](/user-manual/deals) (or [Sales Hub](/user-manual/sales-hub)).
+2. Click **New Deal** — opens the 4-step DealWizard.
+3. **Step 1 — Client Selection:** pick an existing client or create one.
+4. **Step 2 — Case Details:** case name, court info, dates, primary contact.
+5. **Step 3 — Services:** select from catalog.
+   - Pre-trial services: set start date and duration
+   - In-trial services: automatically match trial dates
+   - Rates derived from client tier, consultant tier, and any service overrides
+6. **Step 4 — Review:** verify estimated value and details.
+7. Save — `deals` row created in the first sales pipeline stage.
+8. All services saved as `trial_services` rows with start/end dates.
+
+### Rate Calculation Logic
+
+```text
+For each service on a deal:
+1. Start with service_types.base_rate
+2. Apply client_service_rates override if one exists for this (client, service) pair
+3. Apply consultant_tiers.multiplier (if sales lead has a tier)
+4. Apply client tier multiplier (if client has a tier)
+5. Result = trial_services.rate (snapshotted at time of creation)
+```
+
+### Managing the Deal Pipeline
+
+- **Kanban view** — drag cards between stage columns.
+- **List view** — click the stage badge to change.
+- **Cards view** — visual cards grouped by stage with collapse/expand.
+- View preferences save automatically to the user profile.
+
+### Marking a Deal as Won
+
+1. Open the trial detail modal (click deal card or row).
+2. Navigate to the **Deal Info** tab.
+3. Click **Deal Won** and confirm. The system then:
+   - Sets `won_date` to the current date
+   - Generates a job number via `generateJobNumber`
+   - Moves the deal to the first operations pipeline stage
+   - Updates estimated-value tracking
+
+### Marking a Deal as Lost or Settled
+
+1. Open the trial detail modal.
+2. Click **Deal Lost** or **Deal Settled**.
+3. Sets `completion_type` and `completion_date`.
+4. Deal moves to **Completed** and no longer appears in the active pipeline.
+
+## Operations (Trials)
+
+### Assigning Services — Internal Team
+
+1. Navigate to [Schedule](/user-manual/schedule).
+2. Find the trial and service bar (unassigned bars are gray).
+3. Click the service bar — ServiceAssignmentModal opens.
+4. Select a consultant from the team whose `service_qualifications` match.
+5. `assignments` row created with `is_subcontractor: false`.
+6. Service bar recolors to the consultant's designated color.
+7. Consultant receives an assignment notification.
+8. If the consultant has Google Calendar connected, the event is synced automatically.
+
+### Posting to the HotSeatHub Marketplace
+
+1. From Schedule: click **Post to HSH** on an unassigned service. Or from [Help Wanted](/user-manual/help-wanted): click **New Request**.
+2. PostToHotSeatHubForm opens a 3-step modal:
+   - **Step 1:** service details (dates, description, location)
+   - **Step 2:** estimated/offered rate
+   - **Step 3:** audience — public or invite specific companies/users from favorites
+3. Submit — `hsh_postings` row created with status `open`.
+4. `notifyMarketplace` Edge Function fans out notifications to potential fillers.
+5. The posting appears on [Help Wanted](/user-manual/help-wanted) and in [Potential Gigs](/user-manual/potential-gigs) for other tenants.
+
+### Responding to an HSH Request (Job Filler)
+
+1. Navigate to [Potential Gigs](/user-manual/potential-gigs).
+2. Browse public requests or private invitations.
+3. Click **Respond**.
+4. Select a consultant from your qualified team.
+5. Map your tenant's service to the requested service.
+6. Set the billing rate you will charge the hiring company.
+7. System auto-calculates a proposed rate based on profit-margin settings.
+8. Add an optional message.
+9. Submit — `hsh_applications` row created with status:
+   - `pending_agreed` if proposed rate matches estimated rate
+   - `pending_counter` if proposed rate differs
+10. Hiring company receives a notification.
+
+### HSH Rate Negotiation
+
+1. Either party counter-offers via `negotiateHSHRate`.
+2. Counter updates `proposed_rate` and appends to `negotiation_history`.
+3. Application status becomes `negotiating`.
+4. The other party receives a notification.
+5. Process repeats until one side accepts or declines.
+6. Full thread is visible via the NegotiationThread component.
+
+### Accepting an HSH Response (Job Poster)
+
+1. Review the response card showing consultant, rate, and profit calculation.
+2. Choose an action:
+   - **Accept & Close** — accept, cancel the request, decline others
+   - **Accept & Keep Open** — accept but leave the request open
+   - **Counter** — propose a different rate (enters negotiation)
+   - **Decline** — reject with optional message
+3. On accept, `acceptHSHResponse`:
+   - Creates an `hsh_contracts` row with agreed rate, dates, estimated total
+   - Generates a subcontractor job number for their internal tracking
+   - Creates an `assignments` row with `is_subcontractor: true`
+   - Auto-generates the HSH Agreement PDF via DocuSeal
+   - Records `hiring_accepted_at` timestamp
+   - Grants the subcontractor cross-tenant access to log time and expenses
+   - Syncs the Google Calendar event for the assigned consultant
+
+### Cancelling an HSH Agreement
+
+1. Either party opens the HSH assignment details.
+2. Click **Cancel Agreement** and provide a reason.
+3. `cancelHSHSubcontractAgreement`:
+   - Sets `hsh_contracts.status` to `cancelled`
+   - Sets the linked `hsh_postings.status` to `cancelled` (if applicable)
+   - Deactivates the `assignments` row
+   - Deletes the Google Calendar event for the assigned consultant
+   - Merges a cancellation addendum page into the existing HSH Agreement PDF via DocuSeal
+   - Notifies both parties via `createHSHNotifications`
+
+### Rescheduling via Drag & Drop
+
+1. Navigate to [Schedule](/user-manual/schedule).
+2. Grab a trial bar (moves the entire trial) or a service bar (moves one service).
+3. Drag to a new date range on the timeline.
+4. Confirmation dialog lists affected services, consultants, and notification recipients.
+5. Confirm — `updateTrialDates` updates all dates, PDR, and HSH assignments.
+6. Notifications sent to all involved parties (separately to HSH subs).
+7. Google Calendar events updated for all connected consultants.
+
+### Trial Continuation Workflow
+
+1. Open the trial and click **Continued**.
+2. ContinuedDialog offers three precision options:
+   - **Definite** — enter an exact new trial start date (all services shift)
+   - **Month Only** — select a target month (sets to first business day, Monday)
+   - **None** — mark as continued without new dates yet
+3. Confirm — sets `completion_type: "case_continued"`, shifts dates, creates notifications for internal team and HSH subcontractors.
+
+## Time Tracking
+
+See also the [time clock workflows](/user-manual/time-clock-workflows) and the [travel time feature](/user-manual/travel-time).
+
+### Time Clock — Starting a Timer
+
+1. Navigate to [Time Tracking](/user-manual/time-tracking) — **Time Clock** tab.
+2. Select a trial from the dropdown (shows only assigned trials).
+3. Select a service (filtered to your assigned services for that trial).
+4. Add optional notes for the session.
+5. Click **Clock In** — `time_entries` row created with `status: "in_progress"`.
+6. Timer displays elapsed time and persists across page navigation.
+
+### Time Clock — Stopping a Timer
+
+1. Click **Clock Out**.
+2. System sets `end_time`, calculates duration, applies rounding per tenant settings, and calculates amount.
+3. Status becomes `pending` (awaits approval).
+4. Entry appears in the Table view and on [Approvals](/user-manual/approvals).
+
+### Manual Time Entry
+
+1. Time Tracking — **Table** tab — click **+ Add Time Entry**.
+2. Fill in trial, service, start, end, description.
+3. Duration and rate are computed automatically.
+4. Save — `time_entries` row created with `status: "pending"`.
+
+### Time Entry Approval (Owners/Admins)
+
+1. Navigate to [Approvals](/user-manual/approvals) — **Approve Time** tab (or Time Tracking — **Approve** tab).
+2. Filter by status (All/Pending/Approved/Rejected/Billed), date range.
+3. Group by Team, Person, or Trial using composable toggles.
+4. Bulk-select entries with checkboxes.
+5. **Approve** — sets `status: "approved"`, records `approved_by` and `approved_at`.
+6. **Reject** — prompts for `rejection_reason`, sets `status: "rejected"`.
+7. **Unapprove** — resets approved entries back to `pending`.
+8. All actions sync to linked HSH entries automatically.
+
+### HSH Subcontractor Time Logging
+
+1. Subcontractor logs time in their own tenant's time tracking.
+2. System creates two linked entries:
+   - Subcontractor entry: `entry_type: "subcontractor"`, `rate = agreed_rate`
+   - Hiring company entry: `entry_type: "hiring_company"`, `rate = billing_rate`
+   - Both linked via `linked_time_entry_id`
+3. `linkHSHTimeEntries` automation ensures bidirectional linking.
+4. Approval from the hiring company syncs to the subcontractor entry.
+
+### Travel Time Logging
+
+1. Select a trial and the **Travel Time** service in the time clock.
+2. Select the associated service this travel is for.
+3. Travel rate = associated service rate × travel multiplier (e.g., 0.5 for 50%).
+4. `original_trial_service_id` links the travel entry to its associated service.
+5. Visual travel indicators (±1 day) render on the timeline.
+
+## Expense Tracking
+
+See also the [expense workflows](/user-manual/expense-workflows) and [auto expense reporting](/user-manual/auto-expense-reporting).
+
+### Creating a Receipt Expense (2-Step Wizard)
+
+1. Click **Add Expense** on a trial card (Time Clock) or the Expenses tab.
+2. **Step 1:** toggle set to Receipt (default). Upload a receipt photo or PDF.
+3. An AI vision API extracts data: amount, date, vendor (paid_to), description, category.
+4. **Step 2:** review/edit extracted fields alongside the receipt image.
+5. Submit — `expense_entries` row created with `expense_type: "receipt"`, `status: "pending"`.
+
+### Creating a Mileage Expense (2-Step Wizard)
+
+1. Click **Add Expense** — toggle to Mileage.
+2. **Step 1:** enter start and end addresses (Google Places Autocomplete).
+3. Click **Calculate Route** — calls the Google Directions API.
+4. **Step 2:** view the route map, confirm or edit miles. Amount auto-calculates as `miles × IRS rate` (e.g., $0.70/mile).
+5. Category auto-set to `travel`. Edit date or description as needed.
+6. Submit — `expense_entries` row created with `expense_type: "mileage"`, `miles`, `start_address`, `end_address`, `mileage_rate`.
+
+### HSH Dual-Entry Expenses
+
+1. When creating an expense for an HSH trial, two linked expenses are created:
+   - Subcontractor expense: `entry_type: "subcontractor"`
+   - Hiring company expense: `entry_type: "hiring_company"`, includes `subcontractor_amount`
+2. Linked via `linked_expense_id` (bidirectional).
+3. Approval/rejection syncs across both entries.
+4. Deletion removes both linked entries.
+
+### Expense Approval (Owners/Admins)
+
+1. Navigate to [Approvals](/user-manual/approvals) — **Approve Expenses** tab.
+2. Filter by status (All/Pending/Approved/Rejected/Billed/Reimbursed), date range.
+3. Group by Team, Trial, or Person with composable toggles.
+4. Click the receipt icon to preview in BaseDocumentViewer (in-app, not a new tab).
+5. Bulk-select expenses with checkboxes.
+6. **Approve / Reject** — updates status and records `approved_by` / `approved_at`.
+7. **Unapprove** — resets approved expenses back to `pending`.
+8. **Bulk Delete** — permanently removes selected expenses (with confirmation).
+9. Actions on HSH expenses sync to their linked entry automatically.
+
+## Invoicing & Billing
+
+### Creating a Client Invoice
+
+1. Navigate to [Billing](/user-manual/billing) (single-view 4-column Kanban).
+2. The **Create Invoices** column shows trials with approved, unbilled time and expenses.
+3. Click **Create Invoice** for a trial.
+4. System auto-populates client info (or FRP), invoice number, all approved time entries and expenses, totals, and due date.
+5. Select an invoice template (or use the tenant default).
+6. Review/edit line items — save — `invoices` row with `status: "draft"`.
+7. PDF generated via `generateInvoicePdf` (Edge Function).
+8. Optional: merge receipts into the invoice PDF.
+
+> QuickBooks export is configured but disabled in v1 — a graceful-degradation banner appears where the export action would normally sit. See [QuickBooks integration](/user-manual/quickbooks-integration).
+
+### Sending an Invoice
+
+1. Open the invoice and click **Send Invoice**.
+2. Email composer auto-populates recipients (from saved trial preferences), To/CC/BCC, and an email template.
+3. Send — `sendInvoiceEmail` sends via Resend with the PDF attached, sets `status: "sent"`, and marks linked time/expenses as `billed`.
+4. Recipient preferences are saved to the trial for the next invoice.
+
+### Marking an Invoice as Paid (Collections)
+
+1. Navigate to [Collections](/user-manual/collections) (separate from Billing).
+2. 3-column Kanban: Open Invoices, Overdue Invoices, Paid Invoices.
+3. Click an invoice card to preview (PDF iframe with download).
+4. Click **Mark as Paid** — enter payment method, reference number, payment amount.
+5. Invoice `status: "paid"`, linked `time_entries.status` becomes `paid`.
+
+## Document Management & E-Signatures
+
+### Creating Document Templates
+
+1. [Settings](/user-manual/settings) — **Documents** tab — choose type (Document, Billing, Email).
+2. Build with section types: Rich Text, Services Table, Full Page, Line Items.
+3. Insert placeholders: `{{CASE_NAME}}`, `{{CLIENT_NAME}}`, etc.
+4. Insert signature fields: Client, FRP, or Sales e-signatures.
+5. Configure page settings, conditions, and display order.
+
+### E-Signature Workflow
+
+1. Generate a document from a template and save as draft.
+2. Click **Send for Signature** and select signers (Client, FRP, Sales).
+3. DocuSeal emails each signer a unique signing link.
+4. Signer opens the DocuSeal-hosted signing page and draws on a 600×180 canvas.
+5. Submit — signature embedded in the PDF; signer IP and timestamp recorded.
+6. When all signers complete, the final PDF is generated and the document status becomes `signed`.
+7. If configured, the pipeline stage auto-advances.
+
+## Client Management
+
+### Adding a Client
+
+1. [Clients](/user-manual/clients) — **Add Client** — NewClientLayout modal with tabs.
+2. **Client Info:** firm name, type, sales lead, phone, website.
+3. **Addresses:** multiple office locations with labels.
+4. **Attorneys:** contacts with email, phone, mobile, address association.
+5. **Service Overrides:** custom rates for specific services.
+
+### Transferring a Contact Between Firms
+
+1. Edit the contact and click **Transfer**.
+2. Search for or create the destination firm and select an office address.
+3. Confirm title, enter new email/phone (mobile carries over).
+4. Transfer — a new record is created at the destination; the original is marked `transferred` with notes.
+
+## Settings & Configuration
+
+For theming details see the [style guide](/user-manual/style-guide). The platform ships with a single theme in v1; dual-theme support is architecturally possible and deferred.
+
+### Services & Categories Setup
+
+1. [Settings](/user-manual/settings) — **Services** tab.
+2. Create categories; add services with base rates, rate types, and a daily-minimum flag.
+3. Configure availability (`pre_trial_only` / `in_trial_only` / `both`).
+4. For Travel Time, set `travel_multiplier` (e.g., 0.5 for 50% of the associated service rate).
+
+### Pipeline Stage Configuration
+
+1. Settings — **Pipeline** tab.
+2. Configure Sales stages: name, color, order, `revenue_probability`.
+3. Configure Operations stages with auto-move triggers.
+4. `checkAutoMoveDates` runs daily via `pg_cron` to auto-advance stages.
+
+### Team Member Invitation
+
+1. [Consultants](/user-manual/consultants) — **Invite Team Member**.
+2. Fill in email, name, role, tier, and qualified services.
+3. `inviteTeamMember` creates an invitation and sends email via Resend.
+4. Invitee accepts — `user_profiles`, `user_roles`, and `service_qualifications` rows are created.
+
+### Theme Customization
+
+1. Settings — **Theme** tab.
+2. Customize brand colors, typography, spacing, and component styles.
+3. Real-time preview — save — CSS variables apply app-wide.
+4. Google Fonts integration for custom font loading.
+
+## Download
+
+A plain-Markdown copy of this document is available at
+[`/user-manual/user-workflows/download.md`](/user-manual/user-workflows/download.md).

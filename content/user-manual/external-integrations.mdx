@@ -1,0 +1,291 @@
+---
+title: "External Integrations"
+slug: "external-integrations"
+section: "detailed"
+lastReviewed: "2026-04-22"
+---
+
+Third-party services and API configurations used by HotSeaters. All integrations run through **Next.js API Routes** or **Supabase Edge Functions** — never directly from the browser. Secrets live in Supabase project secrets or environment variables, never in client code.
+
+## Stripe (Subscription Billing)
+
+Stripe handles HotSeaters subscription billing only. It is **not** used for client invoicing — client invoices are generated and emailed from within HotSeaters (see [Billing](/user-manual/billing)).
+
+### Environment variables
+
+```bash
+STRIPE_API_KEY=sk_test_... or sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+### Products and prices
+
+| Plan | Product | Price ID | Monthly | Yearly |
+| --- | --- | --- | --- | --- |
+| Single User | `prod_TTzW1aIDWh1g0L` | `price_1SX1X42M6xED7qUODyxn1wiS` | $85 | $816 |
+| Multi User | `prod_TTzXmiWLEAkMy7` | `price_1SX1YC2M6xED7qUOdSkZtqaX` | $115 | $1,104 |
+| HotSeatHub Add-On | `prod_TTzYn0MXLp5U7O` | `price_1SX1ZY2M6xED7qUONGIdRjpE` | $15 | $144 |
+
+### Webhook events
+
+Endpoint: `https://<your-domain>/api/stripe/webhook` (Next.js API Route).
+
+- `checkout.session.completed` — activates subscription, sets tier and HSH feature flags on `tenant_firms`
+- `customer.subscription.updated` — updates `is_active` based on status
+- `customer.subscription.deleted` — deactivates tenant, removes HSH access
+- `invoice.payment_succeeded` / `invoice.payment_failed`
+
+Signature verification uses **HMAC** (`stripe.webhooks.constructEvent`) against the raw request body. Replay/clock-skew tolerance is enforced by the Stripe SDK's default `tolerance`.
+
+### Server functions
+
+- `createCheckoutSession` — new subscription checkout
+- `createUpgradeSession` — upgrade to multi-user or add HSH
+- `createPortalSession` — Stripe billing portal redirect
+- `getSubscriptionDetails` — current subscription status
+- `updateSubscriptionQuantity` — seat count for per-user billing
+- `stripeWebhook` — webhook handler (API Route, `runtime: 'nodejs'`, raw body)
+
+## Resend (Transactional Email)
+
+Resend delivers **all** transactional email: document signing requests, team invitations, referral invitations, invoice delivery, marketplace notifications, password resets.
+
+### Environment variables
+
+```bash
+RESEND_API_KEY=re_...
+```
+
+Sender email is set on the `tenant_firms` record and must be a verified domain in Resend.
+
+### Used by
+
+- `sendDocumentEmail` / `sendDocumentEmailBatch` — document delivery with signing links
+- `sendInvoiceEmail` — invoice delivery with PDF attachment
+- `inviteTeamMember` — team invitation emails
+- `sendReferralInvitation` — referral invitation emails
+- `notifyMarketplace` — HSH marketplace notifications (email + in-app)
+- `sendTestEmail` — test delivery from Settings
+
+See also: [Notification System](/user-manual/notification-system).
+
+## PDF Generation (Puppeteer Edge Function)
+
+HTML-to-PDF conversion for documents, invoices, and HSH agreement confirmations runs in a Supabase Edge Function backed by headless Chromium (Puppeteer/Playwright). DocuSeal-hosted rendering is an alternative when signing flows embed DocuSeal.
+
+### Environment variables
+
+```bash
+PDF_EDGE_FUNCTION_URL=https://<project>.supabase.co/functions/v1/generate-pdf
+```
+
+### Server functions
+
+- `generatePdfFromHtml` — core PDF generation with retry logic, Google Fonts, private storage upload
+- `generateInvoicePdf` — invoice PDF from template sections
+- `generateHSHAgreementPdf` — HSH assignment confirmation PDF (and cancellation addendum)
+- `mergeReceiptsIntoPdf` — merge expense receipts into invoice PDF
+- `regenerateDocumentPdf` — regenerate document PDF with embedded signatures
+
+### Features
+
+- Retry with exponential backoff (3 attempts)
+- 60s timeout
+- Custom Google Fonts loaded per tenant theme
+- Uploads to Supabase Storage private bucket, with time-limited signed URLs for recipients
+
+## E-Signatures (DocuSeal)
+
+E-signature flows use **DocuSeal** embedded widgets — replacing the legacy canvas SignaturePad. DocuSeal handles signature capture, signer audit trail, and PDF embedding.
+
+- Multi-signer support: client / FRP / sales
+- Public signing pages (no login required)
+- Full audit trails: IP address, user agent, timestamp per signer
+- Automatic pipeline stage advancement when all parties sign (see [Backend Functions](/user-manual/backend-functions))
+
+## Receipt OCR (Veryfi + Cloudinary)
+
+AI-powered receipt data extraction. Veryfi performs OCR to extract vendor, amount, date, and category. Cloudinary handles image deskewing and cropping for better OCR accuracy.
+
+### Environment variables
+
+```bash
+VERYFI_API_KEY=...
+VERYFI_USERNAME=...
+VERYFI_CLIENT_ID=...
+VERYFI_CLIENT_SECRET=...
+
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+```
+
+### Edge functions
+
+- `processReceiptVeryfi` — sends receipt image to Veryfi, extracts vendor, total, date, category
+- `processReceiptAI` — alternative extraction via OpenAI/Anthropic vision (replaces legacy Base44 `InvokeLLM`)
+- `deskewReceiptImage` — uses Cloudinary to straighten/crop the image before OCR
+
+### Workflow
+
+1. User uploads receipt image in the Expense Wizard
+2. Image stored in Supabase Storage
+3. Optional: `deskewReceiptImage` straightens the image via Cloudinary
+4. `processReceiptVeryfi` extracts structured data
+5. Extracted data pre-fills the expense form (amount, date, vendor, category)
+6. User can retry extraction or manually edit
+
+See [Expense Workflows](/user-manual/expense-workflows) and [Auto Expense Reporting](/user-manual/auto-expense-reporting).
+
+## Google Maps Platform (Mileage Expenses)
+
+Powers mileage expense entry: address autocomplete, route calculation, and static map preview. See [Travel Time](/user-manual/travel-time).
+
+### Environment variables
+
+```bash
+GOOGLE_MAPPING_API=your_google_maps_api_key
+```
+
+### APIs used
+
+- **Places Autocomplete** — address suggestions as the user types
+- **Place Details** — full address data from autocomplete selection
+- **Directions API** — calculate driving route and distance
+- **Static Maps API** — generate a route map image for display
+
+### Edge functions
+
+- `placesAutocomplete` — proxy for Google Places Autocomplete
+- `placesDetails` — proxy for Google Place Details
+- `calculateRoute` — returns distance and duration between two addresses
+- `generateRouteMap` — returns a static map image URL
+
+## Google Calendar (Optional OAuth)
+
+Optional OAuth integration to sync trial service assignments to Google Calendar. Users connect during onboarding or from profile settings.
+
+### Environment variables
+
+```bash
+GOOGLE_CLIENT_ID=*.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_client_secret
+```
+
+### OAuth flow
+
+1. `initiateGoogleCalendarOAuth` generates auth URL with state
+2. User redirects to Google consent screen
+3. `handleGoogleCalendarCallback` exchanges code for tokens, stores them on `user_profiles`
+4. Auto-syncs existing active assignments
+
+Google OAuth is **also** used for sub-user self-signup via Supabase Auth (coexists with legacy email/password signup).
+
+### Sync behavior
+
+- Creates/updates all-day events: `"Case Name - Service Name (City, State)"`
+- Auto-refreshes expired tokens
+- Respects the sync preference: in-trial-only vs. all assignments
+- Deletes events when assignments are removed, trials are completed, or calendar is disconnected
+- Calendar sync is fire-and-forget — it never blocks the main operation
+
+### Edge functions
+
+- `initiateGoogleCalendarOAuth`
+- `handleGoogleCalendarCallback`
+- `syncTaskToGoogleCalendar`
+- `testCalendarConnection`
+- `disconnectGoogleCalendar`
+
+## QuickBooks (Deferred — v1 Stub)
+
+The QuickBooks integration ships as a **graceful-degradation stub** in v1. UI surfaces show a "Coming soon" state; server-side sync is not wired. The configured path is deferred to a later release. See [QuickBooks Integration](/user-manual/quickbooks-integration) for the planned scope.
+
+## Supabase Platform Integrations
+
+HotSeaters replaces the legacy Base44 core integrations with Supabase-native primitives.
+
+### Storage
+
+Public bucket for receipts, logos, template backgrounds. Private bucket for generated PDFs (invoices, documents, HSH agreements). Signed URLs give time-limited access to private files.
+
+### AI via Edge Functions
+
+Receipt extraction, expense categorization, and other AI features call **OpenAI** or **Anthropic** APIs from Supabase Edge Functions — never from the client. This replaces the legacy Base44 `InvokeLLM` primitive.
+
+### Image processing
+
+Cloudinary handles deskewing/straightening; AI logo generation uses OpenAI/Anthropic image endpoints from an Edge Function.
+
+### Scheduled work
+
+**All scheduled jobs run via Supabase `pg_cron`** — no Vercel Cron, no `vercel.json`. Scheduled jobs include pipeline auto-advance checks, overdue invoice notifications, and trial-continuation reminders.
+
+## Complete environment variables
+
+```bash
+# Stripe (subscription billing)
+STRIPE_API_KEY=sk_test_... or sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Email (Resend)
+RESEND_API_KEY=re_...
+
+# PDF generation (Puppeteer Edge Function)
+PDF_EDGE_FUNCTION_URL=https://<project>.supabase.co/functions/v1/generate-pdf
+
+# Receipt OCR (Veryfi)
+VERYFI_API_KEY=...
+VERYFI_USERNAME=...
+VERYFI_CLIENT_ID=...
+VERYFI_CLIENT_SECRET=...
+
+# Image processing (Cloudinary)
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+
+# Maps and routing (Google)
+GOOGLE_MAPPING_API=...
+
+# Google OAuth (Calendar + sub-user signup)
+GOOGLE_CLIENT_ID=*.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=...
+
+# AI providers (Edge Functions only)
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+
+# Supabase (platform)
+NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...   # server-only
+```
+
+See [Environment Setup](/user-manual/environment-setup) for local configuration.
+
+## Troubleshooting
+
+### Stripe webhook signature fails
+
+Ensure the API Route receives the **raw request body** (not parsed JSON) and that `STRIPE_WEBHOOK_SECRET` matches the endpoint secret shown in the Stripe dashboard.
+
+### PDF generation failing
+
+Check the Edge Function logs. Validate the input HTML. The retry logic handles transient failures (3 attempts with exponential backoff). Verify the Puppeteer Edge Function has enough memory allocated.
+
+### Receipt extraction empty
+
+Check Veryfi credentials. Try deskewing the image first via Cloudinary. Fallback: route to `processReceiptAI` which uses OpenAI/Anthropic vision.
+
+### Mileage route calculation fails
+
+Verify `GOOGLE_MAPPING_API` has **Directions API** and **Places API** enabled in Google Cloud Console, and that the key has no domain restriction blocking server-side calls.
+
+### Google Calendar `invalid_grant`
+
+`testCalendarConnection` clears stored tokens on `invalid_grant`. The user must reconnect from profile settings.
+
+## Download this document
+
+Download as markdown: [`/user-manual/external-integrations/download.md`](/user-manual/external-integrations/download.md).

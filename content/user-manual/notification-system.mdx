@@ -1,0 +1,184 @@
+---
+title: "Notification System"
+slug: "notification-system"
+section: "detailed"
+lastReviewed: "2026-04-22"
+---
+
+# Notification System
+
+HotSeaters delivers in-app and email notifications through a decoupled, event-driven architecture. Notifications are treated as **side effects** of core business operations — they must never block or fail a user's primary action (assigning a consultant, posting an HSH request, marking a trial continued, etc.).
+
+The transport layer is **Supabase Realtime** (WebSocket channel subscriptions) as the primary delivery mechanism, with a lightweight polling fallback for degraded-connection environments. Outbound email is sent via **Resend** from Edge Functions. See [external integrations](/user-manual/external-integrations) for the broader integration map.
+
+## Design principles
+
+1. **Notifications are side effects.** Failures in the notification pipeline must not roll back the triggering operation.
+2. **Centralized creation.** All notification rows are written through a single Edge Function so validation, deduplication, and sender/recipient filtering live in one place.
+3. **Event-driven, not polled.** Postgres triggers and Realtime channel broadcasts replace the legacy 15-second polling loop.
+4. **Service-role writes.** The creation function runs with the Supabase service role so it never fails on a client's auth context.
+5. **Tenant-isolated.** Every row carries `tenant_id`; RLS restricts reads to the recipient.
+
+## Data model
+
+### `notifications` table
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | primary key |
+| `tenant_id` | uuid | FK → `tenant_firms.id`; indexed |
+| `user_id` | uuid | recipient; FK → `user_profiles.id`; indexed |
+| `sender_user_id` | uuid \| null | optional; used to suppress self-notifications |
+| `type` | text | enum-like discriminator (`assignment.created`, `trial.dates_changed`, `hsh.posting.created`, `invoice.paid`, etc.) |
+| `payload` | jsonb | arbitrary typed metadata (trial id, service name, amounts, links) |
+| `title` | text | short, display-ready |
+| `message` | text | full body for toast + bell menu |
+| `read_at` | timestamptz \| null | null until user dismisses/reads |
+| `created_at` | timestamptz | default `now()` |
+
+### RLS
+
+- `SELECT`: `auth.uid() = user_id`
+- `UPDATE` (mark read): `auth.uid() = user_id`, restricted to `read_at` column
+- `INSERT`: service role only — never from client code
+
+## Architecture
+
+### Event sources
+
+Notifications originate from Postgres triggers on the following tables. Each trigger calls a single `NOTIFY` or invokes an Edge Function via `pg_net` that writes into `notifications` and emits a Realtime broadcast.
+
+| Source table | Event | Notification type(s) |
+|---|---|---|
+| `assignments` | insert | `assignment.created` |
+| `assignments` | update (status → inactive) / delete | `assignment.removed` |
+| `trials` | update `start_date` / `end_date` | `trial.dates_changed` |
+| `trials` | update `pipeline_stage_id` | `trial.stage_changed` |
+| `trials` | update `completion_type` | `trial.continued` / `trial.uncontinued` |
+| `hsh_postings` | insert | `hsh.posting.created` (invited users OR public marketplace) |
+| `hsh_postings` | update (status → cancelled) | `hsh.posting.cancelled` |
+| `hsh_applications` | insert | `hsh.response.received` |
+| `hsh_applications` | update (status → accepted/declined) | `hsh.response.resolved` |
+| `hsh_contracts` | insert | `hsh.contract.created` |
+| `generated_documents` | update (all parties signed) | `document.signed` |
+| `invoices` | update (status → paid) | `invoice.paid` |
+
+### The `create-notification` Edge Function
+
+A single Edge Function owns all notification writes. It accepts:
+
+```ts
+type CreateNotificationInput = {
+  tenantId: string;
+  recipientUserIds: string[];
+  senderUserId: string | null;
+  type: string;
+  title: string;
+  message: string;
+  payload: Record<string, unknown>;
+};
+```
+
+Responsibilities:
+
+- Skip any recipient where `recipientUserId === senderUserId`.
+- Skip inactive users (`user_profiles.is_active = false`).
+- Insert one row per remaining recipient in a single batched statement.
+- Never throw — return a structured result `{ inserted, skipped, errors }` for observability.
+- Fan out email via Resend for notification types flagged in the user's preferences.
+
+### Delivery to the client
+
+1. The trigger inserts rows into `notifications`.
+2. Supabase Realtime broadcasts the `INSERT` on channel `notifications:user_id=eq.<uuid>`.
+3. The client subscription pushes the row into local state.
+4. The bell-menu badge increments; a toast renders if the user's preferences opt in for that `type`.
+
+### Frontend subscription
+
+The `useNotifications` hook performs one initial fetch and then holds a Realtime subscription for the session. No polling, no refetch-on-focus.
+
+```ts
+const supabase = useSupabaseClient();
+const { user } = useUser();
+
+useEffect(() => {
+  if (!user) return;
+
+  // Initial fetch
+  supabase
+    .from("notifications")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50)
+    .then(({ data }) => setNotifications(data ?? []));
+
+  // Realtime subscription
+  const channel = supabase
+    .channel(`notifications:${user.id}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${user.id}`,
+      },
+      (payload) => {
+        if (payload.eventType === "INSERT") {
+          setNotifications((prev) => [payload.new, ...prev]);
+        } else if (payload.eventType === "UPDATE") {
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === payload.new.id ? payload.new : n)),
+          );
+        } else if (payload.eventType === "DELETE") {
+          setNotifications((prev) => prev.filter((n) => n.id !== payload.old.id));
+        }
+      },
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [user, supabase]);
+```
+
+### Polling fallback
+
+If the Realtime channel fails to connect (restrictive network, proxy, etc.), the hook falls back to a 60-second polling query keyed by the most recent `created_at` it has seen. The fallback is announced to telemetry so operators can identify environments where the primary transport is unreachable.
+
+## UI surfaces
+
+- **Toast** — shadcn/ui `Sonner` toaster mounted at the app root. Each incoming notification renders one toast with a link to the relevant record (trial, invoice, posting).
+- **Bell menu** — navbar button with an unread-count badge. Opens a scrollable popover listing the last 50 notifications. Clicking a row marks it read and navigates to the source.
+- **Per-user preferences** — `/settings` profile panel exposes per-`type` toggles for toast, email, and both.
+
+## Email
+
+Email is sent from the `create-notification` Edge Function via Resend for types a user has opted into. Templates live alongside the function and use the same `payload` shape. Failures are logged but never block the database write.
+
+## Adding a new notification type
+
+1. Identify the source table and the mutation that should trigger it.
+2. Add a Postgres trigger (or extend an existing one) that invokes `create-notification` with the new `type` and payload.
+3. Add the `type` to the preferences schema so users can opt in or out.
+4. Add a toast renderer and (optionally) an email template.
+
+## Migration notes from legacy Base44 architecture
+
+The legacy system polled a `Notification` entity every 15 seconds, wrote notifications from many frontend call sites, and invoked a `processNotification` Base44 function without a reliable auth context. That approach produced 429 rate-limit errors, silent drops, and occasional blocking failures on the triggering operation.
+
+The HotSeaters implementation replaces all of that with:
+
+- A single **`notifications`** Postgres table (RLS-scoped per user).
+- Postgres **triggers** as the only event source.
+- One **`create-notification`** Edge Function as the only writer.
+- **Supabase Realtime** channels as the primary delivery transport.
+- **Resend** for outbound email (Base44 mail is not used).
+
+See [backend functions](/user-manual/backend-functions) for the full Edge Function catalog and [technical reference](/user-manual/technical-reference) for the data-layer conventions these triggers follow.
+
+## Download this document
+
+Download as markdown: [`/user-manual/notification-system/download.md`](/user-manual/notification-system/download.md).

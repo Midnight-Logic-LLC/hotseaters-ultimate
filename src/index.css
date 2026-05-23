@@ -1,0 +1,274 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@fontsource-variable/geist';
+
+/* =============================================================================
+ * hotseaters-ultimate — global styles
+ *
+ * Theme tokens ported from HotSeatersMVP `src/components/theme/themeUtils.jsx`
+ * (the bible). Token names are preserved verbatim (`--theme-*`) so legacy
+ * component CSS lifted into ported features continues to work. The runtime
+ * theming layer (Change 3) overrides these from
+ * `src/shared/lib/theme.ts -> applyThemeVars(company.theme)`.
+ *
+ * Self-hosted Supabase only. HotSeatersMVP is the bible.
+ * ============================================================================= */
+
+@theme {
+  --color-brand-primary: #0891B2;
+  --color-brand-secondary: #06B6D4;
+  --color-brand-emphasis: #1E3A8A;
+  --color-brand-accent-warm: #F97316;
+  --color-brand-accent-urgent: #EF4444;
+  --color-hsh-primary: #9333EA;
+  --font-sans: 'Geist Variable', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  /* HotSeaters Brand Colors */
+  --theme-brand-primary: #0891B2;
+  --theme-brand-primary-hover: #06B6D4;
+  --theme-brand-operations: #3B82F6;
+  --theme-brand-emphasis: #1E3A8A;
+  --theme-brand-accent-warm: #F97316;
+  --theme-brand-accent-urgent: #EF4444;
+
+  /* HotSeatHub Brand Colors */
+  --theme-hsh-primary: #9333EA;
+  --theme-hsh-primary-hover: #6B21A8;
+  --theme-hsh-accent-light: #A78BFA;
+  --theme-hsh-background: #F5F3FF;
+  --theme-hsh-secondary: #4F46E5;
+  --theme-hsh-secondary-light: #818CF8;
+
+  /* Semantic Colors */
+  --theme-success: #059669;
+  --theme-success-light: #DCFCE7;
+  --theme-warning: #F59E0B;
+  --theme-warning-light: #FEF3C7;
+  --theme-danger: #DC2626;
+  --theme-danger-light: #FEE2E2;
+  --theme-info: #2563EB;
+  --theme-info-light: #DBEAFE;
+
+  /* Neutral Palette */
+  --theme-stone-50: #FAFAF9;
+  --theme-stone-100: #F5F5F4;
+  --theme-stone-200: #E7E5E4;
+  --theme-stone-500: #78716C;
+  --theme-stone-600: #57534E;
+  --theme-stone-900: #1C1917;
+
+  /* Page Background */
+  --theme-page-bg: #FAFAF9;
+
+  /* Sidebar */
+  --theme-sidebar-bg: #FFFFFF;
+
+  /* Typography */
+  --theme-font-brand-title: 'Zen Dots', sans-serif;
+  --theme-font-brand-subtitle: 'Michroma', sans-serif;
+  --theme-font-body: system-ui, -apple-system, sans-serif;
+  --theme-font-sidebar: system-ui, -apple-system, sans-serif;
+  --theme-text-page-title: 1.875rem;
+  --theme-text-section-title: 1.25rem;
+  --theme-text-card-title: 1.125rem;
+  --theme-text-body: 0.875rem;
+  --theme-text-label: 0.875rem;
+  --theme-text-caption: 0.75rem;
+  --theme-text-sidebar: 0.875rem;
+  --theme-sidebar-heading-weight: 400;
+
+  /* Spacing & Layout */
+  --theme-page-padding: 1.5rem;
+  --theme-page-padding-lg: 2rem;
+  --theme-section-gap: 1.5rem;
+  --theme-card-gap: 1rem;
+  --theme-element-gap: 0.5rem;
+  --theme-max-content-width: 80rem;
+
+  /* Dialog */
+  --theme-dialog-radius: 0.75rem;
+  --theme-dialog-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --theme-dialog-border: 1px;
+  --theme-dialog-bg: #FFFFFF;
+  --theme-dialog-header-bg: #FAFAF9;
+  --theme-dialog-padding: 1.5rem;
+  --theme-dialog-header-padding: 1.5rem;
+
+  /* Card */
+  --theme-card-radius: 0.5rem;
+  --theme-card-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --theme-card-border: 1px;
+  --theme-card-bg: #FFFFFF;
+  --theme-card-header-bg: #FAFAF9;
+  --theme-card-padding: 1.5rem;
+  --theme-card-header-padding: 1.5rem;
+
+  /* Button */
+  --theme-button-radius: 0.5rem;
+  --theme-button-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --theme-button-group-bg: #FFFFFF;
+  --theme-button-group-shadow: none;
+  --theme-button-text-size: 0.875rem;
+
+  /* Tabs */
+  --theme-tab-radius: 0.5rem;
+  --theme-tab-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --theme-tab-group-shadow: none;
+  --theme-tab-group-bg: #F5F5F4;
+  --theme-tab-active-bg: #0891B2;
+  --theme-tab-active-text: #FFFFFF;
+  --theme-tab-text-size: 0.875rem;
+
+  /* Section Headers */
+  --theme-section-border: 1px;
+  --theme-section-spacing: 1.5rem;
+  --theme-section-bg: transparent;
+  --theme-section-text: #1C1917;
+  --theme-section-font-size: 1.25rem;
+  --theme-section-padding: 0.75rem;
+
+  /* List Containers */
+  --theme-list-radius: 0.5rem;
+  --theme-list-border: 1px;
+  --theme-list-spacing: 0.5rem;
+  --theme-list-bg: #FFFFFF;
+  --theme-list-padding: 1rem;
+
+  /* List Items */
+  --theme-list-item-radius: 0.5rem;
+  --theme-list-item-shadow: none;
+  --theme-list-item-border: 1px;
+  --theme-list-item-bg: #FFFFFF;
+  --theme-list-item-padding: 0.75rem;
+
+  /* Inputs */
+  --theme-input-radius: 0.5rem;
+  --theme-input-border: 1px;
+  --theme-input-bg: #FFFFFF;
+
+  /* Convenience aliases that some primitives expect */
+  --theme-surface: #FFFFFF;
+  --theme-text: #1C1917;
+  --theme-text-muted: #78716C;
+  --theme-border: #E7E5E4;
+
+  /* Safe-area for notched mobile (Tauri primary) */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+}
+
+/* Dark mode — pragmatic mirror of legacy `.dark` palette in MVP index.css */
+.dark,
+[data-theme='dark'] {
+  --theme-page-bg: #0c0a09;
+  --theme-sidebar-bg: #1c1917;
+  --theme-card-bg: #1c1917;
+  --theme-dialog-bg: #1c1917;
+  --theme-list-bg: #1c1917;
+  --theme-list-item-bg: #1c1917;
+  --theme-input-bg: #1c1917;
+  --theme-button-group-bg: #1c1917;
+  --theme-stone-50: #1c1917;
+  --theme-stone-100: #292524;
+  --theme-stone-200: #44403c;
+  --theme-stone-500: #a8a29e;
+  --theme-stone-600: #d6d3d1;
+  --theme-stone-900: #fafaf9;
+  --theme-section-text: #fafaf9;
+  --theme-surface: #1c1917;
+  --theme-text: #fafaf9;
+  --theme-text-muted: #a8a29e;
+  --theme-border: #44403c;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --theme-text-page-title: 1.375rem;
+    --theme-text-section-title: 1rem;
+    --theme-text-body: 0.8125rem;
+    --theme-page-padding: 1rem;
+    --theme-section-gap: 1rem;
+    --theme-card-gap: 0.75rem;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  font-family: var(--theme-font-body);
+  font-size: var(--theme-text-body);
+  line-height: 1.5;
+  color: var(--theme-stone-900);
+  background: var(--theme-page-bg);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Headings: legacy MVP used a display font on h1-h6 */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--theme-font-body);
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+
+/* Touch targets ≥ 44pt per RULE 4 (Tauri mobile primary) */
+button,
+[role='button'],
+a {
+  min-height: 44px;
+}
+
+/* Safe-area helpers (legacy MVP utility classes) */
+.safe-top {
+  padding-top: var(--safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: calc(var(--safe-area-inset-bottom) * 0.5);
+}
+.safe-left {
+  padding-left: var(--safe-area-inset-left);
+}
+.safe-right {
+  padding-right: var(--safe-area-inset-right);
+}
+
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Hide the main bottom tab bar when something modal is open (legacy hook). */
+body.hide-bottom-tab-bar .bottom-tab-bar-nav {
+  display: none !important;
+}
+
+/* Apply app body font to all vaul drawers */
+[vaul-drawer] {
+  font-family: var(--theme-font-body) !important;
+}
+
+/* iOS Standalone Web App: prevent viewport bounce-scroll on small screens */
+@media (max-width: 1023px) {
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+  }
+}

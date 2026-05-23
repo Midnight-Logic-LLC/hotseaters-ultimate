@@ -1,0 +1,141 @@
+# hotseaters-ultimate CI test pipeline.
+#
+# Hard Constraints:
+#   - Self-hosted Supabase only — never *.supabase.co.
+#   - HotSeatersMVP is the bible.
+#
+# Pipeline: install → typecheck → lint → vitest → playwright e2e → cucumber
+# → visual-parity (compare only) → pgTAP.
+
+name: test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      HU_PORT: '5174'
+      VITE_BASE_URL: 'http://localhost:5174'
+      VITE_SUPABASE_URL: 'http://localhost:8000'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: supabase_admin
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Checkout sibling latest-data
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/latest-data
+          path: ../latest-data
+          submodules: recursive
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit + integration tests (vitest)
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: E2E (Playwright)
+        run: pnpm test:e2e
+
+      - name: BDD journeys (Cucumber)
+        run: pnpm test:e2e:cucumber
+
+      - name: Visual parity (compare only)
+        run: pnpm test:visual-parity
+
+      - name: Apply Supabase migrations for pgTAP
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U supabase_admin -d postgres \
+            -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
+          for f in ../latest-data/supabase/migrations/*.sql; do
+            echo "Applying $f"
+            PGPASSWORD=postgres psql -h localhost -U supabase_admin -d postgres -f "$f"
+          done
+
+      - name: Install pgTAP runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtap-parser-sourcehandler-pgtap-perl postgresql-client
+
+      - name: pgTAP suite
+        env:
+          DB_URL: postgres://supabase_admin:postgres@localhost:5432/postgres
+        run: pnpm test:db
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            tests/e2e/.artifacts
+          retention-days: 14
+
+      - name: Upload visual-parity artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-parity-diff
+          path: tests/visual-parity/.artifacts
+          retention-days: 14

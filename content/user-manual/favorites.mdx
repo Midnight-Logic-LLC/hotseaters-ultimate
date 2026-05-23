@@ -1,0 +1,54 @@
+---
+title: "Favorites"
+slug: "favorites"
+section: "per-page"
+lastReviewed: "2026-04-22"
+---
+
+# Favorites
+
+Dedicated page for managing favorite HotSeatHub subcontractor tenants and consultants. Only visible when the current tenant has `marketplace_post_jobs = true`.
+
+## Page header and visibility
+
+HSH-themed page with a star mark and the "Favorites" heading plus HotSeatHub subtitle. Renders null when `tenant_firms.marketplace_post_jobs` is disabled. The page reads the current user's tenant to check the flag.
+
+## Favorites manager
+
+The entire page body is rendered by the favorites-manager component, which receives the current `tenant_id`. It manages two categories of `favorite_subcontractors` rows:
+
+### Favorited tenants
+
+`favorite_subcontractors` rows where `favorite_tenant_id` is set. Each `tenant_id` resolves to a `tenant_firms` row for display. Each entry renders the tenant name and a remove (unfavorite) action.
+
+### Favorited individual consultants
+
+`favorite_subcontractors` rows where `favorite_user_id` is set. Each `user_id` resolves to a `user_profiles` row for `first_name` / `last_name` display. Each entry renders the consultant name and a remove action.
+
+## How favorites are added
+
+Favorites are not added from this page — they are added from [Help Wanted](/user-manual/help-wanted) via the star icon on an application sub-card. Clicking the star opens the favorite-choice dialog with three options:
+
+- **Tenant only** — creates a `favorite_subcontractors` row with `favorite_tenant_id` set to the responding subcontractor tenant's ID.
+- **Individual only** — creates a `favorite_subcontractors` row with `favorite_user_id` set to the responding consultant's `user_profiles` ID.
+- **Both** — creates two separate `favorite_subcontractors` rows, one for the tenant and one for the individual.
+
+## How favorites are used
+
+- **Help Wanted** — favorites populate the banner card at the top of the page for quick reference.
+- **Post to HotSeatHub** — when creating a private `hsh_postings` row (`is_public = false`), the audience selector provides quick selection of favorited tenants and individuals to append to `invited_tenant_ids` and `invited_user_ids`.
+- **Consultants** — favorited individual consultants appear in a dedicated "HotSeatHub Favorites" section on the [Consultants](/user-manual/consultants) page, showing name, email, phone, and profile photo (read-only).
+
+## Role visibility
+
+Visible to all tenant roles (owner, admin, sales, trial_consultant) as long as the tenant has `marketplace_post_jobs = true`. The sidebar item is shown or hidden based on this tenant flag, not on user role.
+
+## Related
+
+- [Help Wanted](/user-manual/help-wanted)
+- [Potential Gigs](/user-manual/potential-gigs)
+- [Consultants](/user-manual/consultants)
+
+## Download this document
+
+Download as markdown: [`/user-manual/favorites/download.md`](/user-manual/favorites/download.md).

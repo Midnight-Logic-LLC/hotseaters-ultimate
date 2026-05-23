@@ -1,0 +1,93 @@
+---
+title: "Approvals"
+slug: "approvals"
+section: "per-page"
+lastReviewed: "2026-04-22"
+---
+
+# Approvals
+
+The **Approvals** page is a dedicated hub for owners and admins to review, approve, reject, or reset time entries and expenses submitted by their team. It supports bulk actions, status filtering, and group-by toggles across two tabs: **Approve Time** and **Approve Expenses**. The active tab is persisted per user so the page reopens where it was left.
+
+All data is scoped by `tenant_id` in Supabase. Entries are drawn from `time_entries` and `expense_entries`, and approval state lives on those records (`status`, `approved_by`, `approved_at`, `rejection_reason`). Related surfaces: [Time Tracking](/user-manual/time-tracking), [Time Clock Workflows](/user-manual/time-clock-workflows), [Expense Workflows](/user-manual/expense-workflows), [Billing](/user-manual/billing), [Collections](/user-manual/collections).
+
+## Summary Panel
+
+An informational strip at the top of the page gives admins an at-a-glance view of their approval workload. It never gates or blocks actions.
+
+- **Current billing cycle entries** — count of pending time entries and expenses whose dates fall within the current billing period. The period is derived from the tenant's `invoice_period` setting (weekly uses `weekly_billing_day`; monthly uses `monthly_billing_date`).
+- **Straggler entries** — count of pending items whose dates fall *before* the current billing period. These are shown with a distinct warning treatment so older items can be prioritized first.
+- The panel auto-refreshes as items are approved or rejected below, and counts every entry type (regular, subcontractor, hiring_company mirror).
+- Approved and billed items are excluded — only pending and rejected entries are counted.
+
+## Page Header
+
+Title "Approvals" with the subtitle "Review and approve time entries and expenses". Two tabs — **Approve Time** and **Approve Expenses** — each show a pending-count badge. The active tab is persisted to the user's profile preferences and restored on reload.
+
+## Tab 1: Approve Time
+
+Renders the shared time spreadsheet in **approval mode**. All tenant time entries are loaded sorted by `-start_time`.
+
+### Status Filter
+
+Five options: **All**, **Pending**, **Approved**, **Rejected**, **Billed**. Client-side filtering is applied before rendering. The selection is persisted per user.
+
+### Date Filter
+
+Preset ranges (today, this week, last week, this month, custom) passed into the spreadsheet. Defaults to **This Week** and is persisted per user.
+
+### Group-By Toggles
+
+Three independent toggles, each persisted per user:
+
+- **Group by Person** — default off.
+- **Group by Team** — default on. When enabled in approval mode, entries split into three sections: **Internal Team**, **HotSeatHub Subcontractors** (inbound work by external firms), and **HotSeatHub Assignments** (your own consultants' entries that have been mirrored into other tenants, shown read-only).
+- **Group by Trial** — default off.
+
+Toggles compose hierarchically; toggle changes are written optimistically to the query cache.
+
+### Approval Actions
+
+- **Approve** — sets `status='approved'`, records `approved_by` (current user) and `approved_at` (ISO timestamp). For `hiring_company` mirror entries, the change is synced to the linked subcontractor entry via `linked_time_entry_id`.
+- **Reject** — sets `status='rejected'` with a `rejection_reason` captured from a prompt dialog. Also synced to the linked HSH entry.
+- **Reset to Pending** — sets `status='pending'` and clears `approved_by`, `approved_at`, and `rejection_reason`. Optimistic updates with rollback on error, synced across HSH links.
+- **Bulk actions** — when rows are selected, a bulk action bar offers Approve, Reject, Reset to Pending, and Clear. All selected entries are processed in parallel.
+- **Inline edit** — start time, end time, description, and rate can be edited inline. For `hiring_company` entries, edits to `start_time`, `end_time`, `duration_hours`, and `description` are synced in both directions across the HSH link.
+
+## Tab 2: Approve Expenses
+
+Renders the expense approval grid. All tenant expenses are loaded sorted by `-date`.
+
+### Status Filter
+
+Six options: **All**, **Pending**, **Approved**, **Rejected**, **Billed**, **Reimbursed**. Persisted per user.
+
+### Date Filter
+
+Same preset set as the time tab, persisted per user.
+
+### Group-By Toggles
+
+Three independent switches, composable in any permutation:
+
+- **Group by Team** — splits expenses into a `[Tenant Name] Team` section and a `HotSeatHub Subcontractors` section based on the consultant's tenant.
+- **Group by Trial** — collapsible trial headers showing case name, count, and total.
+- **Group by Person** — collapsible person headers showing name, count, and total. Defaults on.
+
+Toggles compose hierarchically: Team → Trial → Person. Enabling all three yields Team → Trial → Person → individual rows.
+
+### Expense Display
+
+Expense tables use fixed-width columns for consistent alignment across receipt and mileage types. Each row shows a selection checkbox, date, person, trial/client, description, category badge, amount, receipt indicator, and edit/delete actions. Clicking the receipt icon opens the in-app document viewer (not a new tab).
+
+## Data Loading
+
+The page fetches these entities in parallel, all scoped by `tenant_id`: `time_entries`, `expense_entries`, `trials`, `client_firms`, `service_types`, `trial_services`, the current tenant record, `deal_stages`, `hsh_contracts` where the current tenant is the hiring party, and the consultant roster. Queries only run when the user is owner or admin.
+
+## Role Visibility
+
+Accessible only to **Owner** and **Admin** roles. The sidebar item is hidden from Sales and Trial Consultant users, and the underlying queries are gated by the same role check.
+
+## Download this document
+
+Download as markdown: [`/user-manual/approvals/download.md`](/user-manual/approvals/download.md).

@@ -1,0 +1,659 @@
+---
+title: Database Schema
+section: core
+lastReviewed: 2026-04-22
+legacyFile: Doc02DatabaseSchema.jsx
+summary: Complete entity structure and relationships for the Supabase Postgres schema that backs HotSeaters.
+---
+
+# Database Schema Reference
+
+*Complete entity structure and relationships backing the HotSeaters
+application on Supabase Postgres.*
+
+This reference replaces the legacy Base44 schema with the new Supabase
+model. The legacy `company_id` column is renamed **`tenant_id`** across
+every entity; multi-tenancy is enforced by Row Level Security (RLS)
+policies, not by application-layer filtering alone.
+
+## Built-in Fields
+
+Every entity automatically includes:
+
+- `id` — `uuid`, primary key (Postgres `gen_random_uuid()`)
+- `created_at` — `timestamptz` (replaces Base44 `created_date`)
+- `updated_at` — `timestamptz` (replaces Base44 `updated_date`)
+- `created_by` — `uuid` referencing `auth.users(id)` (replaces Base44
+  email-based attribution)
+
+All tenant-scoped entities additionally carry `tenant_id uuid not null`
+with RLS policies enforcing isolation.
+
+## Core Entities
+
+### tenant_firms
+
+Multi-tenant isolation root. Each `tenant_firm` is a single trial
+consulting firm (this is the new name for the legacy `Company`
+entity).
+
+```text
+name, owner_id, logo_url, website, phone, address, city, state, zip,
+subscription_tier (single_user | multi_user), stripe_customer_id,
+has_hsh_addon, marketplace_post_jobs, marketplace_fill_jobs,
+profit_margin_type (percentage | dollar), profit_margin_value,
+default_daily_minimum_hours, time_rounding_minutes,
+clock_in_rounding (up | down | nearest),
+clock_out_rounding (up | down | nearest),
+invoice_due_days, invoice_period (weekly | monthly | per_trial),
+weekly_billing_day, monthly_billing_date, per_trial_billing_days_after_end,
+invoice_number_format, invoice_number_start, invoice_number_reset_yearly,
+job_number_format, job_number_start, job_number_reset_yearly,
+custom_fonts[], sender_email, hide_deals_from_time_clock,
+fiscal_year_start_month, annual_revenue_target, monthly_breakeven,
+retainer_divisor, retainer_multiplier, retainer_minimum,
+default_invoice_template_id, default_statement_template_id,
+default_invoice_email_template_id, default_invoice_email_message,
+show_debug_info, theme (jsonb), is_active,
+hsh_rating, hsh_reviews_count
+```
+
+### auth.users (Supabase built-in)
+
+Supabase-managed authentication table. Not modified directly;
+users are created through:
+
+1. The **email/password signup** flow (legacy, still supported)
+2. The **Google OAuth sub-user self-signup** flow (new — lands in
+   `pending_approval`, approved by the firm owner, 14-day `pg_cron`
+   expiry)
+
+```text
+id, email, encrypted_password, email_confirmed_at, raw_user_meta_data,
+last_sign_in_at
+```
+
+Never insert directly; use Supabase Auth admin APIs (for OAuth sub-user
+approval) or the public signup flow.
+
+### user_profiles
+
+Extends `auth.users` with firm membership and role mapping. One row per
+user.
+
+```text
+user_id (pk, references auth.users.id),
+tenant_id,
+company_role (owner | admin | sales | trial_consultant),
+first_name, last_name, title, phone, profile_photo_url, signature_image_url,
+consultant_tier_id, is_sales, notes,
+account_status (active | pending_approval | rejected | inactive),
+google_calendar_access_token, google_calendar_refresh_token,
+google_calendar_token_expires_at, google_calendar_sync_in_trial_only,
+preferences (jsonb — extensive UI/notification preferences),
+hsh_rating, hsh_reviews_count, hsh_profile_description,
+hsh_skills[], hsh_location
+```
+
+`account_status` gates pending sub-user sign-ups; `preferences`
+stores view types, group-by toggles, tab states, date filters,
+schedule settings, and other UI state.
+
+## Client & Trial Management
+
+### client_firms
+
+Law firms that hire trial consulting services. Renamed from legacy
+`Client`.
+
+```text
+tenant_id, firm_name, client_type_id, sales_lead_user_id,
+phone, website, notes, status (active | inactive)
+```
+
+### client_addresses
+
+Multiple addresses per client firm with labels.
+
+```text
+tenant_id, client_firm_id, label, address, city, state, zip, is_primary
+```
+
+### client_types
+
+Classifier for client firms.
+
+```text
+tenant_id, name, sort_order, is_active
+```
+
+### client_tiers
+
+Pricing tiers for client firms with rate multipliers.
+
+```text
+tenant_id, name, multiplier, description, sort_order, is_active
+```
+
+### contacts
+
+Individual people working at client firms (attorneys, paralegals, etc.).
+Replaces legacy `Attorney`. Supports transfer between firms.
+
+```text
+tenant_id, client_firm_id, client_address_id,
+first_name, last_name, title, email, phone, mobile, notes,
+contact_status (active | transferred),
+is_primary_billing
+```
+
+Transferred contacts are hidden from active lists; transfer creates a
+new row at the destination firm while preserving history on the
+original.
+
+### trials
+
+The core entity for both sales deals and active trials.
+
+```text
+tenant_id, client_firm_id, primary_contact_id,
+case_name, case_style, case_number, job_number,
+courthouse, city, state, court, judge, case_type,
+side (plaintiff | defense),
+retainer_value, start_date, end_date,
+pipeline_stage_id, consultant_user_id, estimated_value, notes,
+deal_document_id, daily_minimum_hours, bill_for_weekends,
+frp_client_firm_id, frp_contact_id, won_date, lost_date,
+completion_type (deal_won | deal_lost | deal_settled |
+  verdict_for | verdict_against | case_settled | case_continued),
+completion_date,
+continued_date_precision (definite | month_only | none),
+invoice_recipient_preferences (jsonb)
+```
+
+### trial_contacts
+
+Secondary contacts copied onto a trial for notifications.
+
+```text
+tenant_id, trial_id, contact_id
+```
+
+## Service Management
+
+### service_categories
+
+Service groupings for organization.
+
+```text
+tenant_id, name, sort_order, is_default, is_active
+```
+
+### service_types
+
+Service catalog (e.g. Jury Consulting, Graphics). Renamed from legacy
+`Service`.
+
+```text
+tenant_id, name, description, service_category_id,
+base_rate, rate_type (hourly | daily | flat),
+has_daily_minimum,
+service_availability (pre_trial_only | in_trial_only | both),
+default_lead_days, default_duration_days,
+sort_order, is_default, is_active, travel_multiplier
+```
+
+The **Travel Time** service uses `travel_multiplier` to derive its
+billing rate from the associated parent service.
+
+### trial_services
+
+Services added to a specific trial, with calculated rates and daily
+revenue projections.
+
+```text
+tenant_id, trial_id, service_type_id, service_name (snapshot),
+custom_description, rate, rate_type,
+estimated_quantity, estimated_total,
+start_date, end_date,
+days_before_trial, split_billing_at_threshold,
+pre_trial_estimated_hours,
+final_billing_method (hourly | daily_minimum | split),
+service_phase (pre_trial | in_trial | split),
+projected_daily_revenue,
+pre_trial_projected_daily_revenue,
+in_trial_projected_daily_revenue,
+display_order, travel_eligible, estimated_travel_hours
+```
+
+Supports split billing (pre-trial hourly + in-trial daily minimum) and
+travel-time billing.
+
+### assignments
+
+Links consultants to trial services. Renamed from legacy
+`TrialServiceAssignment`.
+
+```text
+tenant_id, trial_id, trial_service_id, consultant_user_id,
+is_subcontractor, subcontract_assignment_id,
+google_calendar_event_id,
+status (active | inactive)
+```
+
+### user_services
+
+Services that each consultant is qualified to provide. Renamed from
+legacy `UserService`.
+
+```text
+tenant_id, consultant_user_id, service_type_id
+```
+
+### client_service_rates
+
+Custom pricing for specific client-firm + service combinations.
+Renamed from legacy `ClientServiceOverride`.
+
+```text
+tenant_id, client_firm_id, service_type_id, custom_rate, rate_type
+```
+
+## Time Tracking & Billing
+
+### time_entries
+
+Logged billable time. Supports internal, subcontractor, hiring-company,
+and travel-time entries.
+
+```text
+tenant_id, trial_id, client_firm_id, service_type_id, consultant_user_id,
+start_time, end_time, duration_hours, description,
+rate, amount,
+trial_name, client_name, service_name (snapshots),
+subcontractor_rate, subcontractor_amount, is_billable,
+invoice_id,
+status (in_progress | pending | approved | rejected | billed | paid),
+approved_by_user_id, approved_at, rejection_reason,
+subcontract_assignment_id, linked_time_entry_id,
+entry_type (regular | subcontractor | hiring_company),
+original_trial_service_id
+```
+
+Supports time clock with auto-rounding; `original_trial_service_id`
+links travel time to the associated service for rate calculation.
+
+### expense_entries
+
+Reimbursable and billable expenses. Supports both receipt-based and
+mileage-based entries, including HSH dual-entry. Renamed from legacy
+`Expense`.
+
+```text
+tenant_id, trial_id, client_firm_id, consultant_user_id,
+amount, expense_date,
+category (travel | meals | lodging | materials | equipment |
+  software | parking | other),
+expense_type (receipt | mileage),
+description, paid_to, receipt_url,
+miles, start_address, end_address, mileage_rate,
+is_billable, is_reimbursable, reimbursed, invoice_id,
+status (pending | approved | rejected | billed | reimbursed),
+rejection_reason, approved_by_user_id, approved_at, notes,
+entry_type (regular | subcontractor | hiring_company),
+linked_expense_id, subcontract_assignment_id, subcontractor_amount
+```
+
+`expense_type: receipt` uploads route through the AI vision pipeline
+for vendor/amount/date extraction; `expense_type: mileage` uses
+Google Places + Directions API with the current IRS rate. HSH expenses
+use `linked_expense_id` for bidirectional sync.
+
+### time_off
+
+Time-off requests and approvals.
+
+```text
+tenant_id, consultant_user_id, time_off_type,
+start_date, end_date, notes, status
+```
+
+### invoices
+
+Client invoices and HSH subcontractor invoices with payment tracking.
+
+```text
+tenant_id, invoice_number, client_firm_id, trial_id,
+invoice_date, due_date,
+subtotal, tax_rate, tax_amount, total,
+status (generating | draft | sent | paid | overdue | cancelled),
+paid_date,
+payment_method (check | wire_transfer | ach | credit_card | cash | other),
+payment_reference, payment_amount,
+notes, is_hsh_invoice, pdf_url, include_receipts,
+recipient_emails (jsonb: { to[], cc[], bcc[] })
+```
+
+## HotSeatHub Marketplace
+
+HSH tables intentionally live outside strict `tenant_id` isolation;
+rows carry explicit `hiring_tenant_id` and `subcontractor_tenant_id`
+columns so RLS can grant bounded cross-tenant read access to exactly
+the counterparty.
+
+### hsh_postings
+
+Job postings for subcontractors. Renamed from legacy
+`SubcontractRequest`.
+
+```text
+hiring_tenant_id, trial_id, service_type_id, service_name,
+start_date, end_date, description, estimated_rate, location,
+status (open | in_progress | filled | cancelled),
+posted_by_user_id,
+is_public, invited_tenant_ids[], invited_user_ids[],
+viewed_by_user_ids[], cancelled_date,
+preferred_consultants_map (jsonb: { tenant_id: user_id[] })
+```
+
+Public postings are visible to all marketplace participants; private
+postings only to invited tenants.
+
+### hsh_applications
+
+Proposals from potential subcontractors with multi-round negotiation
+support. Renamed from legacy `SubcontractResponse`.
+
+```text
+posting_id, responding_tenant_id, consultant_user_id,
+proposed_rate, message,
+status (pending_agreed | pending_counter | negotiating |
+  accepted | declined | lost),
+responded_by_user_id, mapped_service_type_id, viewed,
+negotiation_history (jsonb:
+  [{ rate, message, proposed_by, proposed_by_name, ts, type }]),
+agreed_rate, last_proposed_by, assigned_consultant_user_id
+```
+
+### hsh_contracts
+
+Accepted subcontractor arrangements with agreement-PDF tracking.
+Renamed from legacy `SubcontractAssignment`.
+
+```text
+hiring_tenant_id, subcontractor_tenant_id, trial_id,
+trial_service_id, consultant_user_id,
+consultant_first_name, consultant_last_name (snapshots),
+agreed_rate, estimated_total,
+start_date, end_date,
+posting_id, application_id, mapped_service_type_id,
+subcontractor_job_number,
+hiring_accepted_at, subcontractor_accepted_at,
+agreement_pdf_url,
+status (active | completed | cancelled)
+```
+
+`estimated_total` includes daily-minimum calculations. Cancellations
+append a cancellation addendum to the existing PDF rather than
+overwriting it.
+
+### favorite_subcontractors
+
+Preferred subcontractors for quick invite.
+
+```text
+tenant_id, favorite_tenant_id, favorite_user_id
+```
+
+### hsh_reviews
+
+Ratings and reviews for HSH participants.
+
+```text
+reviewer_tenant_id, reviewed_tenant_id, reviewed_user_id,
+contract_id, rating (1-5), review_text, reviewer_name
+```
+
+## Configuration Entities
+
+### deal_stages
+
+Deal and trial pipeline stages with auto-move triggers.
+
+```text
+tenant_id, name, stage_type (sales | operations), color, sort_order,
+revenue_probability,
+auto_move_on_document_sent_category_id,
+auto_move_on_document_signed_category_id,
+auto_move_on_earliest_service_start,
+auto_move_on_trial_start,
+is_active
+```
+
+### consultant_tiers
+
+Pricing tiers for consultants.
+
+```text
+tenant_id, name, multiplier, description, is_active
+```
+
+### invitations
+
+Team-member and referral invitations.
+
+```text
+tenant_id, email, first_name, last_name, role,
+invitation_type (internal | referral),
+consultant_tier_id, token,
+status (pending | accepted | expired),
+invited_by_user_id, sent_at, accepted_at
+```
+
+`invitation_type = internal` adds a team member to this tenant;
+`invitation_type = referral` invites another firm to join HotSeaters.
+
+### sub_user_requests
+
+Pending Google-OAuth sub-user self-signups awaiting owner approval
+(new in phase 24).
+
+```text
+tenant_id, user_id, email, first_name, last_name,
+requested_at, expires_at (14 days), resolved_at,
+resolution (approved | rejected), resolution_by_user_id, notes
+```
+
+Expiry is driven by the `sub_user_request_expiry` `pg_cron` job.
+
+### notifications
+
+User notifications for schedule changes, assignments, marketplace
+events, and HSH lifecycle transitions.
+
+```text
+recipient_user_id, trial_id, notification_type, title, message, details,
+trial_service_id, assignment_id, service_name, trial_name,
+old_start_date, old_end_date, new_start_date, new_end_date,
+related_entity_type, related_entity_id,
+posting_id, application_id,
+responding_tenant_id, responding_tenant_name,
+consultant_user_id, consultant_name, proposed_rate, response_status,
+request_service_name, request_trial_name, requesting_tenant_name,
+request_start_date, request_end_date, request_location,
+estimated_rate, billing_rate, response_message,
+decline_count, declines_with_message,
+read_at
+```
+
+`recipient_user_id` references `user_profiles.user_id` (i.e. the
+`auth.users.id`), *not* any other identifier. Realtime delivery uses
+Supabase Realtime channels — there is no 15-second polling loop.
+
+Notification types: `task_date_change`, `hsh_date_change`,
+`trial_continued`, `hsh_trial_continued`, `trial_uncontinued`,
+`hsh_trial_uncontinued`, `assignment`, `unassignment`, `general`,
+`trial_stage_auto_moved`, `hsh_response_received`, `hsh_new_request`,
+`hsh_request_cancelled`, `hsh_declines_aggregated`,
+`assignment_cancelled`, `expense_approved`, `expense_rejected`.
+
+## Document Management
+
+### document_template_categories
+
+Classifier for document templates.
+
+```text
+tenant_id, name, description,
+category_type (document | billing | email),
+sort_order, is_default, is_active
+```
+
+### document_templates
+
+Reusable document templates (engagement letters, proposals, invoices,
+emails).
+
+```text
+tenant_id, name, document_template_category_id, description,
+page_settings (jsonb),
+has_signature_fields, is_contract, is_active
+```
+
+### template_sections
+
+Sections within a document template with rich content and tables.
+
+```text
+document_template_id, name, content (rich html), sort_order,
+is_required,
+condition_type (always | user_choice | has_services | no_services |
+  has_retainer | no_retainer | has_frp | no_frp),
+condition_label,
+section_type (rich_text | table | services_table |
+  full_page_start | full_page_end |
+  invoice_line_items | statement_line_items),
+page_break_after, keep_together, background_image_url, table_data (jsonb)
+```
+
+### generated_documents
+
+Concrete documents generated from a template for a specific trial.
+Renamed from legacy `DealDocument`.
+
+```text
+tenant_id, trial_id, document_template_id, document_template_category_id,
+document_name, letter_number,
+generated_content, pdf_url, file_url, file_name, file_type,
+page_settings, total_budget,
+status (draft | sent | viewed | signed | declined),
+docuseal_submission_id,
+signing_token, sent_date, sent_to, viewed_date, viewed_by_ip,
+signed_date, signature_data, signer_name, signer_email, signer_ip,
+notes
+```
+
+Signature capture and audit trails are delegated to **DocuSeal** via
+`docuseal_submission_id`; the legacy `signature_data` column remains
+for historical rows imported from Base44 but is never populated for
+new signatures.
+
+### document_signers
+
+Individual signers for multi-signature documents.
+
+```text
+tenant_id, generated_document_id,
+signer_name, signer_email,
+signer_type (client | frp | sales),
+signer_order, signing_token,
+status (sent | viewed | signed),
+sent_date, viewed_date, signed_date, signature_data, signer_ip
+```
+
+### document_audit_logs
+
+Audit trail for document delivery and viewing (renamed from separate
+`DocumentSend` + `DocumentView` tables into one append-only log).
+
+```text
+generated_document_id, event_type (sent | viewed | signed | declined),
+actor_email, actor_ip, occurred_at, method, notes
+```
+
+## Key Schema Patterns
+
+### Snapshot pattern
+
+Denormalize critical display values onto transactional rows:
+
+- `service_name` on `trial_services`
+- `trial_name`, `client_name`, `service_name` on `time_entries`
+- `consultant_first_name`, `consultant_last_name` on `hsh_contracts`
+- `consultant_name`, `responding_tenant_name`, `trial_name`, etc. on
+  `notifications`
+
+Reason: historical accuracy when source rows change (a service is
+renamed, a client firm rebrands, a consultant leaves).
+
+### Soft delete pattern
+
+Prefer `is_active` or `status` flags over hard deletes. Documents
+used in production are soft-deleted; unused draft templates may be
+hard-deleted. `contacts.contact_status = 'transferred'` hides
+transferred people without losing history. `hsh_contracts.status =
+'cancelled'` retains the audit trail.
+
+### Tenant isolation
+
+Every tenant-scoped entity includes `tenant_id`. RLS policies are the
+primary guardrail; application-layer filters are defense in depth.
+See the [Backend Functions](/user-manual/backend-functions) and
+[Technical Reference](/user-manual/technical-reference) documents for
+the specific RLS patterns in use.
+
+### Cross-tenant references (HotSeatHub)
+
+`hsh_contracts` links `hiring_tenant_id` and `subcontractor_tenant_id`.
+Time entries and expenses are mirrored in both tenants via
+`linked_time_entry_id` / `linked_expense_id`.
+
+### Projected Daily Revenue (PDR)
+
+`trial_services` stores precomputed `projected_daily_revenue` fields for
+performant forecasting; split billing carries separate pre-trial and
+in-trial rates.
+
+### Invoice recipient preferences
+
+`trials.invoice_recipient_preferences` (jsonb) remembers recipient
+selections for invoice emails — selected contacts and additional
+addresses with To/CC/BCC designations.
+
+### HSH negotiation history
+
+`hsh_applications.negotiation_history` (jsonb) is an append-only array
+tracking every counter-offer: rate, message, proposer, timestamp, and
+type (`initial` | `counter` | `accept` | `decline`).
+`last_proposed_by` determines signing order on acceptance.
+
+### HSH agreement PDF lifecycle
+
+`hsh_contracts.agreement_pdf_url` points at the auto-generated HSH
+agreement PDF. On cancellation, a cancellation-addendum page is
+appended to the existing PDF (not overwritten) so both sides retain a
+single document containing the full lifecycle.
+
+### QuickBooks graceful degradation
+
+The QuickBooks-integration columns referenced in later documents
+(`quickbooks_customer_id`, `quickbooks_invoice_id`,
+`quickbooks_sync_state`) exist on the relevant entities but all code
+paths short-circuit behind a "configured path deferred" banner until
+the dedicated QuickBooks phase lands. See
+[QuickBooks Integration](/user-manual/quickbooks-integration).
+
+## Download
+
+A plain-Markdown copy of this document is available at
+[`/user-manual/database-schema/download.md`](/user-manual/database-schema/download.md).

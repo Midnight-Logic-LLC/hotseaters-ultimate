@@ -1,0 +1,171 @@
+---
+title: "Travel Time Feature"
+slug: "travel-time"
+section: "detailed"
+lastReviewed: "2026-04-22"
+---
+
+HotSeaters lets consultants log billable travel to and from trial locations and reimburse mileage in a single paired workflow. Drive time is billed at a tenant-configurable multiplier of the underlying service rate; miles are reimbursed as an expense. Both sides flow through the same approval queue and land on the client invoice as an ordinary line item with a transparent rate.
+
+## Overview
+
+The Travel Time feature pairs two records for every logged trip:
+
+- A **billable time entry** with `is_travel = true`, priced at `service_rate × travel_rate_multiplier`.
+- A **mileage expense** with miles captured from Google Maps Directions API.
+
+Both records share an `entry_group_id` so the approval workflow and invoice generator treat them as a single reimbursement event. The travel rate multiplier is configured once per tenant in **Settings → Time Tracking** and applied at clock-out.
+
+## Data Model
+
+All travel records live on the existing `time_entries` and `expense_entries` tables with a small set of travel-specific columns. `tenant_id` scopes every row and RLS enforces isolation. See [Database Schema](/user-manual/database-schema) for full definitions.
+
+### `time_entries` — travel columns
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `is_travel` | `boolean` | `true` for travel time entries; `false` for regular work. |
+| `travel_rate_multiplier` | `numeric` | Snapshot of the multiplier applied at clock-out (e.g. `0.50`). |
+| `origin_address` | `text` | Starting address resolved against Google Maps. |
+| `destination_address` | `text` | Trial-location address. |
+| `miles` | `numeric` | Distance returned by the Directions API, rounded to one decimal. |
+| `entry_group_id` | `uuid` | Links this time entry to its paired mileage `expense_entries` row. |
+
+### `expense_entries` — travel columns
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `category` | `text` | Set to `mileage` for travel-linked expenses. |
+| `amount` | `numeric` | `miles × tenant.mileage_rate` (IRS rate or custom). |
+| `origin_address` | `text` | Same address as the paired time entry. |
+| `destination_address` | `text` | Same address as the paired time entry. |
+| `miles` | `numeric` | Mirrored from the paired time entry. |
+| `entry_group_id` | `uuid` | Foreign key back to the `time_entries` row. |
+
+### Tenant configuration
+
+Travel multiplier and mileage rate live on `tenant_firms`:
+
+```sql
+alter table tenant_firms
+  add column travel_rate_multiplier numeric default 0.50,
+  add column mileage_rate numeric default 0.67;
+```
+
+Owners and admins edit these in **Settings → Time Tracking** (see [Settings](/user-manual/settings)).
+
+## Google Maps Directions API
+
+The Directions API is the single source of truth for both distance and estimated drive time. Calls happen server-side from a Supabase Edge Function; the client never sees the API key.
+
+```ts
+// supabase/functions/resolve-travel/index.ts
+const params = new URLSearchParams({
+  origin: originAddress,
+  destination: destinationAddress,
+  mode: "driving",
+  departure_time: "now",
+  key: Deno.env.get("GOOGLE_MAPS_API_KEY")!,
+});
+
+const res = await fetch(
+  `https://maps.googleapis.com/maps/api/directions/json?${params}`,
+);
+const data = await res.json();
+const leg = data.routes[0]?.legs[0];
+
+return {
+  miles: leg.distance.value / 1609.344,
+  estimatedDriveMinutes: leg.duration.value / 60,
+};
+```
+
+See [External Integrations](/user-manual/external-integrations) for key rotation and quota notes.
+
+## Workflow
+
+### 1. Consultant starts a travel entry
+
+From the time clock, the consultant picks **Travel Time** for an assigned trial service. The UI asks for origin and destination addresses (pre-filled from the trial site when available). The Edge Function resolves miles and drive estimate on submit.
+
+### 2. Clock-out creates paired records
+
+At clock-out, HotSeaters:
+
+1. Reads `tenant_firms.travel_rate_multiplier` and snapshots it onto the time entry.
+2. Computes `rate = assigned_service.rate × travel_rate_multiplier`.
+3. Inserts the time entry with `is_travel = true`, `status = 'pending'`, and a fresh `entry_group_id`.
+4. Inserts the paired mileage expense with the same `entry_group_id`.
+
+```ts
+const groupId = crypto.randomUUID();
+const rate = service.rate * tenant.travel_rate_multiplier;
+
+await supabase.from("time_entries").insert({
+  tenant_id: tenant.id,
+  trial_service_id: service.id,
+  is_travel: true,
+  travel_rate_multiplier: tenant.travel_rate_multiplier,
+  origin_address: origin,
+  destination_address: destination,
+  miles,
+  duration_hours: durationHours,
+  rate,
+  amount: durationHours * rate,
+  entry_group_id: groupId,
+  status: "pending",
+});
+
+await supabase.from("expense_entries").insert({
+  tenant_id: tenant.id,
+  trial_service_id: service.id,
+  category: "mileage",
+  origin_address: origin,
+  destination_address: destination,
+  miles,
+  amount: miles * tenant.mileage_rate,
+  entry_group_id: groupId,
+  status: "pending",
+});
+```
+
+### 3. Approval
+
+Both records enter the standard `approval_workflows` queue. Approvers see the time entry and mileage expense grouped by `entry_group_id`. Approving or rejecting one side prompts the approver to act on the other; rejections cascade within the group so a trip never ends up half-approved. See [Approvals](/user-manual/approvals).
+
+### 4. Invoicing
+
+On the client invoice:
+
+- The **time entry** appears as a normal line with the parent service name, the travel rate, and the consultant's notes.
+- The **mileage expense** appears under reimbursable expenses at the tenant mileage rate.
+
+No special grouping on the invoice itself — clarity comes from the rate and description. See [Billing](/user-manual/billing).
+
+## Settings → Time Tracking
+
+Configurable per tenant:
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| `travel_rate_multiplier` | `0.50` | Applied to service rate for travel time. |
+| `mileage_rate` | `0.67` | USD per mile. IRS business rate used as default. |
+| `require_addresses` | `true` | Forces origin/destination entry before clock-out. |
+| `round_miles_to` | `0.1` | Display/storage precision. |
+
+Editing `travel_rate_multiplier` affects only future entries — existing rows keep their snapshot. See [Time Clock Workflows](/user-manual/time-clock-workflows) and [Expense Workflows](/user-manual/expense-workflows).
+
+## HSH Subcontractor Travel
+
+When the subcontractor logs travel on an HSH assignment, HotSeaters writes two linked pairs — one in the subcontractor's tenant, one in the hiring firm's — each with its own `entry_group_id`. The subcontractor pair uses the agreed subcontract rate; the hiring-firm pair uses the hiring tenant's service rate. Both apply the same `travel_rate_multiplier` from their respective tenants. See [External Integrations](/user-manual/external-integrations) for HSH mirroring rules.
+
+## Validation Rules
+
+- `origin_address` and `destination_address` are required when `is_travel = true`.
+- `miles ≥ 0` on both paired records; values must match exactly.
+- `travel_rate_multiplier` is snapshotted at clock-out — never recomputed from tenant settings after the fact.
+- A travel time entry must have a matching `expense_entries` row with the same `entry_group_id`, or the approval workflow will flag it.
+
+## Download
+
+[`/user-manual/travel-time/download.md`](/user-manual/travel-time/download.md)

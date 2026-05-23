@@ -1,0 +1,313 @@
+{
+  "$schema": "./schema.json",
+  "version": 1,
+  "generated": "authored by hand; edit to register new manual docs",
+  "entries": [
+    {
+      "slug": "hello",
+      "legacyFile": null,
+      "legacyPageId": null,
+      "title": "Hello (pipeline smoke)",
+      "section": "foundation",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "app-overview",
+      "legacyFile": "Doc01AppOverview.jsx",
+      "legacyPageId": "Doc01AppOverview",
+      "title": "Application Overview",
+      "section": "foundation",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "database-schema",
+      "legacyFile": "Doc02DatabaseSchema.jsx",
+      "legacyPageId": "Doc02DatabaseSchema",
+      "title": "Database Schema",
+      "section": "core",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "user-workflows",
+      "legacyFile": "Doc03UserWorkflows.jsx",
+      "legacyPageId": "Doc03UserWorkflows",
+      "title": "User Workflows",
+      "section": "core",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "technical-reference",
+      "legacyFile": "Doc04TechnicalReference.jsx",
+      "legacyPageId": "Doc04TechnicalReference",
+      "title": "Technical Reference",
+      "section": "core",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "design-patterns",
+      "legacyFile": "Doc05DesignPatterns.jsx",
+      "legacyPageId": "Doc05DesignPatterns",
+      "title": "Design Patterns",
+      "section": "core",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "backend-functions",
+      "legacyFile": "Doc06BackendFunctions.jsx",
+      "legacyPageId": "Doc06BackendFunctions",
+      "title": "Backend Functions",
+      "section": "core",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "external-integrations",
+      "legacyFile": "Doc07ExternalIntegrations.jsx",
+      "legacyPageId": "Doc07ExternalIntegrations",
+      "title": "External Integrations",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "environment-setup",
+      "legacyFile": "Doc08EnvironmentSetup.jsx",
+      "legacyPageId": "Doc08EnvironmentSetup",
+      "title": "Environment Setup",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "logo-designs",
+      "legacyFile": "Doc09LogoDesigns.jsx",
+      "legacyPageId": "Doc09LogoDesigns",
+      "title": "Logo Designs",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "style-guide",
+      "legacyFile": "Doc10StyleGuide.jsx",
+      "legacyPageId": "Doc10StyleGuide",
+      "title": "Style Guide",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "notification-system",
+      "legacyFile": "Doc11NotificationSystemRefactor.jsx",
+      "legacyPageId": "Doc11NotificationSystemRefactor",
+      "title": "Notification System",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "travel-time",
+      "legacyFile": "Doc12TravelTimeFeature.jsx",
+      "legacyPageId": "Doc12TravelTimeFeature",
+      "title": "Travel Time Feature",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "time-clock-workflows",
+      "legacyFile": "Doc13TimeClockWorkflows.jsx",
+      "legacyPageId": "Doc13TimeClockWorkflows",
+      "title": "Time Clock Workflows",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "quickbooks-integration",
+      "legacyFile": "Doc14QuickBooksIntegration.jsx",
+      "legacyPageId": "Doc14QuickBooksIntegration",
+      "title": "QuickBooks Integration",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "expense-workflows",
+      "legacyFile": "Doc16ExpenseWorkflows.jsx",
+      "legacyPageId": "Doc16ExpenseWorkflows",
+      "title": "Expense Workflows",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "auto-expense-reporting",
+      "legacyFile": "Doc17AutoExpenseReporting.jsx",
+      "legacyPageId": "Doc17AutoExpenseReporting",
+      "title": "Auto Expense Reporting",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "cloud-storage",
+      "legacyFile": "Doc15CloudStorageIntegration.jsx",
+      "legacyPageId": "Doc15CloudStorageIntegration",
+      "title": "Cloud Storage Integration",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "mobile-design",
+      "legacyFile": "Doc18MobileDesignPlan.jsx",
+      "legacyPageId": "Doc18MobileDesignPlan",
+      "title": "Mobile Design Plan",
+      "section": "detailed",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "dashboard",
+      "legacyFile": "DocPageDashboard.jsx",
+      "legacyPageId": "DocPageDashboard",
+      "title": "Dashboard",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "sales-hub",
+      "legacyFile": "DocPageSalesHub.jsx",
+      "legacyPageId": "DocPageSalesHub",
+      "title": "Sales Hub",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "deals",
+      "legacyFile": "DocPageDeals.jsx",
+      "legacyPageId": "DocPageDeals",
+      "title": "Deals",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "clients",
+      "legacyFile": "DocPageClients.jsx",
+      "legacyPageId": "DocPageClients",
+      "title": "Clients",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "trials",
+      "legacyFile": "DocPageTrials.jsx",
+      "legacyPageId": "DocPageTrials",
+      "title": "Trials",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "schedule",
+      "legacyFile": "DocPageSchedule.jsx",
+      "legacyPageId": "DocPageSchedule",
+      "title": "Schedule",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "time-tracking",
+      "legacyFile": "DocPageTimeTracking.jsx",
+      "legacyPageId": "DocPageTimeTracking",
+      "title": "Time Tracking",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "approvals",
+      "legacyFile": "DocPageApprovals.jsx",
+      "legacyPageId": "DocPageApprovals",
+      "title": "Approvals",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "billing",
+      "legacyFile": "DocPageBilling.jsx",
+      "legacyPageId": "DocPageBilling",
+      "title": "Billing",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "collections",
+      "legacyFile": "DocPageCollections.jsx",
+      "legacyPageId": "DocPageCollections",
+      "title": "Collections",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "potential-gigs",
+      "legacyFile": "DocPagePotentialGigs.jsx",
+      "legacyPageId": "DocPagePotentialGigs",
+      "title": "Potential Gigs",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "help-wanted",
+      "legacyFile": "DocPageHelpWanted.jsx",
+      "legacyPageId": "DocPageHelpWanted",
+      "title": "Help Wanted",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "favorites",
+      "legacyFile": "DocPageFavorites.jsx",
+      "legacyPageId": "DocPageFavorites",
+      "title": "Favorites",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "consultants",
+      "legacyFile": "DocPageTeam.jsx",
+      "legacyPageId": "DocPageTeam",
+      "title": "Consultants",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    },
+    {
+      "slug": "settings",
+      "legacyFile": "DocPageSettings.jsx",
+      "legacyPageId": "DocPageSettings",
+      "title": "Settings",
+      "section": "per-page",
+      "lastReviewed": "2026-04-22",
+      "deferred": false
+    }
+  ]
+}

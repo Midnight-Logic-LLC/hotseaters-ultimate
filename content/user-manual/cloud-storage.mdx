@@ -1,0 +1,46 @@
+---
+title: "Cloud Storage Integration"
+slug: "cloud-storage"
+section: "detailed"
+lastReviewed: "2026-04-22"
+---
+
+## Overview
+
+Cloud storage integration (Dropbox, Google Drive, OneDrive, Box) is **deferred** beyond v1 of HotSeaters. This document is a roadmap stub for the intended design.
+
+In v1, all file storage uses **Supabase Storage** with tenant-scoped buckets and RLS-enforced access. Receipts, generated documents, signed PDFs, and firm assets all live in private buckets with signed-URL access.
+
+## v1 Supabase Storage Buckets
+
+| Bucket | Visibility | Contents |
+| --- | --- | --- |
+| `receipts` | private | Receipt images uploaded from the time-tracking / expense flows |
+| `documents` | private | Generated PDFs (invoices, contracts, HSH agreements) |
+| `signatures` | private | DocuSeal-returned signed document binaries |
+| `tenant-assets` | private | Per-tenant logos, letterhead, email banners |
+| `public-assets` | public | Landing-page images, icons, shared branding |
+
+Access control is RLS-enforced via `storage.objects` policies keyed on `tenant_id` paths.
+
+## Deferred: Third-Party Cloud Storage
+
+Future integrations will let a tenant connect Dropbox / Google Drive / OneDrive / Box and mirror chosen buckets. The intended architecture:
+
+- OAuth-based connection per tenant, stored encrypted on `tenant_firms`
+- Edge Functions `cloud-storage-sync-{provider}` for bidirectional sync
+- pg_cron nightly reconciliation (NOT Vercel Cron)
+- Per-bucket mirror policy (one-way push, bidirectional, or none)
+- Graceful degradation UI when no cloud provider is connected
+
+All of the above is **deferred in v1**. The Supabase-only path is feature-complete for current requirements.
+
+## Related
+
+- [External Integrations](/user-manual/external-integrations)
+- [Environment Setup](/user-manual/environment-setup)
+- [Database Schema](/user-manual/database-schema)
+
+## Download this document
+
+Download as markdown: [`/user-manual/cloud-storage/download.md`](/user-manual/cloud-storage/download.md).

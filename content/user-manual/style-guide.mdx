@@ -1,0 +1,299 @@
+---
+title: "Style Guide"
+slug: "style-guide"
+section: "detailed"
+lastReviewed: "2026-04-22"
+---
+
+# Style Guide
+
+The HotSeaters design system. This document captures the color palette, typography scale, spacing tokens, and component rules used across the application. The authoritative branding sources are `docs/branding/hotseaters-brand-template.html` and `docs/branding/hotseaters-brand-guide.html` — this guide summarizes them for day-to-day implementation.
+
+For the larger picture, see [App Overview](/user-manual/app-overview), [Design Patterns](/user-manual/design-patterns), and [Technical Reference](/user-manual/technical-reference).
+
+> **Theme scope (v1).** HotSeaters ships a single light theme in v1. Dual-theme (light + dark) support is **deferred**. All tokens below describe the v1 light theme. Do not reach for `dark:` variants or conditional theme switching in new components.
+
+---
+
+## Brand Identities
+
+HotSeaters contains two distinct brand surfaces. They must remain visually separate.
+
+| Surface | Palette | Where it applies |
+|---|---|---|
+| **HotSeaters** (core app) | Cyan / blue / orange | Deals, trials, clients, invoicing, schedule, team |
+| **HotSeatHub** (marketplace) | Purple / indigo | Gig postings, HSH responses, subcontractor network, favorites |
+
+Never mix palettes across surfaces. HSH elements are always paired with the marketplace-specific icon treatment (see [Design Patterns](/user-manual/design-patterns)).
+
+---
+
+## Color Palette
+
+### HotSeaters brand colors
+
+| Token | Hex | Tailwind | Usage |
+|---|---|---|---|
+| Cyan Primary | `#06B6D4` | `bg-cyan-500` | Primary brand color, main buttons, active states |
+| Cyan Hover | `#0891B2` | `bg-cyan-600` | Hover state for primary cyan |
+| Blue | `#3B82F6` | `bg-blue-500` | Core operations — deals, trials, schedule, analytics |
+| Blue Deep | `#1E3A8A` | `bg-blue-900` | Professional headers, emphasis |
+| Orange | `#F97316` | `bg-orange-500` | Warm accents, notifications, CTAs |
+| Red-Orange | `#EF4444` | `bg-red-500` | Urgent actions, warm gradient partner |
+
+### HotSeatHub brand colors
+
+| Token | Hex | Tailwind | Usage |
+|---|---|---|---|
+| Purple Primary | `#9333EA` | `bg-purple-600` | HSH primary buttons, gig postings |
+| Purple Hover | `#6B21A8` | `bg-purple-800` | HSH button hover / emphasis |
+| Purple Light | `#A78BFA` | `bg-purple-400` | HSH accent highlights |
+| Purple Subtle | `#F5F3FF` | `bg-purple-50` | HSH card backgrounds |
+| Indigo Accent | `#4F46E5` | `bg-indigo-600` | HSH secondary actions |
+| Indigo Light | `#818CF8` | `bg-indigo-400` | HSH light accents |
+
+### Semantic colors
+
+Status colors apply across both surfaces.
+
+| Token | Hex | Tailwind | Usage |
+|---|---|---|---|
+| Success | `#059669` | `bg-green-600` | Paid invoices, won deals, active states |
+| Success Light | `#DCFCE7` | `bg-green-100` | Success badges and subtle fills |
+| Warning | `#F59E0B` | `bg-amber-500` | Pending, attention needed |
+| Warning Light | `#FEF3C7` | `bg-amber-100` | Warning badges |
+| Danger | `#DC2626` | `bg-red-600` | Errors, destructive actions, overdue |
+| Danger Light | `#FEE2E2` | `bg-red-100` | Error badges |
+| Info | `#2563EB` | `bg-blue-600` | Informational messages, neutral actions |
+| Info Light | `#DBEAFE` | `bg-blue-100` | Info badges |
+
+### Neutral palette
+
+Stone grays for structure — backgrounds, borders, and text.
+
+| Token | Hex | Tailwind | Usage |
+|---|---|---|---|
+| Stone 50 | `#FAFAF9` | `bg-stone-50` | Page background |
+| Stone 100 | `#F5F5F4` | `bg-stone-100` | Section backgrounds, disabled states |
+| Stone 200 | `#E7E5E4` | `bg-stone-200` | Borders, dividers, input borders |
+| Stone 500 | `#78716C` | `bg-stone-500` | Icons, placeholder text |
+| Stone 600 | `#57534E` | `bg-stone-600` | Secondary text, labels |
+| Stone 900 | `#1C1917` | `bg-stone-900` | Headings, primary text |
+
+### CSS variable example
+
+Define semantic tokens as CSS custom properties so components stay theme-aware:
+
+```css
+:root {
+  --color-bg-page: #FAFAF9;
+  --color-surface-card: #FFFFFF;
+  --color-border-default: #E7E5E4;
+  --color-text-heading: #1C1917;
+  --color-text-body: #57534E;
+
+  --color-brand-primary: #06B6D4;   /* cyan-500 */
+  --color-brand-primary-hover: #0891B2;
+  --color-hsh-primary: #9333EA;     /* purple-600 */
+  --color-hsh-primary-hover: #6B21A8;
+
+  --color-status-success: #059669;
+  --color-status-warning: #F59E0B;
+  --color-status-danger: #DC2626;
+}
+```
+
+---
+
+## Typography
+
+HotSeaters uses two brand fonts loaded via Google Fonts: **Zen Dots** for primary brand marks and **Michroma** for brand subtitles. Body and UI text use the system sans stack via Tailwind's default.
+
+| Role | Classes | Example |
+|---|---|---|
+| Page title | `text-3xl font-bold text-stone-900` | Dashboard |
+| Section title | `text-xl font-bold text-stone-900` | Recent Activity |
+| Card title | `text-lg font-semibold text-stone-900` | Revenue Trend |
+| Body text | `text-sm text-stone-600` | Descriptions and paragraph content |
+| Label | `text-sm font-medium text-stone-700` | Form field labels |
+| Caption | `text-xs text-stone-500` | Timestamps, metadata |
+| Brand title | `font-brand-title text-stone-900` | HotSeaters wordmark |
+| Brand subtitle | `font-brand-subtitle text-xs text-stone-500` | Trial Tech Toolkit |
+
+```css
+:root {
+  --font-brand-title: "Zen Dots", sans-serif;
+  --font-brand-subtitle: "Michroma", sans-serif;
+  --font-ui: ui-sans-serif, system-ui, sans-serif;
+}
+```
+
+---
+
+## Spacing & Layout
+
+| Name | Token | Description |
+|---|---|---|
+| Page padding | `p-6 lg:p-8` | Standard page wrapper |
+| Section gap | `space-y-6` / `space-y-8` | Vertical rhythm between major sections |
+| Card gap | `gap-4` / `gap-6` | Grid spacing for card layouts |
+| Element gap | `gap-2` / `gap-3` | Spacing between related inline elements |
+| Content width | `max-w-7xl mx-auto` | Default content container |
+
+Layouts are mobile-first. Use Tailwind breakpoints (`sm:`, `md:`, `lg:`, `xl:`) with the common responsive pattern `md:grid-cols-2 lg:grid-cols-3`.
+
+---
+
+## Border Radius & Elevation
+
+| Token | Tailwind | Usage |
+|---|---|---|
+| Radius sm | `rounded` (0.25rem) | Badges, small inputs |
+| Radius md | `rounded-md` (0.375rem) | Buttons, inputs |
+| Radius lg | `rounded-lg` (0.5rem) | Cards, modals, media |
+| Radius xl | `rounded-xl` (0.75rem) | Hero surfaces, feature cards |
+
+| Shadow | Tailwind | Usage |
+|---|---|---|
+| None | — | Default resting cards |
+| Subtle | `shadow-sm` | Color swatches, thumbnails |
+| Default | `shadow` | Hover lift on interactive cards |
+| Elevated | `shadow-lg` | Elevated content cards, popovers |
+| Modal | `shadow-xl` | Modals, dialogs, command palettes |
+
+Pair hover transitions with `transition-shadow` so elevation changes feel intentional.
+
+---
+
+## Components
+
+HotSeaters components are built on **shadcn/ui** over Tailwind. Prefer shadcn primitives (`Card`, `Button`, `Input`, `Badge`, `Dialog`, `Select`) before introducing custom HTML controls.
+
+### Buttons
+
+| Purpose | Classes |
+|---|---|
+| Primary (HotSeaters) | `bg-cyan-500 hover:bg-cyan-600 text-white` |
+| Operations | `bg-blue-500 hover:bg-blue-600 text-white` |
+| Accent / CTA | `bg-orange-500 hover:bg-red-500 text-white` |
+| Primary (HotSeatHub) | `bg-purple-600 hover:bg-purple-800 text-white` |
+| Destructive | `bg-red-600 hover:bg-red-700 text-white` |
+| Outline | `border border-stone-200 text-stone-900 hover:bg-stone-50` |
+
+Always include a leading icon at `w-4 h-4 mr-2` when the button represents a concrete action.
+
+### Cards
+
+- Border: `border-stone-200`
+- Background: `bg-white`
+- Padding: `p-6` for content
+- Header: `border-b border-stone-100 bg-white rounded-t-lg`
+- Elevated variant: `shadow-lg hover:shadow-xl transition-shadow`
+- HSH accent variant: `border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50`
+
+### Inputs
+
+- Use shadcn's `Input`, `Textarea`, `Select`, and `Checkbox` primitives.
+- Border: `border-stone-200`
+- Focus: `focus-visible:ring-2 focus-visible:ring-cyan-500`
+- Placeholder text uses `text-stone-500`
+- Labels use `text-sm font-medium text-stone-700`
+
+### Badges
+
+| Purpose | Classes |
+|---|---|
+| Success | `bg-green-100 text-green-700` |
+| Warning | `bg-amber-100 text-amber-700` (or `bg-yellow-100 text-yellow-700`) |
+| Danger | `bg-red-100 text-red-700` |
+| Info | `bg-blue-100 text-blue-700` |
+| HotSeatHub | `bg-purple-100 text-purple-700` (always with HSH icon) |
+| Neutral | `bg-stone-100 text-stone-700` |
+
+Role-specific badges: Owner → purple, Admin → blue, Sales → green, Trial Consultant → stone.
+
+### Modals
+
+- Use shadcn's `Dialog` for all modals.
+- Consistent size tokens: `sm` (max-w-sm), `md` (max-w-md), `lg` (max-w-2xl), `xl` (max-w-4xl).
+- Footer pattern: outline **Cancel** on the left, primary action on the right.
+- Include a short description under the title for anything more complex than a confirmation.
+
+### Empty states
+
+Empty states should show an icon, a short title, a one-sentence description, and a single primary action that unblocks the user.
+
+### Metric cards
+
+Summary metric tiles follow this anatomy: small label, large value, optional delta percentage, and a tinted icon badge. Use semantic colors for positive (green) and negative (red) deltas.
+
+---
+
+## Interactive states
+
+| State | Pattern |
+|---|---|
+| Hover (card) | `hover:shadow-lg transition-shadow` |
+| Active / selected | `bg-cyan-50 border-cyan-300` (HotSeaters) or `bg-purple-50 border-purple-300` (HSH) |
+| Disabled | `opacity-50 cursor-not-allowed` |
+| Loading | `animate-spin` spinner in brand-primary color |
+| Focus (keyboard) | `focus-visible:ring-2 focus-visible:ring-offset-2` with brand-primary ring |
+
+All interactive elements must have visible focus states — do not suppress the ring.
+
+---
+
+## Icons
+
+The app uses **lucide-react** as its icon library. Use icons intentionally, never purely decoratively. Group usage into these categories:
+
+- **Navigation & structure** — dashboard, sidebar, and section affordances.
+- **Sales & finance** — deals, invoicing, payments, reporting.
+- **Operations** — trials, schedule, time tracking, approvals.
+- **People** — team, contacts, consultants, roles.
+- **Marketplace (HotSeatHub)** — gig postings, favorites, subcontractors; always color-paired with the HSH palette.
+- **Status & feedback** — success, warning, error, info indicators.
+- **Actions** — create, edit, delete, upload, download.
+
+Keep icon sizes consistent: `w-4 h-4` inside buttons and inline affordances; `w-5 h-5` or `w-6 h-6` for section headers and feature tiles.
+
+---
+
+## Tailwind reference
+
+| Element | Classes | Usage |
+|---|---|---|
+| Page background | `bg-stone-50` | Main page wrapper |
+| Card background | `bg-white` | Card / modal surfaces |
+| Primary button | `bg-cyan-500 hover:bg-cyan-600` | Main HotSeaters actions |
+| Operations button | `bg-blue-500 hover:bg-blue-600` | Operations surfaces |
+| HSH button | `bg-purple-600 hover:bg-purple-800` | HotSeatHub only |
+| Accent button | `bg-orange-500 hover:bg-red-500` | CTAs, urgent actions |
+| Success badge | `bg-green-100 text-green-700` | Paid, accepted, won |
+| Warning badge | `bg-yellow-100 text-yellow-700` | Pending, review |
+| HSH badge | `bg-purple-100 text-purple-700` | HSH indicators |
+| Borders | `border-stone-200` | Card / section borders |
+| Heading text | `text-stone-900` | Titles |
+| Body text | `text-stone-600` | Descriptions, content |
+
+---
+
+## Brand separation rules
+
+- HotSeaters palette (cyan / blue / orange) is reserved for core app features.
+- HotSeatHub palette (purple / indigo) is reserved for marketplace features and is always paired with the HSH icon treatment.
+- Do not mix palettes across surfaces. Status colors (green / amber / red / blue) are shared.
+- Gradients: HotSeaters uses `cyan → blue → orange`; HotSeatHub uses `purple → indigo`.
+
+---
+
+## Deferred
+
+- **Dual-theme (light + dark) support.** v1 ships light only; dark-mode tokens and `dark:` variants are out of scope. When dual theme returns, token definitions should move into `:root` / `[data-theme="dark"]` CSS variable blocks rather than Tailwind `dark:` class variants.
+- **Per-tenant theme overrides.** Customer-level theme customization (colors, fonts, radii) is not part of v1.
+
+---
+
+## Download this document
+
+Download as markdown: [`/user-manual/style-guide/download.md`](/user-manual/style-guide/download.md).

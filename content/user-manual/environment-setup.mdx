@@ -1,0 +1,276 @@
+---
+title: "Environment Setup"
+slug: "environment-setup"
+section: "detailed"
+lastReviewed: "2026-04-22"
+---
+
+# Environment Setup & Configuration
+
+Complete deployment and configuration guide for HotSeaters on Supabase + Next.js 16. This stack is **Vercel-agnostic** — all scheduled work runs via Supabase `pg_cron`, and there is no `vercel.json`.
+
+For the underlying architecture, see [Technical Reference](/user-manual/technical-reference) and [Backend Functions](/user-manual/backend-functions). For data model details, see [Database Schema](/user-manual/database-schema).
+
+## Stack Summary
+
+- **Framework:** Next.js 16 (App Router) + React 19, strict TypeScript only.
+- **Package manager:** pnpm. Local dev: `pnpm run dev -p 3444`.
+- **Production build:** `pnpm build --webpack`.
+- **Backend:** Supabase — PostgreSQL, Auth, Realtime, Storage, Edge Functions.
+- **Scheduled work:** Supabase `pg_cron` (no Vercel Cron).
+- **Hosting:** Any Node-compatible host. Do **not** depend on Vercel-specific APIs, `VERCEL_URL`, `@vercel/*` packages, or `vercel.json`.
+
+## Required Environment Variables
+
+All server-side secrets live only in Edge Functions or Next.js Route Handlers. Never expose secrets to the client bundle. Only `NEXT_PUBLIC_*` vars are safe for the browser.
+
+### Supabase (core)
+
+- **`NEXT_PUBLIC_SUPABASE_URL`** — Project URL, e.g. `https://<ref>.supabase.co`. Source: Supabase Dashboard → Project Settings → API.
+- **`NEXT_PUBLIC_SUPABASE_ANON_KEY`** — Public anon key used by the browser client with RLS enforcing tenant isolation.
+- **`SUPABASE_SERVICE_ROLE_KEY`** — Server-only key used in Route Handlers and Edge Functions for privileged operations. **Never** bundle to the client.
+
+### Stripe (subscription billing)
+
+- **`STRIPE_SECRET_KEY`** — `sk_test_...` (test) or `sk_live_...` (production). Source: Stripe Dashboard → Developers → API Keys.
+- **`STRIPE_WEBHOOK_SECRET`** — `whsec_...`. Created when registering the webhook endpoint below.
+
+### Email
+
+- **`RESEND_API_KEY`** — `re_...`. Source: Resend Dashboard → API Keys. Verified sender domain required.
+
+### E-Signatures
+
+- **`DOCUSEAL_API_KEY`** — DocuSeal API key for generating signature requests.
+- **`DOCUSEAL_WEBHOOK_SECRET`** — Signing secret for verifying DocuSeal webhook callbacks.
+
+### Google APIs
+
+- **`GOOGLE_OAUTH_CLIENT_ID`** / **`GOOGLE_OAUTH_CLIENT_SECRET`** — Google OAuth credentials for optional Calendar integration. Source: Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client.
+- **`GOOGLE_MAPS_API_KEY`** — Server-side Maps key for mileage expense routing. Enable Places API, Directions API, and Maps Static API.
+
+### AI (receipt OCR, courthouse lookup, drafting)
+
+Exactly one of the following is required (both are supported by our Edge Functions):
+
+- **`OPENAI_API_KEY`** — OpenAI API key.
+- **`ANTHROPIC_API_KEY`** — Anthropic API key.
+
+## Setting Environment Variables
+
+### Next.js App (runtime)
+
+Create `.env.local` for local development. For production, set variables in your host's environment (e.g., container env, systemd unit, or hosting platform dashboard — **not** `vercel.json`).
+
+```bash
+# .env.local (local dev only — never commit)
+NEXT_PUBLIC_SUPABASE_URL=https://your-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+RESEND_API_KEY=re_...
+DOCUSEAL_API_KEY=...
+DOCUSEAL_WEBHOOK_SECRET=...
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+GOOGLE_MAPS_API_KEY=...
+ANTHROPIC_API_KEY=...
+```
+
+### Supabase Edge Functions (secrets)
+
+Set secrets per project with the Supabase CLI:
+
+```bash
+supabase secrets set \
+  STRIPE_SECRET_KEY=sk_live_... \
+  STRIPE_WEBHOOK_SECRET=whsec_... \
+  RESEND_API_KEY=re_... \
+  DOCUSEAL_API_KEY=... \
+  DOCUSEAL_WEBHOOK_SECRET=... \
+  GOOGLE_MAPS_API_KEY=... \
+  ANTHROPIC_API_KEY=...
+```
+
+Redeploy the affected Edge Functions after secrets change: `supabase functions deploy <name>`.
+
+## Stripe Configuration
+
+### Webhook Setup
+
+1. Stripe Dashboard → Developers → Webhooks → Add endpoint.
+2. URL: `https://your-app.example.com/api/stripe/webhook` (Next.js Route Handler) or the deployed Edge Function URL.
+3. Select events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`.
+4. Copy signing secret → set `STRIPE_WEBHOOK_SECRET`.
+
+### Test Cards
+
+| Scenario | Number | CVV / Expiry |
+| --- | --- | --- |
+| Success | `4242 4242 4242 4242` | Any 3 digits / any future date |
+| Decline | `4000 0000 0000 0002` | Any 3 digits / any future date |
+| 3DS required | `4000 0025 0000 3155` | Any 3 digits / any future date |
+
+## Resend Email Configuration
+
+1. Add your sending domain in the Resend dashboard.
+2. Add DNS records: TXT (verification), CNAME (DKIM), MX (optional return-path).
+3. Wait for verification (up to 48 hours).
+4. Update `tenant_firms.sender_email` via app Settings to use the verified domain.
+
+## DocuSeal Configuration
+
+1. Create an API key in the DocuSeal dashboard → set as `DOCUSEAL_API_KEY`.
+2. Register a webhook endpoint pointing to `/api/docuseal/webhook` (or the Edge Function URL).
+3. Copy the webhook signing secret → set as `DOCUSEAL_WEBHOOK_SECRET`.
+4. Our signing flow calls DocuSeal to create signature requests, then receives `submission.completed` callbacks to embed signatures into the generated PDF and advance the pipeline stage.
+
+## Google APIs Configuration
+
+### Google Maps (Mileage Expenses)
+
+1. Google Cloud Console → create or select a project.
+2. Enable: Places API, Directions API, Maps Static API.
+3. Create an API key → restrict to those three APIs.
+4. Set as `GOOGLE_MAPS_API_KEY`.
+
+### Google Calendar (Optional)
+
+1. Same GCP project → enable Google Calendar API.
+2. Create an OAuth 2.0 Client ID (Web application).
+3. Add authorized redirect URI: `https://your-app.example.com/api/auth/google/callback`.
+4. Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`.
+
+## Supabase Configuration
+
+### Row-Level Security
+
+RLS is mandatory on every table. Every query must filter by `tenant_id` through a policy that reads the authenticated user's tenant from `user_profiles`. See [Database Schema](/user-manual/database-schema) for policy templates.
+
+### Storage Buckets
+
+- `receipts` (private) — expense receipt images.
+- `documents` (private) — generated PDFs and signed documents.
+- `avatars` (public) — user profile images.
+- `tenant-assets` (public) — tenant logos, document template backgrounds.
+
+### pg_cron Scheduled Jobs
+
+All recurring background work runs in PostgreSQL via the `pg_cron` extension. Enable it once per project:
+
+```sql
+create extension if not exists pg_cron;
+```
+
+Example scheduled jobs:
+
+```sql
+-- Expire stale sub_user requests after 14 days
+select cron.schedule(
+  'sub_user_request_expiry',
+  '0 * * * *', -- hourly
+  $$ update sub_user_requests
+     set status = 'expired', updated_at = now()
+     where status = 'pending'
+       and created_at < now() - interval '14 days'; $$
+);
+
+-- Sweep abandoned time-clock sessions older than 24 hours
+select cron.schedule(
+  'time_clock_abandoned_sweep',
+  '*/15 * * * *',
+  $$ select public.close_abandoned_time_clocks(); $$
+);
+
+-- Nightly invoice overdue status refresh
+select cron.schedule(
+  'invoice_overdue_refresh',
+  '0 6 * * *',
+  $$ update invoices
+     set status = 'overdue'
+     where status = 'sent'
+       and due_date < current_date; $$
+);
+```
+
+Inspect scheduled jobs: `select * from cron.job;`. Remove a job: `select cron.unschedule('job_name');`.
+
+## Deployment
+
+- **Frontend + API routes:** Node-compatible host. Build with `pnpm build --webpack`, start with `pnpm start -p 3444` (or the host's equivalent).
+- **Edge Functions:** `supabase functions deploy <name>` deploys to the Supabase project.
+- **Database migrations:** ship via `supabase db push` or a migration pipeline — RLS policies and `pg_cron` jobs live in migrations alongside schema changes.
+- **Do not** add `vercel.json`, `@vercel/*` packages, `VERCEL_URL` references, or Vercel Cron configuration.
+
+## Initial Setup Checklist
+
+- [ ] Create Supabase project, capture URL + keys.
+- [ ] Apply all migrations (schema, RLS policies, `pg_cron` jobs).
+- [ ] Create Storage buckets (`receipts`, `documents`, `avatars`, `tenant-assets`) with policies.
+- [ ] Set Stripe secret + webhook secret; configure products, prices, and webhook endpoint.
+- [ ] Set Resend API key and verify sender domain.
+- [ ] Set DocuSeal API key + webhook secret; register webhook endpoint.
+- [ ] Set Google Maps API key (enable Places + Directions + Static Maps).
+- [ ] Optional: set Google Calendar OAuth credentials.
+- [ ] Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for AI features.
+- [ ] Deploy Supabase Edge Functions.
+- [ ] Complete tenant onboarding flow.
+- [ ] Smoke test: Stripe checkout → webhook → subscription activation.
+- [ ] Smoke test: email sending (invitations, documents).
+- [ ] Smoke test: PDF generation (documents, invoices).
+- [ ] Smoke test: receipt upload and AI extraction.
+- [ ] Smoke test: mileage route calculation.
+- [ ] Smoke test: DocuSeal signing flow → pipeline auto-advance.
+- [ ] Smoke test: HotSeatHub marketplace flows.
+
+## Monitoring & Maintenance
+
+### Regular Checks
+
+- Stripe dashboard — failed payments, webhook failures.
+- Resend dashboard — email bounces, delivery rates.
+- DocuSeal dashboard — signature request status.
+- Google Cloud Console — Maps API quota and billing.
+- Supabase dashboard — function logs, database load, Realtime connection counts.
+- `select * from cron.job_run_details order by start_time desc limit 50;` — recent `pg_cron` runs.
+
+### Logs
+
+- **Frontend:** browser devtools console.
+- **Next.js server:** host logs (stdout/stderr from the Node process).
+- **Supabase Edge Functions:** Supabase Dashboard → Functions → Logs, or `supabase functions logs <name>`.
+- **PostgreSQL / pg_cron:** Supabase Dashboard → Logs → Postgres; `cron.job_run_details` for cron outcomes.
+- **Stripe:** Stripe Dashboard → Webhooks → endpoint history.
+- **Resend:** Resend Dashboard → Emails.
+- **DocuSeal:** DocuSeal Dashboard → Submissions.
+
+## Troubleshooting
+
+### Environment Variable Not Found
+
+Confirm the exact name (case-sensitive), that it's set in the correct environment (`.env.local` for local dev, host env for production, `supabase secrets` for Edge Functions), and that the process/function was restarted or redeployed after the change.
+
+### Stripe Webhook Not Working
+
+Verify the endpoint URL, that `STRIPE_WEBHOOK_SECRET` matches the value shown in the Stripe endpoint details, that the required events are selected, and inspect the endpoint history for delivery errors.
+
+### Google Maps: REQUEST_DENIED
+
+Ensure the API key has Places API, Directions API, and Maps Static API enabled, and that billing is active on the GCP project. Check that server-side use of the key is not blocked by an HTTP referrer restriction — server calls need an IP or unrestricted key, not a referrer-restricted one.
+
+### Supabase RLS Denies Access
+
+Confirm the user has a row in `user_profiles` with the expected `tenant_id`, that the policy references the correct auth helper (`auth.uid()`), and that the client is using the anon key (not service role) so RLS actually runs.
+
+### pg_cron Job Not Firing
+
+Check `select * from cron.job;` to confirm the schedule is installed, then `select * from cron.job_run_details where jobid = <id> order by start_time desc;` for errors. The `pg_cron` extension must be enabled on the database and jobs run as the database owner.
+
+### DocuSeal Webhook Signature Mismatch
+
+Verify `DOCUSEAL_WEBHOOK_SECRET` matches the secret shown in the DocuSeal dashboard for that webhook, and that the raw request body (not a parsed JSON re-serialization) is used for signature verification.
+
+## Download this document
+
+Download as markdown: [`/user-manual/environment-setup/download.md`](/user-manual/environment-setup/download.md).

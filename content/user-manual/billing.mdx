@@ -1,0 +1,210 @@
+---
+title: "Billing"
+slug: "billing"
+section: "per-page"
+lastReviewed: "2026-04-22"
+---
+
+# Billing
+
+The **Billing** page is the single-view invoice creation workflow for HotSeaters. It presents a **4-column Kanban** — Approve Time → Approve Expenses → Create Invoices → Send Invoices — so owners and admins can move an approved pile of work through to a sent invoice without leaving the page. The post-send lifecycle (Open / Overdue / Paid) lives on the separate [Collections](/user-manual/collections) page.
+
+All data is scoped by `tenant_id`. The page reads from `invoices`, `time_entries`, `expense_entries`, `trials`, `client_firms`, `contacts`, `service_types`, and `hsh_contracts`. PDFs are produced by a Puppeteer Supabase Edge Function; email delivery is handled by a Resend-backed Edge Function. Related: [Approvals](/user-manual/approvals), [Time Tracking](/user-manual/time-tracking), [Expense Workflows](/user-manual/expense-workflows), [Settings](/user-manual/settings).
+
+## Header and Data Loading
+
+Title "Billing" with a **Create Invoice** button. A single consolidated query (`billingData`) fetches invoices, clients, trials, time entries, services, expenses, consultants, and HSH contracts in parallel. A loading spinner displays until data is ready.
+
+The `billingData` query uses a dynamic `refetchInterval`: if any invoice has `status='generating'`, it polls every 3 seconds to detect when the Puppeteer Edge Function completes PDF generation. Polling is otherwise disabled.
+
+## Billing Period Summary Panel
+
+An informational panel above the Kanban columns. **Advisory only** — it does not gate or block invoice creation.
+
+### Billing Period Date Range
+
+Automatically displays the *upcoming* billing period based on the tenant's `invoice_period`:
+
+- **Weekly** — current week ending on `weekly_billing_day` (e.g., "Week of March 23–29, 2026").
+- **Monthly** — current month's range using `monthly_billing_date` as the cycle boundary (e.g., "March 1–31, 2026").
+
+### Unapproved Entries Alert
+
+Shows the count and total dollar amount of *all* unapproved (pending or rejected) time entries and expenses across the tenant, regardless of date — a reminder that approval work remains.
+
+### Straggler Highlighting
+
+Within the unapproved summary, entries whose dates fall *before* the current billing period are flagged as stragglers with a warning treatment. Helps admins address older items first.
+
+### Link to Approvals
+
+A direct **Go to Approvals →** link for quick navigation to the [Approvals](/user-manual/approvals) page.
+
+## 4-Column Kanban Layout
+
+Four columns. Each column header shows a title, count badge, and total amount. The Kanban is hidden while the invoice form is open.
+
+### Column 1: Approve Time
+
+Pending and rejected time entries grouped by trial. Cards surface the same approve / reject / reset actions available on the [Approvals](/user-manual/approvals) page so admins can resolve outstanding items without leaving Billing. Bulk selection is supported. HSH subcontractor entries are shown as separate cards and sync to the linked mirror on approval.
+
+### Column 2: Approve Expenses
+
+Pending and rejected expenses grouped by trial. Receipt thumbnails open the in-app viewer. Same approve / reject / reset / bulk actions as above, scoped to `expense_entries`.
+
+### Column 3: Create Invoices
+
+Aggregates **approved, unbilled** time entries and expenses by trial into cards. Each card shows case name, client (or hiring company for HSH), total hours, entry count, and total dollar amount. Clicking a card opens the invoice form pre-populated with that trial's data.
+
+- **Regular entries** — grouped by `trial_id` where `entry_type != 'subcontractor'`, `status='approved'`, `is_billable=true`, and `invoice_id IS NULL`.
+- **HSH entries** — separate cards for `entry_type='subcontractor'` grouped by `trial_id`, labeled with the hiring company name.
+- Approved unbilled expenses are folded into the matching trial group and increase the total.
+
+### Column 4: Send Invoices
+
+Shows invoices with `status='draft'` or `status='generating'`. Each card displays the invoice number, client name, trial name, and total.
+
+- **Generating** invoices show a pulsing dot and "Generating…" text at reduced opacity.
+- **Draft** invoices (PDF ready) expose **Preview** and **Send** actions — **Send** invokes the `send-invoice-email` Edge Function.
+- HSH invoices resolve their client from the hiring-company list rather than `client_firms`.
+
+## Invoice Creation Flow
+
+### Invoice Form — Layout
+
+The invoice form is a stacked card view with two modes: **Create** (new invoice) and **View** (existing invoice passed in).
+
+#### Top Card: Invoice Details (4-column grid)
+
+- **Invoice For** — trial case name with job number prefix (e.g., "(JOB-001) Smith v. Jones"). Appears after a trial is selected.
+- **Bill To** — billing client firm name, attention contact, and address. Uses the FRP (Financially Responsible Party) client/contact when `frp_client_id` or `frp_contact_id` is set; otherwise falls back to the primary. HSH invoices resolve to the hiring company.
+- **Email Recipients** — Create Mode only, once a trial is selected. Lists available contacts with checkboxes:
+  - **FRP contact** — listed first with a purple "(FRP)" label. Default type **To**.
+  - **Primary contact** — listed with an indigo "(Primary)" label. Default type **To**.
+  - **Secondary contacts** — from trial contacts. Default type **CC**.
+  - Each selected contact has a **To / CC / BCC** dropdown.
+  - **Saved preferences** — on load, `trials.invoice_recipient_preferences` is checked; prior selections (attorney IDs, types, additional emails) are restored. Without saved prefs, FRP + primary auto-select.
+  - **Additional recipients** — expandable section with an email input, type selector, and Add button. Added emails appear as removable badges.
+- **Dates** (right-aligned) — Invoice Date (defaults to today), Due Date (defaults to today + `tenant_firms.invoice_due_days`), and Tax Rate % (shown only if the tenant default tax rate or the form tax rate is greater than zero).
+
+#### Client/Trial Selection (Create Mode, no preselected trial)
+
+When no trial is preselected, Client and Trial dropdowns appear. Regular invoices filter trials by `client_id`. HSH invoices (`isHSH=true`) filter trials to those with approved subcontractor time entries. Selecting a trial expands the full layout above.
+
+#### Unbilled Time Entries Card (Create Mode)
+
+Shown when a trial has approved, billable, unbilled time entries. Header: Clock icon, "Unbilled Time Entries", and **Select All / Deselect All**.
+
+- **Desktop** — 8-column grid: checkbox, date, time range, consultant, service, description, duration + rate, amount. Selected rows highlight green.
+- **Mobile** — stacked cards per entry.
+- **Filter** — entries where `trial_id` matches, `status='approved'`, `is_billable=true`, and `entry_type` matches the mode (regular excludes `subcontractor`; HSH shows only `subcontractor`).
+- **Auto-select** — when a trial is preselected, all matching entries auto-select on first render.
+- **Subcontractor names** — for `hiring_company` mirror entries, consultant names are resolved from the HSH contract snapshot (first/last name) rather than the internal consultant roster.
+- **Add additional items to invoice** — toggle at the bottom reveals the Additional Line Items card.
+
+#### Unbilled Expenses Card (Create Mode)
+
+Shown when approved, billable, unbilled expenses exist. Header: Receipt icon, "Unbilled Expenses", and **Select All / Deselect All**.
+
+- **Desktop** — 6-column grid: checkbox, date, consultant, category, description, amount. Selected rows highlight indigo.
+- **Mobile** — stacked cards per expense.
+- **Include expense receipts in PDF** — toggle shown at the bottom when any expense is selected. Defaults on. When on, receipt images and PDFs are merged into the final invoice PDF.
+
+#### Additional Line Items Card (Create Mode)
+
+Appears when "Add additional items" is checked. Header: List icon, "Additional Line Items", and **Add Item**. Each row: description, quantity, rate, calculated amount (read-only), and a delete button.
+
+#### Billed Entries / Expenses (View Mode)
+
+In View Mode, checkboxes are replaced by read-only lists of the billed time entries and expenses attached to the invoice (filtered by `invoice_id`). Each row shows service/description/date/rate/amount.
+
+#### Bottom Row: Email Message and Totals
+
+- **Email Message** — textarea for the email body, placeholder from `tenant_firms.default_invoice_email_message`, stored as `invoices.notes`.
+- **Totals** — right-aligned breakdown: Time Entries Subtotal, Expenses Subtotal, Additional Items (if present). When `tax_rate > 0`: Subtotal, Tax, divider, Total. Otherwise: Total only. Total is emphasized.
+
+#### Action Buttons
+
+- **Create Mode** — **Cancel** and **Create Invoice**. Submit is disabled with a spinner while saving.
+- **View Mode** — **Close**, **View PDF** (opens `pdf_url`), and **Mark as Paid** (shown for sent / overdue invoices, sets `status='paid'` and `paid_date=today`).
+
+### Invoice Submit Flow
+
+#### Form Submission
+
+On submit, the form closes immediately and work continues in the background:
+
+1. Generate the invoice number via the `generate-invoice-number` Edge Function. Number format is per-tenant and supports `YY`, `YYYY`, `MM`, and an auto-incrementing counter, with optional yearly reset.
+2. Build a `recipientEmails` object from selected contacts and additional emails, grouped by `to`, `cc`, `bcc`.
+3. Save the selection to `trials.invoice_recipient_preferences` so it is restored next time.
+4. Call `onSubmit` with the full payload: `invoice_number`, `client_id`, `trial_id`, dates, subtotal/tax/total, selected time entry IDs, expense IDs, line items, `is_hsh_invoice`, `include_receipts`, and `recipient_emails`.
+
+#### Invoice Creation Mutation
+
+The Billing page handles persistence:
+
+1. Insert a row into `invoices` with `status='generating'` (the Send column shows a pulsing dot).
+2. Update selected time entries in parallel: set `invoice_id` and `status='billed'`.
+3. Update selected expenses in parallel: set `invoice_id` and `status='billed'`.
+4. Fire-and-forget the `generate-invoice-pdf` Puppeteer Edge Function.
+5. Optimistically patch the query cache so the UI updates instantly; the real row replaces the temp row on success.
+6. While any invoice has `status='generating'`, the 3-second `billingData` poll detects the transition to `draft`.
+
+## PDF Generation (generate-invoice-pdf)
+
+Supabase Edge Function running Puppeteer. Executes asynchronously after invoice creation.
+
+1. **Data loading** — fetches the invoice, tenant, clients, trials, time entries (by `invoice_id`), expenses (by `invoice_id`), services, and consultants in parallel using the service role.
+2. **Template loading** — loads the tenant's `default_invoice_template_id` (`document_templates`) and its sections (sorted by `order`).
+3. **Bill-to resolution** — if the trial has `frp_client_id`, it overrides the primary client; same for `frp_contact_id` and the primary contact.
+4. **Date range** — derives `{{start_time}}` and `{{end_time}}` from the earliest and latest time entries.
+5. **Placeholder resolution** — builds a map of ~25 placeholders (`{{invoice_number}}`, `{{invoice_date}}`, `{{due_date}}`, `{{start_time}}`, `{{end_time}}`, `{{client_name}}`, `{{client_address/city/state/zip}}`, `{{primary_contact}}`, `{{bill_to_*}}`, `{{subtotal}}`, `{{tax}}`, `{{total}}`, `{{company_name}}`, `{{case_name}}`, `{{payment_terms}}`) and substitutes them in each section's HTML.
+6. **Section rendering** — iterates sorted sections:
+   - **invoice_line_items** — builds rows from time entries (sorted by `start_time`) and expenses (sorted by `date`). Row types: *header* (column headers), *repeating* (one row per line item with per-cell placeholders: `{{date}}`, `{{time_entry_time_range}}`, `{{consultant_name}}`, `{{service_name}}`, `{{description}}`, `{{quantity}}`, `{{rate}}`, `{{amount}}`, `{{category}}`), *subtotal/static* (totals), *separator* (full-colspan dividers). Supports alternating row colors.
+   - **table** / **statement_line_items** — rendered with full per-cell style support (bg color, text color, weight, style, decoration, size, family, padding, align, vertical align).
+   - **Other sections** — raw HTML with placeholder substitution.
+7. **HTML → PDF** — Puppeteer renders the assembled HTML using the template's page settings (margins, size).
+8. **Receipt attachment** — if `include_receipts` is true and any expense has a `receipt_url`, the merger function appends receipts (see below).
+9. **Finalization** — updates the invoice row with the final `pdf_url` (private Supabase Storage URI) and `status='draft'`.
+10. **Error handling** — on failure, `status` is set to `draft` and "[PDF generation failed — please retry]" is appended to `notes`.
+
+## Receipt Attachment
+
+A helper Edge Function appends expense receipts to the invoice PDF using `pdf-lib` for PDF manipulation and Puppeteer for HTML → PDF conversion of image receipts.
+
+1. **Input** — receives the invoice PDF URI from the primary generator and the list of expenses (each with `receipt_url`, description, date, amount).
+2. **Load base PDF** — creates a signed URL for the private invoice PDF, downloads it, and loads it into a `PDFDocument`.
+3. **Header page** — renders an "Expense Receipts" cover page with subtitle "Supporting documentation for invoice expenses" via Puppeteer and appends it after the main invoice.
+4. **Receipt separation** — splits receipts into PDF receipts (`.pdf`) and image receipts (everything else).
+5. **PDF receipts** — each is downloaded, loaded as a `PDFDocument`, and all of its pages are copied into the merged document so multi-page PDF receipts are fully included.
+6. **Image receipts — 4-up layout** — image receipts are batched into groups of four and rendered in a 2×2 CSS grid. Each cell shows the description, date + amount, and the image (max-height 280px, bordered). The grid is rendered to an 8.5×11in page with 0.3in margins via Puppeteer and copied into the merged document. Five receipts produce two pages (4 + 1).
+7. **Save and upload** — the merged `PDFDocument` is saved to bytes, uploaded to the private Supabase Storage bucket, and the returned URI replaces the original `pdf_url`.
+
+## Invoice Preview Dialog
+
+A memoized preview renders only when the invoice has a `pdf_url`. It shows the invoice number heading, the status badge, an embedded PDF iframe (600px tall), a **Download** button (creates a signed URL for private files), and a **Close** button. It never regenerates the PDF.
+
+## Email Preview and Send
+
+**Preview** calls the `preview-invoice-email` Edge Function to render the email HTML (Resend template), displayed in an iframe. **Send** calls `send-invoice-email` which delivers the PDF as an attachment to every selected **To / CC / BCC** recipient through Resend, then updates `invoices.status` to `sent`.
+
+## Delete Invoice
+
+Confirmation dialog showing the invoice number and a warning that the action is permanent. On confirm:
+
+1. Reset all linked time entries: `invoice_id=null`, `status='approved'`.
+2. Reset all linked expenses: `invoice_id=null`, `status='approved'`.
+3. Call `delete-invoice` (deletes the `invoices` row and cleans up the PDF in Storage).
+4. Invalidate the `billingData` cache.
+
+## QuickBooks Export
+
+QuickBooks export is deferred in v1. The Billing page displays a graceful-degradation banner explaining that export is coming soon; no export controls are rendered. See [QuickBooks Integration](/user-manual/quickbooks-integration) for the planned workflow.
+
+## Role Visibility
+
+Accessible to **Owner** and **Admin** only. The sidebar item is hidden from Sales and Trial Consultant roles, and the underlying queries are gated by the same role check.
+
+## Download this document
+
+Download as markdown: [`/user-manual/billing/download.md`](/user-manual/billing/download.md).

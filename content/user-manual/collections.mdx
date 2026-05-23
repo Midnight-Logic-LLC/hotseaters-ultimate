@@ -1,0 +1,60 @@
+---
+title: "Collections"
+slug: "collections"
+section: "per-page"
+lastReviewed: "2026-04-22"
+---
+
+# Collections
+
+The **Collections** page is the standalone post-send invoice tracker. It presents a **3-column Kanban** — Open / Overdue / Paid — so owners and admins can monitor outstanding receivables and mark invoices as paid at a glance. Invoice creation and the pre-send workflow live on the [Billing](/user-manual/billing) page.
+
+All data is scoped by `tenant_id`. The page reads from `invoices`, `client_firms`, `trials`, `hsh_contracts`, and `payments`. Related: [Billing](/user-manual/billing), [Approvals](/user-manual/approvals), [Time Tracking](/user-manual/time-tracking).
+
+## Header and Data Loading
+
+Title "Collections" with the subtitle "Track outstanding and paid invoices". The page fetches `invoices`, `client_firms`, `trials`, and `hsh_contracts` (where the current tenant is the hiring party) for the signed-in tenant. Hiring-company records are fetched separately to resolve HSH invoices. A loading spinner displays until the data is ready.
+
+Collections shares the same `billingData` query key as [Billing](/user-manual/billing), so cache updates made on one page are reflected on the other.
+
+## 3-Column Kanban Layout
+
+Three Kanban columns are displayed in a responsive grid (one column on mobile, three on desktop). Each header shows the title, count badge, and total dollar amount.
+
+### Column 1: Open (success)
+
+- Invoices with `status='sent'` and `due_date ≥ today` (or no due date).
+- Cards show invoice number, client / hiring company, trial case name, "Due in X days" text, and the total in the success color.
+- Entire card is clickable — opens the invoice preview dialog. A dedicated preview icon also opens the dialog (event propagation is stopped to avoid double-triggering).
+- HSH invoices resolve the client label from the hiring-company list instead of `client_firms`.
+
+### Column 2: Overdue (danger)
+
+- Invoices with `status` in (`sent`, `overdue`) and `due_date < today`.
+- Cards show invoice number, client / hiring company, trial case name, "Xd overdue" in the danger color, and the total in the danger color.
+- Same click-to-preview behavior as **Open**.
+
+### Column 3: Paid (success)
+
+- Invoices with `status='paid'`.
+- Cards show invoice number, client / hiring company, trial case name, "Paid [date]" (formatted as "MMM d"), and the total in the success color.
+- Same click-to-preview behavior.
+
+## Invoice Preview Dialog
+
+A memoized preview renders only when the selected invoice has a `pdf_url`. The dialog shows:
+
+- Invoice number heading with a status badge (draft = neutral, sent = info, paid = success, overdue = danger).
+- Embedded PDF in an iframe (600px tall).
+- **Download** button — handles both public and private Supabase Storage URLs by creating a signed URL for private objects.
+- **Mark as Paid** button — shown for sent and overdue invoices. On click, `invoices.status` becomes `paid` and `paid_date` is set to today; an optional `payments` row records the reconciliation.
+- **Close** button.
+- The dialog never regenerates the PDF — it only displays the pre-generated file produced by [Billing](/user-manual/billing).
+
+## Role Visibility
+
+Accessible to **Owner** and **Admin** only. The **Collections** sidebar item appears under Financial alongside **Billing**. The underlying queries are gated by the same role check.
+
+## Download this document
+
+Download as markdown: [`/user-manual/collections/download.md`](/user-manual/collections/download.md).

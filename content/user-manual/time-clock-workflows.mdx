@@ -1,0 +1,144 @@
+---
+title: "Time Clock Workflows"
+slug: "time-clock-workflows"
+section: "detailed"
+lastReviewed: "2026-04-22"
+---
+
+# Time Clock Workflows
+
+Complete documentation of the HotSeaters time tracking system, covering the clock UI, tenant-configurable auto-rounding, manual entry, the spreadsheet view, HotSeatHub (HSH) bidirectional entries, approvals, and how time entries feed invoices under split billing.
+
+All persistence is in the Supabase `time_entries` table, scoped by `tenant_id`. Cross-tenant HSH links are created via the `hshSyncTimeEntry` Edge Function. See [Database Schema](/user-manual/database-schema), [Time Tracking](/user-manual/time-tracking), [Approvals](/user-manual/approvals), [Billing](/user-manual/billing), [Travel Time](/user-manual/travel-time), and [Expense Workflows](/user-manual/expense-workflows) for related surfaces.
+
+## Overview
+
+The time clock supports three kinds of `time_entries.entry_type`:
+
+- **`regular`** — standard entries for the signed-in user's own tenant.
+- **`subcontractor`** — entries a subcontractor logs in their own tenant for HSH work.
+- **`hiring_company`** — mirror entries written into the hiring tenant's books for the same HSH work.
+
+For any HSH session, two linked rows are created: one `subcontractor` row in the subcontractor's tenant and one `hiring_company` mirror row in the hiring tenant. They are linked bidirectionally via `linked_time_entry_id` and share an `hsh_contract_id`. An optional `entry_group_id` groups a parent entry with its travel-time child.
+
+## Time Clock UI
+
+Four primary surfaces under `/time-tracking`:
+
+1. **Clock In / Clock Out** — a single-click timer. The start timestamp is rounded per tenant config at clock-in, the end timestamp is rounded at clock-out, and `duration_hours` is derived from the rounded span.
+2. **Manual Entry** — user picks a trial, service, date, start, and end. Rounding is applied identically so manual entries are indistinguishable from clocked entries downstream.
+3. **Spreadsheet View** — editable grid of the user's own entries (and, for managers, direct reports). Inline edits round on save.
+4. **Active Timer Panel** — while running, description edits are debounced (1s) and patched to the entry; HSH sessions fan out the description patch to the linked mirror via `hshSyncTimeEntry`.
+
+## Auto-Rounding Configuration
+
+Rounding is per-tenant and configured under [Settings](/user-manual/settings). Clock-in and clock-out are rounded **independently** — each has its own direction and granularity.
+
+```ts
+type RoundingDirection = 'up' | 'down' | 'nearest';
+type RoundingGranularityMinutes = 1 | 5 | 15;
+
+interface TenantTimeRoundingConfig {
+  clock_in: {
+    direction: RoundingDirection;
+    granularity: RoundingGranularityMinutes;
+  };
+  clock_out: {
+    direction: RoundingDirection;
+    granularity: RoundingGranularityMinutes;
+  };
+}
+```
+
+Rounding semantics:
+
+| Direction | Meaning |
+|---|---|
+| `up` | Round to the next boundary of `granularity` minutes. |
+| `down` | Truncate to the previous boundary of `granularity` minutes. |
+| `nearest` | Round to the closest boundary; ties round up. |
+
+A common configuration is `clock_in: down / 15` and `clock_out: up / 15`, which favors the consultant. Firms that prefer strict capture use `nearest / 1` on both ends.
+
+Rounding is applied client-side for immediate UI feedback, then re-applied server-side in the Route Handler that persists the entry — the server value wins.
+
+## Starting a Timer
+
+| Step | Regular | HSH (subcontractor tenant) |
+|---|---|---|
+| 1 | Round `start_time` using tenant `clock_in` rule. | Round `start_time` using **subcontractor tenant's** `clock_in` rule. |
+| 2 | Compute `rate` from the matching `trial_services.rate`. | Compute `rate` from the HSH-agreed subcontractor rate. |
+| 3 | — | Also resolve `hiring_rate` from the hiring tenant's `trial_services` row. |
+| 4 | Insert `time_entries` row with `entry_type = 'regular'`, `tenant_id`, `trial_id`, `trial_service_id`, snapshot names. | Insert `time_entries` row with `entry_type = 'subcontractor'`, `subcontract_assignment_id`, `hsh_contract_id`. |
+| 5 | Set `active_entry` in client store. | Invoke `hshSyncTimeEntry` Edge Function → inserts mirror row in hiring tenant with `entry_type = 'hiring_company'`, `linked_time_entry_id`, `hiring_rate`, `subcontractor_rate`. |
+| 6 | — | Patch subcontractor row's `linked_time_entry_id` → mirror id (bidirectional). |
+
+Travel-time variants follow the same flow but resolve a dedicated `travel_time_service_id`, apply the service's `travel_multiplier` to the computed rate, and set `original_trial_service_id` on the entry. See [Travel Time](/user-manual/travel-time).
+
+## Realtime Description Sync
+
+```
+user types → debounce 1s → PATCH /api/time-entries/:id { description }
+                                     │
+                                     └── if entry_type = 'subcontractor'
+                                         → hshSyncTimeEntry(linked_time_entry_id, { description })
+```
+
+The Edge Function enforces that only `description`, `start_time`, `end_time`, and `duration_hours` fan out cross-tenant; rate fields never mirror (each tenant owns its own billing side).
+
+## Stopping a Timer
+
+| Step | Regular | HSH |
+|---|---|---|
+| 1 | Round `end_time` using tenant `clock_out` rule. | Round `end_time` using subcontractor tenant's `clock_out` rule. |
+| 2 | Recompute `duration_hours` from rounded span. | Same. |
+| 3 | PATCH entry with `end_time`, `duration_hours`, final `description`. | PATCH subcontractor entry, then `hshSyncTimeEntry` fans out end fields to the hiring mirror. |
+| 4 | Clear `active_entry`. | Clear `active_entry` and `active_hiring_company_entry`. |
+
+## Manual Entry
+
+Manual entries bypass the live-timer store but pass through the same rounding and the same Route Handler. For HSH assignments, a manual entry in the subcontractor's tenant triggers `hshSyncTimeEntry` on insert to create the hiring-side mirror synchronously.
+
+## Spreadsheet View
+
+The spreadsheet is read/write for the user's own entries and read-only for entries created by others (except for managers viewing direct reports). Inline edits:
+
+- Re-run rounding on any changed `start_time` / `end_time`.
+- Recompute `duration_hours`.
+- Fan out to the HSH mirror if `entry_type = 'subcontractor'`.
+- Are blocked once an entry is included in a submitted `approval_workflows` row unless the manager unlocks it.
+
+## Approval Flow
+
+Entries move through `approval_workflows` with states `pending → submitted → approved → rejected`. The user submits a batch (by date range or by trial), which:
+
+1. Creates one `approval_workflows` row with the grouped `time_entry_ids` and `expense_entry_ids`.
+2. Flips the included `time_entries.status` to `submitted` and locks fields from edit.
+3. Notifies the manager; manager acts from [Approvals](/user-manual/approvals) with bulk approve / reject.
+4. On approve, entries flip to `approved` and become eligible for [Billing](/user-manual/billing).
+5. HSH subcontractor entries carry an independent approval from the hiring tenant's manager — the mirror row has its own `approval_workflows` membership in the hiring tenant. Neither side blocks the other; each tenant approves what it owes.
+
+## Split Billing: Pre-Trial vs. In-Trial
+
+A `trial_services` row has a `service_phase` of `pre_trial`, `in_trial`, or `split`. Time entries inherit the phase via their `trial_service_id` (or `original_trial_service_id` for travel-time children), which determines how they feed invoices.
+
+| Phase | Billing model | How entries feed invoices |
+|---|---|---|
+| `pre_trial` | **Hourly.** | Each entry contributes `duration_hours × rate` as a discrete line item on the invoice. |
+| `in_trial` | **Daily minimum.** | Entries are grouped by work-date; each date becomes one line item at the service's daily rate, regardless of logged hours. Entries still persist for audit and consultant payout, but do not sum independently on the client invoice. |
+| `split` | **Both.** | Entries dated before `trials.start_date` bill hourly; entries dated on or after bill daily. Invoicing inspects the entry's `work_date` against the trial to bucket it. |
+
+Because the phase decision lives on the service row and uses the entry's `work_date`, reclassifying a trial's start date (see trial continuation in [Schedule](/user-manual/schedule)) automatically reshuffles which side of the split each entry lands on — no entry rewrites required.
+
+## Key Supabase Objects
+
+| Object | Purpose |
+|---|---|
+| `time_entries` | Primary store. Columns include `entry_type`, `tenant_id`, `trial_id`, `trial_service_id`, `original_trial_service_id`, `rate`, `hiring_rate`, `subcontractor_rate`, `start_time`, `end_time`, `duration_hours`, `description`, `status`, `linked_time_entry_id`, `hsh_contract_id`, `entry_group_id`, `subcontract_assignment_id`. |
+| `approval_workflows` | Groups submitted time + expense entries for a single approval decision. |
+| `trial_services` | Source of truth for `service_phase` and per-service `rate` / `daily_rate` / `travel_multiplier`. |
+| `hshSyncTimeEntry` (Edge Function) | Writes and updates cross-tenant mirrors for HSH entries. See [Help Wanted](/user-manual/help-wanted) and [Potential Gigs](/user-manual/potential-gigs). |
+
+## Download
+
+[`/user-manual/time-clock-workflows/download.md`](/user-manual/time-clock-workflows/download.md)

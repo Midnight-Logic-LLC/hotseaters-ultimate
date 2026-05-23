@@ -1,0 +1,712 @@
+---
+title: Design Patterns
+section: core
+lastReviewed: 2026-04-22
+legacyFile: Doc05DesignPatterns.jsx
+summary: Architectural patterns, coding standards, and HotSeaters-specific conventions for the Supabase-backed Next.js stack.
+---
+
+# Design Patterns & Best Practices
+
+Architectural patterns, coding standards, and HotSeaters-specific conventions.
+
+[Back to User Manual](/user-manual)
+
+## Core Architectural Patterns
+
+### Entity-Driven Design
+
+All business logic centers around entities (database records).
+
+- Clear separation: entities = data, functions = orchestration, components = UI
+- Entities represent domain objects (Trial, Client, TimeEntry, Invoice, etc.)
+- Relationships via foreign keys (`client_id`, `trial_id`, `service_id`)
+- Edge Functions and Route Handlers orchestrate complex entity interactions
+- Frontend reads via the Supabase client; mutations trigger TanStack Query invalidation
+
+### Module-Based Navigation
+
+Navigation is organized by functional area with role-based visibility:
+
+- **Overview** — Dashboard with KPIs, revenue charts, quick actions (all roles)
+- **Sales** — Sales Hub, Deals pipeline, Clients (owner/admin/sales)
+- **Operations** — Trials, Schedule, Time & Expenses (all roles)
+- **Financial** — Approvals, Billing, Collections, Invoices (owner/admin)
+- **HotSeatHub** — Potential Gigs, Help Wanted, Favorites (owner, add-on)
+- **Company** — Consultants, Settings (owner/admin)
+
+A collapsible sidebar provides quick access to all features.
+
+### Theme-Driven UI (v1: Single Theme)
+
+HotSeaters v1 ships a **single curated theme** derived from the brand guide. CSS custom properties are still the mechanism, but per-tenant theme JSON is **not** exposed to end users in v1 — this keeps the UI predictable and the surface area small while we stabilize the core product. Multi-theme and white-label support are deferred to a later release.
+
+- Brand variables live in `app/globals.css` and the Tailwind config
+- Components consume `var(--color-brand-primary)`, `var(--color-surface)`, etc.
+- Dark-mode toggling is deliberately deferred; do not add `dark:` variants
+
+## Snapshot Pattern (Historical Accuracy)
+
+**Core principle:** store denormalized data at time of transaction to preserve historical accuracy even when source data changes.
+
+### Why Snapshots Matter
+
+Without snapshots: if a service is renamed from "Graphics" to "Visual Design," all historical time entries would show "Visual Design," making old invoices inaccurate.
+
+### Real Examples from HotSeaters
+
+```ts
+// TrialService: snapshot service name at creation
+{
+  trial_id: "trial_123",
+  service_id: "service_abc",
+  service_name: "Trial Consulting" // frozen
+}
+
+// TimeEntry: comprehensive snapshots for audit trail
+{
+  trial_id: "trial_xyz",
+  trial_name: "Smith v. Jones",
+  client_name: "Acme Law Firm",
+  service_name: "Jury Consulting",
+  rate: 150,        // rate at time of work
+  consultant_id: "consultant_123",
+  amount: 300
+}
+
+// HSH contract: snapshot all pricing and names
+{
+  hiring_tenant_id: "tenant_A",
+  hiring_tenant_name: "XYZ Consulting",
+  subcontractor_tenant_id: "tenant_B",
+  subcontractor_tenant_name: "ABC Firm",
+  billing_rate: 200,  // what hiring company charges client
+  payout_rate: 180,   // what subcontractor receives
+  service_name: "Graphics"
+}
+
+// Invoice: complete billing snapshot
+{
+  client_name: "Law Firm LLC",
+  trial_name: "Case 2025-001",
+  subtotal: 5000,
+  tax_rate: 0.08,
+  tax_amount: 400,
+  total: 5400
+}
+```
+
+### Snapshot Best Practices
+
+- Snapshot names, rates, and amounts on all financial/transactional records
+- Use `*_name` fields for snapshots; keep `*_id` for relationship integrity
+- Snapshot at creation time; never update snapshot fields later
+- For display, show the snapshot name with an option to view the current linked entity
+
+## Multi-Tenancy via tenant_id
+
+Every tenant-scoped entity includes `tenant_id` for strict data isolation between firms. Row-Level Security (RLS) in Supabase enforces this at the database layer.
+
+```ts
+// Frontend: filter by current user's tenant_id via RLS-backed client
+const { data: trials } = useQuery({
+  queryKey: ['trials', userInfo?.tenant_id],
+  queryFn: async () => {
+    const { data } = await supabase
+      .from('trials')
+      .select('*')
+      .eq('tenant_id', userInfo.tenant_id);
+    return data ?? [];
+  },
+  enabled: !!userInfo?.tenant_id,
+});
+
+// Frontend: always include tenant_id on insert
+await supabase.from('client_firms').insert({
+  tenant_id: userInfo.tenant_id,
+  firm_name: 'Acme Law',
+});
+
+// Backend: marketplace operations cross tenant boundaries via service role
+// (Edge Function or Route Handler using SUPABASE_SERVICE_ROLE_KEY)
+const { data: hiringTenantTrials } = await serviceRoleClient
+  .from('trials')
+  .select('*')
+  .eq('tenant_id', hiringTenantId);
+
+await serviceRoleClient.from('notifications').insert({
+  tenant_id: otherTenantId,
+  user_id: otherUserId,
+  type: 'hsh_response_received',
+  data: responseData,
+});
+```
+
+### Global vs Tenant-Specific Entities
+
+A handful of reference entities support global defaults (`tenant_id IS NULL`), such as starter service catalogs. Tenants may override or extend them.
+
+```ts
+// Global starter services shipped by the platform
+const { data: globalServices } = await supabase
+  .from('service_types')
+  .select('*')
+  .is('tenant_id', null);
+
+// Tenant-specific services
+const { data: tenantServices } = await supabase
+  .from('service_types')
+  .select('*')
+  .eq('tenant_id', userInfo.tenant_id);
+
+const allServices = [...(globalServices ?? []), ...(tenantServices ?? [])];
+```
+
+### Benefits of the tenant_id Pattern
+
+- **Data isolation** — Tenants never see each other's data except through explicit marketplace flows
+- **Simple queries** — Add a `tenant_id` filter; no complex joins
+- **Clear ownership** — Every record belongs to exactly one tenant
+- **Debuggable** — Filter by `tenant_id` to reproduce a tenant's view
+
+## Service Role Elevation
+
+Edge Functions and Route Handlers can operate with elevated privileges by constructing a Supabase client with the service role key. This bypasses RLS — use it intentionally.
+
+```ts
+// Edge Function (Deno runtime on Supabase) or Next.js Route Handler
+import { createClient } from '@supabase/supabase-js';
+
+export async function POST(req: Request) {
+  const authHeader = req.headers.get('Authorization');
+  const userClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: authHeader ?? '' } } },
+  );
+
+  // Always authenticate first
+  const { data: { user } } = await userClient.auth.getUser();
+  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // User-scoped: respects tenant_id via RLS
+  const { data: myTrials } = await userClient.from('trials').select('*');
+
+  // Service role: admin privileges, can access any tenant
+  const serviceClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+
+  await serviceClient.from('notifications').insert({
+    tenant_id: hiringTenantId,
+    user_id: hiringTenantUserId,
+    type: 'hsh_new_response',
+    data: { /* ... */ },
+  });
+
+  return Response.json({ ok: true });
+}
+```
+
+### When Service Role Is Required
+
+- **HSH marketplace** — Reading job postings across tenants, creating linked time entries
+- **Cross-tenant notifications** — Notifying users in other tenants about marketplace activity
+- **Webhooks** — No user context (Stripe subscription events, Resend delivery callbacks)
+- **pg_cron scheduled jobs** — `check_auto_move_dates`, HSH sub-user expiry, retainer computation
+- **Data migrations** — Updating schema or data across all tenants
+
+> **Security critical:** service role bypasses all RLS. Validate user authorization and business logic **before** using it, and never expose service-role operations directly to the browser.
+
+## React Patterns
+
+### Component Composition
+
+Build complex UIs from small, reusable components.
+
+```tsx
+// Trials page hierarchy
+PipelinePageContent (mode="trials")
+├── PipelineViewToggle (kanban/list/cards)
+├── SearchAndFilters
+├── PipelineKanban
+│   └── TrialCard
+│       ├── PipelineStageBadge
+│       ├── AssignmentDisplay
+│       └── MetadataRow
+├── PipelineList
+├── PipelineCards
+└── TrialDetails (modal)
+    ├── DealDocumentsSection
+    ├── TrialContactsSection
+    └── ServiceSelector
+```
+
+### Controlled Components
+
+All form inputs are controlled via React state.
+
+```tsx
+const [formData, setFormData] = useState({ case_name: '', start_date: '' });
+
+<Input
+  value={formData.case_name}
+  onChange={(e) => setFormData({ ...formData, case_name: e.target.value })}
+/>
+```
+
+Benefits: single source of truth, straightforward validation, simple reset/undo.
+
+### Lifting State Up
+
+Share state between siblings by moving it to the parent.
+
+```tsx
+function DashboardPage() {
+  const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'quarter'>('month');
+  return (
+    <>
+      <PeriodSelector value={selectedPeriod} onChange={setSelectedPeriod} />
+      <RevenueChart period={selectedPeriod} />
+      <TeamPerformance period={selectedPeriod} />
+    </>
+  );
+}
+```
+
+### View Persistence Pattern
+
+Persist UI preferences to `user_profiles.preferences` + `localStorage` for instant load plus cross-device sync.
+
+```ts
+const [viewType, setViewType] = useState<'card' | 'kanban' | 'list'>('card');
+
+useEffect(() => {
+  const savedInDb = userInfo?.preferences?.deals_view;
+  const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('deals_view') : null;
+  setViewType((savedInDb ?? savedLocal ?? 'card') as typeof viewType);
+}, [userInfo]);
+
+const handleViewChange = async (newView: typeof viewType) => {
+  setViewType(newView);
+  localStorage.setItem('deals_view', newView);
+  const prefs = userInfo?.preferences ?? {};
+  await supabase
+    .from('user_profiles')
+    .update({ preferences: { ...prefs, deals_view: newView } })
+    .eq('id', userInfo.id);
+};
+```
+
+### Custom Hooks Pattern
+
+Extract reusable logic into hooks. Hooks are the only bridge between components and stores.
+
+```ts
+export const useCurrentUserAndInfo = () => {
+  return useQuery({
+    queryKey: ['currentUserAndInfo'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data: userInfo } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      return { user, userInfo };
+    },
+  });
+};
+```
+
+## Real-Time Notification Pattern
+
+The notification system combines **Supabase Realtime** (postgres_changes) with a polling fallback for tabs that miss a channel event.
+
+```ts
+// NotificationsMenu — realtime channel + polling safety net
+const { data: notifications = [] } = useQuery({
+  queryKey: ['notifications', userInfo?.id],
+  queryFn: async () => {
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('tenant_id', userInfo.tenant_id)
+      .eq('user_id', userInfo.user_id)
+      .eq('is_dismissed', false)
+      .order('created_at', { ascending: false });
+    return data ?? [];
+  },
+  enabled: !!userInfo?.id,
+  refetchInterval: 15_000,
+  refetchOnWindowFocus: true,
+});
+
+useEffect(() => {
+  const channel = supabase
+    .channel(`notif:${userInfo.user_id}`)
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'notifications',
+        filter: `user_id=eq.${userInfo.user_id}` },
+      () => queryClient.invalidateQueries({ queryKey: ['notifications'] }))
+    .subscribe();
+  return () => { supabase.removeChannel(channel); };
+}, [userInfo.user_id]);
+```
+
+### Creating Notifications
+
+```ts
+await supabase.from('notifications').insert({
+  tenant_id: userInfo.tenant_id,
+  user_id: affectedUserId,
+  type: 'trial_date_changed',
+  title: 'Trial Rescheduled',
+  message: `Trial "${trialName}" moved to ${newDate}`,
+  data: { trial_id: trialId, old_date: oldDate, new_date: newDate },
+  is_read: false,
+  is_dismissed: false,
+});
+```
+
+Notification types in use include `assignment_created`, `assignment_removed`, `trial_date_changed`, `trial_continued`, `pipeline_stage_auto_moved`, `hsh_new_request`, `hsh_response_received`, `hsh_request_cancelled`, `hsh_declines_aggregated`, and `expense_requires_approval`.
+
+### Notification Router Pattern
+
+A single `NotificationRouter` component dispatches the right dialog or navigation per notification `type`, keeping per-type behavior co-located.
+
+## Theme System Pattern (v1 Scope)
+
+HotSeaters v1 uses a single, opinionated brand theme — not per-tenant customization. The CSS-variable mechanism remains so future white-labeling is a pure additive change, but end users cannot edit theme tokens.
+
+```css
+/* app/globals.css */
+:root {
+  --color-brand-primary: oklch(0.72 0.14 220);
+  --color-brand-secondary: oklch(0.68 0.17 260);
+  --color-accent-warm: oklch(0.76 0.17 55);
+  --color-surface: oklch(0.99 0 0);
+  --color-text: oklch(0.18 0 0);
+
+  --font-brand-title: 'Zen Dots', sans-serif;
+  --font-brand-subtitle: 'Michroma', sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  --radius-card: 12px;
+  --radius-button: 8px;
+  --shadow-card: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+```
+
+Components consume these tokens via Tailwind utilities mapped in `tailwind.config.ts` or directly via `style={{ color: 'var(--color-text)' }}`.
+
+## Common Pitfalls & How to Avoid Them
+
+### 1. Query running before data is ready
+
+```ts
+// Bad: runs immediately, tenantId is undefined
+const { data } = useQuery({
+  queryKey: ['clients', tenantId],
+  queryFn: () => supabase.from('client_firms').select('*').eq('tenant_id', tenantId),
+});
+
+// Good: gate with `enabled`
+const { data } = useQuery({
+  queryKey: ['clients', tenantId],
+  queryFn: () => supabase.from('client_firms').select('*').eq('tenant_id', tenantId),
+  enabled: !!tenantId,
+});
+```
+
+### 2. Not invalidating queries after mutations
+
+```ts
+const updateMutation = useMutation({
+  mutationFn: ({ id, data }: { id: string; data: Partial<Trial> }) =>
+    supabase.from('trials').update(data).eq('id', id),
+  onSuccess: (_, { id }) => {
+    queryClient.invalidateQueries({ queryKey: ['trials'] });
+    queryClient.invalidateQueries({ queryKey: ['trialServices', id] });
+    toast.success('Updated');
+  },
+});
+```
+
+### 3. Missing snapshot fields
+
+```ts
+// Bad: only the ID — name could change later
+await supabase.from('time_entries').insert({ service_id: '123' });
+
+// Good: snapshot name and rate at transaction time
+const service = services.find((s) => s.id === serviceId)!;
+await supabase.from('time_entries').insert({
+  service_id: serviceId,
+  service_name: service.name,
+  rate: calculatedRate,
+});
+```
+
+### 4. Not handling all UI states
+
+Always render loading, error, empty, and populated states explicitly. Use `AppEmptyState` for the empty case.
+
+### 5. Forgetting tenant_id filter/include
+
+```ts
+// Bad: returns all tenants' data (RLS should catch this, but don't rely on it)
+const { data } = await supabase.from('client_firms').select('*');
+
+// Good: explicit tenant_id filter
+const { data } = await supabase
+  .from('client_firms')
+  .select('*')
+  .eq('tenant_id', userInfo.tenant_id);
+
+// Bad: insert without tenant_id
+await supabase.from('service_types').insert({ name: 'Trial Consulting' });
+
+// Good: include tenant_id on insert
+await supabase.from('service_types').insert({
+  tenant_id: userInfo.tenant_id,
+  name: 'Trial Consulting',
+});
+```
+
+### 6. Hardcoding brand values
+
+Use CSS custom properties or the Tailwind brand tokens — not raw hex codes — so future theming remains additive.
+
+```tsx
+<Button
+  className="px-4 py-2"
+  style={{
+    backgroundColor: 'var(--color-brand-primary)',
+    borderRadius: 'var(--radius-button)',
+  }}
+>
+  Click me
+</Button>
+```
+
+## HotSeaters-Specific Patterns
+
+### Rate Calculation Cascade
+
+Apply pricing modifiers in order of specificity (most specific wins).
+
+```ts
+let rate = service.base_rate;
+
+// 1. Consultant tier multiplier (if consultant is sales lead)
+if (consultantTier) rate *= consultantTier.multiplier;
+
+// 2. Client tier multiplier
+if (clientTier) rate *= clientTier.multiplier;
+
+// 3. Client service rate override (most specific — wins)
+const { data: override } = await supabase
+  .from('client_service_rates')
+  .select('*')
+  .eq('client_firm_id', clientId)
+  .eq('service_type_id', serviceId)
+  .maybeSingle();
+
+if (override) rate = override.custom_rate;
+
+// Final rate snapshotted to trial_services.rate
+```
+
+### Projected Daily Revenue (PDR)
+
+```text
+// Hourly billing
+PDR = (estimated_quantity * rate) / duration_days
+     = (40 * 150) / 10 = $600/day
+
+// Daily minimum (in-trial services)
+PDR = daily_minimum_hours * rate
+     = 8 * 150 = $1,200/day
+
+// Split billing
+pre_trial_PDR = (pre_trial_hours * rate) / pre_trial_days
+in_trial_PDR  = daily_minimum_hours * rate
+```
+
+PDR fields are pre-computed on `trial_services` for performant revenue forecasting on the Dashboard and Forecasting surfaces.
+
+### Split Billing Visual Pattern
+
+Services that span pre-trial and in-trial render as two adjacent bars on the Gantt — a light pre-trial segment (hourly) and a darker in-trial segment (daily minimum). Fields on `trial_services`:
+
+- `split_billing_at_threshold: true`
+- `pre_trial_estimated_hours`
+- `final_billing_method: 'split'`
+- `pre_trial_projected_daily_revenue`
+- `in_trial_projected_daily_revenue`
+
+### Document Placeholder Replacement
+
+Document templates use `{{PLACEHOLDER}}` tokens. DocuSeal renders the final PDF after placeholder substitution; HotSeaters supplies the filled HTML/Markdown, DocuSeal handles signature capture and PDF sealing.
+
+```ts
+const replacements: Record<string, string> = {
+  CASE_NAME: trial.case_name,
+  CLIENT_NAME: clientName,
+  CASE_NUMBER: trial.case_number,
+  TRIAL_START: formatDate(trial.start_date),
+  TOTAL_BUDGET: formatCurrency(totalBudget),
+};
+
+let filled = template.content;
+for (const [key, value] of Object.entries(replacements)) {
+  filled = filled.replaceAll(`{{${key}}}`, value ?? '');
+}
+```
+
+### E-Signature Workflow (DocuSeal)
+
+DocuSeal replaces the legacy API2PDF + custom signing pipeline. The flow:
+
+1. Template defines signature fields (client, FRP, sales). HotSeaters maps our placeholders to DocuSeal roles.
+2. "Send for signature" creates a DocuSeal submission via the DocuSeal API; we persist a `signature_requests` row keyed by the submission ID.
+3. DocuSeal emails each signer a signing link (Resend handles transactional email app-wide; DocuSeal uses its own sender for signing invitations).
+4. Signers complete signing in DocuSeal's hosted UI (600x180 canvas, audit trail).
+5. DocuSeal webhook → our Edge Function marks the request complete, downloads the sealed PDF to Supabase Storage, and updates `generated_documents.status = 'signed'`.
+6. Optional: auto-advance the pipeline stage if the deal's stage is configured to move on "document fully signed."
+
+### HSH Subcontractor Identity (Email + OAuth Coexist)
+
+Subcontractors engaged through HotSeatHub exist as constrained `user_profiles` rows. Two identity paths are supported side-by-side:
+
+- **Email-only sub-user** — The hiring firm invites by email; a pg_cron job expires the account **14 days** after the contract ends.
+- **OAuth (Google/Microsoft)** — The subcontractor signs in with their own account and links to the contract. No automatic expiry (they own the identity).
+
+Both coexist on the same contract; choose per invitee.
+
+### Scheduled Work: pg_cron Only
+
+All scheduled work runs via Supabase `pg_cron`. There is **no Vercel Cron**, no `vercel.json`, and no `VERCEL_URL`-bearer endpoints. Typical jobs:
+
+- `check_auto_move_dates` — advance pipeline stages on date triggers
+- `expire_hsh_sub_users` — deactivate email-only sub-users 14 days post-contract
+- `compute_retainer_balances` — nightly retainer consumption rollup
+- `collections_aging_buckets` — refresh overdue invoice buckets
+
+### QuickBooks Integration: Graceful Degradation
+
+QuickBooks sync is **optional and non-blocking**. If the tenant has not connected QuickBooks, or if the QBO token is expired / QBO is returning errors, every QuickBooks-dependent surface must degrade gracefully:
+
+- Show a neutral "Not connected" or "Sync paused" state — never a hard error
+- Let users complete their primary workflow (approve time, send invoice) without QBO
+- Queue sync attempts and retry; surface sync health in Settings, not on operational pages
+
+## Performance Patterns
+
+### Computed Fields Pattern
+
+Pre-calculate expensive values (PDR, totals) and store them; write-time cost, read-time savings.
+
+```ts
+// When a trial_service is created/updated
+const pdr = calculatePDR(service, trial);
+await supabase.from('trial_services').update({ projected_daily_revenue: pdr }).eq('id', service.id);
+
+// Frontend just sums the stored values
+const totalProjected = trialServices.reduce((s, x) => s + (x.projected_daily_revenue ?? 0), 0);
+```
+
+### TanStack Query Stale Time
+
+```ts
+// Tenant row rarely changes
+const { data: tenant } = useQuery({
+  queryKey: ['tenant', tenantId],
+  queryFn: () => supabase.from('tenant_firms').select('*').eq('id', tenantId).single(),
+  staleTime: 5 * 60 * 1000,
+});
+
+// Notifications: always stale, realtime + poll
+const { data: notifications } = useQuery({
+  queryKey: ['notifications', userId],
+  queryFn: fetchNotifications,
+  refetchInterval: 15_000,
+  staleTime: 0,
+});
+```
+
+### Lazy Loading Pattern
+
+```ts
+const [showDetails, setShowDetails] = useState(false);
+
+const { data: trialDetails } = useQuery({
+  queryKey: ['trialDetails', trialId],
+  queryFn: () => fetchAllTrialData(trialId),
+  enabled: showDetails,
+});
+```
+
+Apply to modals, tabs, and accordions so heavy data loads only when the user opens the surface.
+
+## Code Style Guidelines
+
+### Naming Conventions
+
+- **Components** — PascalCase (`TrialCard`, `ServiceSelector`)
+- **Functions** — camelCase (`calculatePDR`, `generateInvoicePdf`)
+- **Variables** — camelCase (`trialServices`, `userInfo`)
+- **Constants** — UPPER_SNAKE_CASE (`API_ENDPOINT`, `MAX_RETRIES`)
+- **Files** — match export name (`TrialCard.tsx`, `pdrCalculations.ts`)
+- **Booleans** — `is`, `has`, `should`, `can` prefixes
+
+### Import Order
+
+```ts
+// 1. React and external libraries
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+
+// 2. UI components (shadcn)
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+
+// 3. Custom components
+import TrialCard from '@/components/trials/TrialCard';
+import ServiceSelector from '@/components/trials/ServiceSelector';
+
+// 4. Hooks and utilities
+import { useCurrentUserAndInfo } from '@/hooks/useCurrentUserAndInfo';
+import { formatCurrency } from '@/lib/format';
+import { calculatePDR } from '@/lib/pdrCalculations';
+
+// 5. Icons last
+import { Briefcase, Calendar, Plus } from 'lucide-react';
+```
+
+### Comment Standards
+
+- Comment non-obvious business logic and calculations
+- JSDoc on reusable utility functions
+- `TODO(owner):` comments for known follow-ups
+- Remove `console.log` before committing
+
+## Related Documents
+
+- [App Overview](/user-manual/app-overview)
+- [Database Schema](/user-manual/database-schema)
+- [User Workflows](/user-manual/user-workflows)
+- [Technical Reference](/user-manual/technical-reference)
+- [Backend Functions](/user-manual/backend-functions)
+- [External Integrations](/user-manual/external-integrations)
+- [Style Guide](/user-manual/style-guide)
+- [Notification System](/user-manual/notification-system)
+- [QuickBooks Integration](/user-manual/quickbooks-integration)
+
+## Download
+
+A plain-Markdown copy of this document is available at
+[`/user-manual/design-patterns/download.md`](/user-manual/design-patterns/download.md).

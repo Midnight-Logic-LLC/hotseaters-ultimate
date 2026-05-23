@@ -1,0 +1,174 @@
+---
+title: "Schedule"
+slug: "schedule"
+section: "per-page"
+lastReviewed: "2026-04-22"
+---
+
+# Schedule
+
+The Schedule page is a Gantt-style interactive timeline for every active trial, its services, and every consultant assignment. It supports drag-and-drop date editing for both trial bars and individual task bars, with cascading updates to child services.
+
+Data is persisted in the Supabase `trials`, `trial_services`, and `assignments` tables and scoped by `tenant_id`. Drag-drop mutations fire Supabase Realtime events so teammates see changes immediately, and they enqueue notification emails via Resend. Related: [Trials](/user-manual/trials), [Time Tracking](/user-manual/time-tracking), [Notification System](/user-manual/notification-system).
+
+## Overall function
+
+<p>The timeline shows all scheduled trials and their service tasks on a horizontal time axis. The dataset includes own-tenant trials, HotSeatHub subcontract gigs (where your tenant provides consultants to another), and pending marketplace responses. Completed trials that were lost or settled are excluded.</p>
+
+## Toolbar controls
+
+<ul>
+  <li><strong>By Trial / By Consultant toggle</strong> — Groups timeline rows by trial or by consultant. Persisted to <code>user_profiles.preferences.schedule_view_by</code>.</li>
+  <li><strong>Deals switch</strong> — Show/hide items still in sales pipeline stages. Persisted to <code>preferences.schedule_hide_deals</code>.</li>
+  <li><strong>Pre-Trial switch</strong> — Show/hide pre-trial services (<code>service_phase = 'pre_trial'</code>, or any service whose start date falls before the trial start). Persisted to <code>preferences.schedule_hide_pre_trial</code>.</li>
+  <li><strong>Time scale slider</strong> — Day / Week / Month / Quarter / Year. Adjusts column width and header labels. Persisted to <code>preferences.schedule_time_scale</code>.</li>
+  <li><strong>Zoom slider</strong> — Manual zoom 1%–100%. Using it disables Fit mode.</li>
+  <li><strong>Fit button</strong> — Auto-computes zoom to fit all content in the viewport; recalculates on window resize. Persisted to <code>preferences.schedule_full_width</code>.</li>
+  <li><strong>Expand / Collapse button</strong> — Toggles full-width mode (drops the container max-width constraint).</li>
+</ul>
+
+## Timeline structure
+
+<ul>
+  <li><strong>Left sidebar</strong> — Fixed-width, resizable column (drag the divider). Shows trial or consultant names, nested service names, consultant avatars, and assignment status.</li>
+  <li><strong>Timeline area</strong> — Horizontally scrollable. Renders date-column headers, weekend shading, a red "today" indicator, and the bars.</li>
+  <li><strong>Trial bars</strong> — Colored bars spanning trial start to end. Blue for trials, gray for deals, purple for HSH gigs. Clicking opens the Trial Summary modal.</li>
+  <li><strong>Service bars</strong> — Narrower bars for individual services. Light shade = hourly billing, dark shade = daily-minimum billing. Split-billing services render as two adjacent bars.</li>
+  <li><strong>Travel bars</strong> — Hatched bars rendered before and after a service bar when <code>travel_eligible</code> is true.</li>
+</ul>
+
+## Drag-and-drop: service bars
+
+Owner and admin users can drag service bars to adjust task dates. Three interactions are supported:
+
+<ul>
+  <li><strong>Move (body drag)</strong> — Shifts start and end by the same delta. End date is clamped to the trial's end date; any overflow is clipped from the start.</li>
+  <li><strong>Resize start (left handle)</strong> — Adjusts start only; cannot cross the end.</li>
+  <li><strong>Resize end (right handle)</strong> — Adjusts end only; constrained to the trial end.</li>
+</ul>
+
+On mouse-up, the `update-service-dates` Edge Function is called with the new date range. It updates the <code>trial_services</code> row, inserts notification rows that Supabase Realtime broadcasts to assigned consultants, sends Resend email, and optionally syncs Google Calendar.
+
+### Split-billing trigger
+
+If a drag causes a service with <code>has_daily_minimum = true</code> to <em>newly</em> cross the trial start threshold (it was not crossing before but now is), the Split Billing dialog opens with three choices:
+
+<ul>
+  <li><strong>Hourly</strong> — Bill at hourly rate for the full duration (<code>final_billing_method = 'hourly'</code>).</li>
+  <li><strong>Daily Minimum</strong> — Bill at daily minimum for the full duration (<code>final_billing_method = 'daily_minimum'</code>).</li>
+  <li><strong>Split</strong> — Hourly before trial start, daily minimum during trial (<code>final_billing_method = 'split'</code>); rendered as two adjacent bars.</li>
+</ul>
+
+If the service was already crossing and still crosses after the drag, its existing split configuration is preserved. If it was split but no longer crosses, it auto-converts to <code>hourly</code> (entirely before) or <code>daily_minimum</code> (entirely during).
+
+### Restrictions
+
+<ul>
+  <li>HSH subcontract-gig service bars cannot be dragged (the subcontractor tenant has no authority to move them).</li>
+  <li>Pending marketplace service bars cannot be dragged.</li>
+  <li>Only owner and admin roles can drag (`canEditDates` check).</li>
+  <li>If the service has assignments, an Update Progress modal shows the notification-sending status after the drop.</li>
+</ul>
+
+## Drag-and-drop: trial bars
+
+Dragging a trial bar cascades date changes to every child service bar within that trial. Three interactions with distinct cascading rules:
+
+### Move (body drag)
+
+Shifts trial start and end by the same number of days. All child services shift by the same delta (both start and end).
+
+### Resize start (left handle)
+
+Changes only the trial start. Child services cascade as follows:
+
+<ul>
+  <li><strong>In-trial-only services</strong> — Start moves with the trial start; end unchanged.</li>
+  <li><strong>Pre-trial / both services, start date</strong> — Always moves with the trial start.</li>
+  <li><strong>Pre-trial / both services, end date</strong> — Moves with the trial start only if it falls in the first half of the original trial range (before the midpoint); otherwise stays fixed.</li>
+</ul>
+
+### Resize end (right handle)
+
+Changes only the trial end. Child services cascade as follows:
+
+<ul>
+  <li><strong>In-trial-only services</strong> — End moves with the trial-end delta; start unchanged.</li>
+  <li><strong>Pre-trial / both services, end date</strong> — Moves with the trial end only if it falls in the second half of the original trial range (after the midpoint); otherwise stays fixed.</li>
+  <li><strong>Pre-trial / both services, start date</strong> — Always unchanged.</li>
+</ul>
+
+### Visual feedback and backend processing
+
+While dragging, the trial bar and all affected service bars update in real time via direct style updates. Split-billing bars update both portions; travel bars shift their day-before/day-after positions; label containers slide with the bars. On mouse-up, the `update-trial-dates` Edge Function is called with the new trial range and an array of service-date updates. It atomically updates the <code>trials</code> row and all affected <code>trial_services</code> rows in a single transaction, writes notification rows (Realtime + Resend email), and optionally syncs Google Calendar. An Update Progress modal reports notification status for trials with assignees.
+
+### Restrictions
+
+<ul>
+  <li>HSH subcontract-gig trial bars cannot be dragged.</li>
+  <li>Only owner and admin roles can drag.</li>
+  <li>If start and end are unchanged after drop, the mutation is silently skipped.</li>
+</ul>
+
+## Service Assignment modal
+
+Opened by clicking a service in the sidebar or on its bar. A two-column dialog for managing who works on a specific service task. Only owner and admin can change assignments.
+
+### Left column — service info
+
+<ul>
+  <li>Service name, daily-minimum badge (if applicable), location, and date range.</li>
+  <li>Rate display: $/hour for hourly, $/day for daily minimum, or a split-billing breakdown.</li>
+  <li><strong>Override</strong> button to change the rate (updates <code>trial_services.rate</code> directly).</li>
+  <li>Split-billing panel — appears when a daily-minimum service crosses the trial start. Shows current method and a Settings button that re-opens the Split Billing dialog.</li>
+</ul>
+
+### Right column — internal team assignment
+
+<ul>
+  <li>Checkbox list of <strong>qualified</strong> consultants — filtered via <code>service_qualifications</code> to those who hold the matching <code>service_id</code>. Unqualified consultants are not shown.</li>
+  <li>Pre-checked for currently assigned consultants (<code>assignments</code> rows where <code>is_subcontractor = false</code>).</li>
+  <li><strong>Assign Selected (N)</strong> — diffs current checkboxes against the initial state and creates or deletes <code>assignments</code> rows. Runs through a single Edge Function that also creates or deletes Google Calendar events and emits assignment / unassignment notifications.</li>
+</ul>
+
+### HotSeatHub section
+
+Visible only when <code>tenant_firms.marketplace_post_jobs</code> is enabled. Rendered full-width below the team column with a purple top border.
+
+<ul>
+  <li><strong>Assigned HSH subcontractors</strong> — Checkbox list of subcontractor consultants currently linked via the HSH contract. Unchecking and confirming removes the assignment in both tenants, deletes the mirror calendar events, and sends an unassignment notification.</li>
+  <li><strong>"Posted to HSH" badge</strong> — Shown when an active HSH request exists for this trial + service; indicates the task is on the marketplace awaiting responses.</li>
+  <li><strong>Pending responses</strong> — If responses exist on the active request, each is shown as a card with company and consultant names, proposed rate, a rate-comparison badge (agreed / counter), a message, and action buttons. Owner can Accept (creates assignment) or Decline. A Favorite button adds the company / individual to the favorites network.</li>
+  <li><strong>Post to HotSeatHub</strong> — Shown only when no active request exists. Opens an inline form with: rate input (auto-suggested from profit-margin settings), public / private toggle, audience selector (companies or individual consultants, including favorites), and a description.</li>
+  <li><strong>Suggested rate</strong> — For the private-margin case, subtracts the tenant-configured profit-margin value (percentage or dollar amount) from the service rate to suggest the subcontractor payout.</li>
+</ul>
+
+### Subcontractor's own-gig view
+
+When a user opens an HSH subcontract service where their own tenant is the subcontractor, the modal switches to a read-only view:
+
+<ul>
+  <li>Service info card with a purple "You are assigned via HotSeatHub" badge.</li>
+  <li>Hiring tenant (client) name.</li>
+  <li>List of any other HSH consultants assigned to the same service by the hiring tenant.</li>
+  <li>No assignment controls — the subcontractor cannot modify assignments on the hiring tenant's service.</li>
+</ul>
+
+## Bar color legend
+
+<ul>
+  <li>Light blue — Trial service, hourly billing.</li>
+  <li>Dark blue — Trial service, daily-minimum billing.</li>
+  <li>Light purple — HSH subcontract, hourly.</li>
+  <li>Dark purple — HSH subcontract, daily-minimum.</li>
+  <li>Light gray — Deal service, hourly.</li>
+  <li>Dark gray — Deal service, daily-minimum.</li>
+</ul>
+
+## Continued trials
+
+Trials with <code>completion_type = 'case_continued'</code> render specially: definite dates show normal bars, month-only renders a shaded month span, and "none" hides the end date from timeline calculations until a date is set.
+
+## Download this document
+
+Download as markdown: [`/user-manual/schedule/download.md`](/user-manual/schedule/download.md).

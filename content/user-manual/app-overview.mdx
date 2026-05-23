@@ -1,0 +1,415 @@
+---
+title: Application Overview
+section: foundation
+lastReviewed: 2026-04-22
+legacyFile: Doc01AppOverview.jsx
+summary: Complete platform for trial consulting management with marketplace connectivity.
+---
+
+# Application Overview
+
+*Complete platform for trial consulting management with marketplace connectivity.*
+
+## Executive Summary
+
+HotSeaters is a comprehensive trial consulting management platform built for trial
+consulting firms and legal professionals. It combines CRM, project and case
+management, scheduling, time tracking, expense management, invoicing and
+collections, document generation with embedded e-signatures, real-time
+notifications, and the **HotSeatHub** marketplace for subcontractor connections —
+all in a single TypeScript-first application.
+
+The new stack is **Next.js 16 (App Router) + React 19 + TypeScript**, backed by
+**Supabase** (PostgreSQL, Auth, Realtime, Storage, Edge Functions), with
+**DocuSeal** for e-signatures, **Resend** for email, **pg_cron** for scheduled
+work, and **Stripe** for subscription billing. There is no Base44, no Deno, no
+Vercel, and no third-party hosted signature platform beyond DocuSeal.
+
+## Core Value Proposition
+
+- **Sales Pipeline Management** — Track deals from first contact through trial
+  completion with Kanban / Card / List views, auto-advancing stages, and
+  revenue-probability weighting for forecasting.
+- **Operations Management** — Coordinate services, consultants, and schedules
+  for active trials with a drag-and-drop Gantt timeline, split-billing support,
+  and real-time team availability.
+- **Time Tracking & Expenses** — Time clock with configurable auto-rounding,
+  manual entry, travel-time billing with rate multipliers, expense tracking
+  with AI-assisted receipt extraction, and approval workflows with bulk
+  actions.
+- **Invoicing & Payments** — Automated invoice generation with customizable
+  templates, multi-recipient email delivery with saved preferences per trial,
+  payment tracking via the standalone Collections page, and HSH subcontractor
+  invoicing.
+- **HotSeatHub Marketplace** — Connect trial consulting firms via public and
+  private job postings, real-time notifications, a favorites network, linked
+  time and expense tracking, and an HSH Directory.
+- **Document Management & E-Signatures** — Generate engagement letters,
+  proposals, invoices, and custom documents with dynamic placeholder
+  replacement; signatures are collected through **DocuSeal** (hosted signing)
+  with full audit trails.
+- **Team Collaboration & Notifications** — Role-based access control,
+  real-time notifications via Supabase Realtime, consultant tier pricing, and
+  per-service qualification tracking.
+- **Advanced Features** — Revenue forecasting with Projected Daily Revenue
+  (PDR), smart trial continuation, split billing (pre-trial hourly + in-trial
+  daily minimum), a single cohesive theme (dual-theme work is deferred), and
+  service-phase tracking.
+
+## Technology Stack
+
+### Frontend
+
+- **Framework:** Next.js 16 (App Router) with React 19 and TypeScript
+- **Styling:** Tailwind CSS with shadcn/ui and CSS variables
+- **Data:** TanStack Query for server state, Zustand for client state
+- **Forms & validation:** React Hook Form with Zod schemas
+- **Drag & drop:** @dnd-kit (accessible, keyboard-friendly)
+- **Charts:** Recharts
+- **Rich text:** TipTap
+- **Motion:** Framer Motion (used sparingly)
+
+### Backend
+
+- **Platform:** Supabase (PostgreSQL, Auth, Realtime, Storage, Edge Functions)
+- **Runtime (server compute):** Next.js Route Handlers on Node runtime and
+  Supabase Edge Functions (Deno) for workloads that must run close to
+  Postgres
+- **Authentication:** Supabase Auth (email + Google OAuth, including the
+  sub-user self-signup + owner approval loop with a 14-day pending window)
+- **Database:** Supabase PostgreSQL with Row Level Security (RLS) enforcing
+  tenant isolation on every table
+
+### Scheduled Work
+
+All scheduled jobs run via **Supabase `pg_cron`**. There is no Vercel Cron and
+no `vercel.json` in this repository. Current registered jobs include:
+
+- `sub_user_request_expiry` — expires stale sub-user signup requests after 14
+  days
+- `check_auto_move_dates` *(planned — phase 26+)* — advances pipeline stages
+  when dates are reached
+
+### External Services
+
+- **Subscription billing:** Stripe
+- **Transactional email:** Resend
+- **E-signatures:** DocuSeal (hosted signing + audit trail + PDF embedding)
+- **PDF generation:** Puppeteer-backed Edge Function (or API2PDF as a
+  fallback) — API2PDF is *not* required for core signing; DocuSeal handles
+  signed-PDF assembly natively
+- **Calendar integration:** Google Calendar OAuth (optional trial sync)
+- **Receipt processing:** OpenAI/Anthropic vision API (via Edge Function) for
+  vendor/amount/date extraction
+- **Maps & routing:** Google Maps Platform — Places Autocomplete, Directions
+  API (mileage), Static Maps (route visualization)
+- **File storage:** Supabase Storage — `public` bucket for logos and shared
+  documents, `private` bucket for receipts and invoice source files
+
+## Application Architecture
+
+### Multi-Tenancy Model
+
+- Every business entity carries a `tenant_id` column (replacing the legacy
+  `company_id` field)
+- RLS policies enforce `tenant_id` isolation on every read and write
+- Users are modeled via `user_profiles`, which extends `auth.users` with
+  `tenant_firm` membership and role mapping
+- Marketplace operations that must cross tenants use dedicated RPCs and
+  explicitly tagged cross-tenant references (`hiring_tenant_id`,
+  `subcontracting_tenant_id`), never ambient elevation
+
+### Authentication & Signup Paths
+
+Two coexisting signup models are both supported and must remain operational:
+
+1. **Existing Supabase email/password signup** — the historical path for
+   owner-initiated firm creation.
+2. **Google OAuth sub-user self-signup with owner approval** — a new user
+   arriving through Google OAuth lands in `pending_approval`; the firm owner
+   approves or rejects via the approvals surface; Resend delivers the
+   notification; `pg_cron` expires the request after 14 days.
+
+Every change that touches auth must carry an explicit coexistence regression
+check.
+
+### Role-Based Access Control
+
+- **Owner** — Full access including billing, subscription management,
+  marketplace posting and filling, theme customization, and referral
+  invitations
+- **Admin** — Full operational access (trials, clients, services, team,
+  approvals) except subscription management
+- **Sales** — Deal pipeline, client relationships, and document generation
+- **Trial Consultant** — Assigned trials, time and expense entry
+
+### Data Flow
+
+```
+Supabase Auth → tenant_id context (from user_profiles) → role mapping →
+feature gate → RLS-enforced query
+```
+
+### Key Design Patterns
+
+1. **Entity-first architecture** — Business objects live in normalized
+   PostgreSQL tables with foreign-key relationships.
+2. **Snapshot pattern** — Denormalized names and rates are copied onto
+   transactional records (for example `service_name` on `trial_services`;
+   `trial_name`/`client_name`/`service_name` on `time_entries`) to preserve
+   historical accuracy when source records change.
+3. **Hooks-only data access** — Components never call Supabase directly.
+   Components call hooks; hooks call Zustand stores or TanStack Query; those
+   call API route handlers or Edge Functions.
+4. **Strong typing end-to-end** — `any` is banned in application code;
+   database types are generated from the Supabase schema.
+5. **Tenant isolation at the database layer** — RLS policies are the final
+   guardrail; application-layer filtering is defense in depth, not the
+   primary control.
+6. **Linked cross-tenant entities** — HSH subcontract work creates linked
+   time entries and expenses in both tenant firms.
+7. **Graceful degradation** — QuickBooks integration is intentionally
+   configured-but-disabled at the app level until its dedicated phase lands;
+   the code paths exist but short-circuit with a "configured path deferred"
+   banner.
+
+## Application Structure
+
+### Unauthenticated Pages
+
+- **`/`** — Landing / marketing page with login and signup
+- **`/onboarding`** — New firm setup
+- **`/accept-invite`** — Team invitation acceptance
+- **`/sign-document`** — DocuSeal hosted signing launcher (no login required)
+- **`/view-document`** — Public document viewer for CC recipients
+- **`/privacy-policy`**, **`/terms-of-service`** — Legal pages
+- **`/pricing`**, **`/payment-success`**, **`/payment-cancelled`** —
+  Subscription flow surfaces
+- **`/user-manual`** — This manual (public; no authentication required)
+
+### Core Pages
+
+- **`/dashboard`** — KPIs, revenue charts, team performance, quick actions
+- **`/sales-hub`** — Sales-focused workflow combining deals and client insights
+
+### Sales Module
+
+- [**`/deals`**](/user-manual/deals) *(deep dive)* — Pipeline management,
+  Kanban / Card / List, 4-step Deal Wizard
+- [**`/clients`**](/user-manual/clients) *(deep dive)* — Law firms, attorney
+  contacts, service rate overrides
+
+### Operations Module
+
+- [**`/trials`**](/user-manual/trials) *(deep dive)* — Active case management
+- [**`/schedule`**](/user-manual/schedule) *(deep dive)* — Gantt timeline with
+  drag-drop date editing
+- [**`/time-tracking`**](/user-manual/time-tracking) *(deep dive)* — Time
+  clock, manual entry, expenses
+
+### Financial Module
+
+- **`/approvals`** — Unified time and expense approvals with bulk actions
+- [**`/billing`**](/user-manual/billing) *(deep dive)* — 4-column Kanban
+  invoice workflow
+- **`/collections`** — Standalone 3-column Kanban (Open / Overdue / Paid)
+- **`/invoices`** — Invoice list and detail
+
+### HotSeatHub Marketplace
+
+- [**`/potential-gigs`**](/user-manual/potential-gigs) *(deep dive)* — Browse
+  and respond to subcontractor requests
+- [**`/help-wanted`**](/user-manual/help-wanted) *(deep dive)* — Post job
+  requests and manage responses
+- **`/favorites`** — Trusted subcontractor network
+- **`/marketplace`** — Feature overview and opt-in
+
+### Company Management
+
+- [**`/consultants`**](/user-manual/consultants) *(deep dive)* — Team,
+  invitations, tiers, service qualifications
+- [**`/settings`**](/user-manual/settings) *(deep dive)* — Firm info, services
+  catalog, pipeline stages, templates, tiers, theme, billing config
+
+## Security & Performance
+
+### Security Controls
+
+- **Supabase Auth JWTs** for user authentication (email/password + Google OAuth)
+- **Row Level Security (RLS)** enforces `tenant_id` isolation on every table;
+  application-layer checks are defense in depth
+- **Service-role operations** are contained to Edge Functions and server-only
+  route handlers; the anon key is never granted elevated scope
+- **Webhook signature validation** — Stripe webhooks verified via HMAC;
+  DocuSeal webhooks verified via shared secret
+- **Public signing links** are single-use tokens scoped to a document and
+  signer; launching DocuSeal from a public link never exposes tenant data
+- **Transport security** — HTTPS everywhere; HSTS preload
+- **Zero client-side secrets** — all API keys live in server-only env vars
+- **Audit trails** — DocuSeal captures signer identity, IP address, timestamp,
+  and user agent; invoice and approval state transitions are logged in
+  dedicated audit tables
+
+### Performance Controls
+
+- **TanStack Query caching** — deduplication, background refetch, optimistic
+  updates
+- **Route-based code splitting** via the App Router
+- **Computed fields** — PDR, totals, and other expensive aggregates are
+  precomputed on write rather than recomputed on read
+- **Indexed queries** — every query used on a hot path has a matching
+  PostgreSQL index; see the [Database Schema](/user-manual/database-schema)
+  document
+- **Realtime over polling** — Supabase Realtime replaces the legacy 15-second
+  poll for notifications
+- **Snapshot pattern** — reduces joins on historical reads
+- **Parallel operations** — `Promise.all` in Edge Functions for independent
+  work
+
+## Deployment & Infrastructure
+
+- **Hosting:** a Vercel-free deployment topology (self-hosted Node runtime
+  backed by Supabase); there is no `vercel.json` and no dependency on Vercel
+  Cron or Vercel Edge
+- **Database & functions:** Managed by Supabase with automated backups and
+  point-in-time recovery
+- **Scheduled work:** Supabase `pg_cron`
+- **Storage:** Supabase Storage — public and private buckets
+- **CDN:** Fronted by a standard CDN for static assets; MDX for the manual is
+  compiled at request time and cached per entry
+
+## Standout Features
+
+### E-Signature Workflow (DocuSeal)
+
+Full electronic signature system with multi-party signing (client / FRP /
+sales), DocuSeal-hosted signing pages, email delivery via Resend, signature
+embedding in the final PDF, complete audit trail (signer identity, IP,
+timestamp), and automatic pipeline advancement when all parties sign.
+
+### HotSeatHub Marketplace Intelligence
+
+Linked time and expense entries mirror automatically between subcontractor
+and hiring firm; profit-margin calculations (percent or dollar); favorites
+network for direct invitations; multi-round counter-offer negotiation with
+full history; auto-generated HSH agreement PDFs with cancellation addendum
+support; HSH Directory; ratings and reviews.
+
+### Mileage Expense Tracking
+
+Two-step expense wizard with a Receipt/Mileage toggle. Mileage mode enters
+start and end addresses via Google Places Autocomplete, calculates the route
+via Google Directions API, renders a static route map, and auto-calculates
+amount using the current IRS mileage rate.
+
+### Travel Time Billing
+
+Services can be marked travel-eligible. A distinct **Travel Time** service
+with a configurable rate multiplier (for example 50% of the associated
+service rate) ties to the parent service via
+`time_entries.original_trial_service_id`. Visual travel indicators display on
+the Gantt timeline.
+
+### Split Billing
+
+Services that span the pre-trial and in-trial windows split into two billing
+portions — hourly before trial start, daily minimum during trial. The Gantt
+timeline renders this as two adjacent bars; PDR calculations account for
+both.
+
+### Smart Trial Continuation
+
+Three precision levels:
+
+- **Definite** — exact new dates with auto-shift of all services
+- **Month Only** — sets to the first business day of the target month
+- **None** — mark as continued without new dates
+
+Resend sends personalized notifications to the full team and any HSH
+subcontractors.
+
+### Dynamic Document Templates
+
+Rich-text sections with placeholder replacement (`{{CASE_NAME}}`,
+`{{CLIENT_NAME}}`, and friends); services tables (all / pre-trial / in-trial
+/ by-category); full-page sections with background images; conditional
+sections (`always` / `optional` / `has_services` / `has_retainer` /
+`has_frp`); signature field insertion; page size and margin controls.
+
+### Single-Theme System (dual-theme deferred)
+
+A single cohesive brand theme using CSS variables (brand, semantic,
+typography, spacing, component shapes). Full dual-theme implementation
+(HotSeaters vs HotSeatHub palettes) is deferred to a later phase; the theme
+architecture does not preclude it.
+
+### Auto-Advancing Pipeline Stages
+
+Four configurable per-stage triggers:
+
+1. On document sent (any category)
+2. On document fully signed
+3. On the earliest service start date
+4. On the trial start date
+
+### Invoicing & Payments
+
+Automated invoice generation with customizable number formats
+(`YY` / `YYYY` / `MM` / auto-increment), template-based PDFs, multi-recipient
+email via Resend (to / cc / bcc) with saved preferences per trial,
+configurable billing periods, receipt merging, HSH subcontractor invoicing,
+and payment state tracking (`draft → sent → paid`). Billing is a 4-column
+Kanban; Collections is a separate 3-column Kanban.
+
+## Future Extensibility
+
+The architecture is positioned to support (phase ordering TBD):
+
+- Consolidated expense-report submission and approval
+- Expense rejection and edit-and-resubmit
+- QuickBooks integration (the graceful-degradation code paths are already in
+  place)
+- Cloud storage integration (Google Drive, Dropbox, Box)
+- Mobile native clients (React Native or equivalent)
+- Public API and third-party webhooks
+- Multi-owner firm support
+- Dual-theme implementation (HotSeaters vs HotSeatHub palette)
+- Visual regression screenshot-diff harness
+- AI-powered insights (outcome prediction, resource optimization)
+- Client portal (invoices, documents, status)
+- Document real-time co-editing
+
+## System Health & Monitoring
+
+### Scheduled Work
+
+- `sub_user_request_expiry` — daily `pg_cron` job expiring stale sub-user
+  signup requests after 14 days
+- Additional jobs (pipeline auto-move, email dispatch sweep) land in later
+  phases; all run under `pg_cron`, never Vercel Cron
+
+### Data Integrity
+
+- Snapshot fields preserve historical accuracy when source rows change
+- Soft deletes on templates and categories preserve document history
+- Linked time entries and expenses maintain consistency across HSH
+  relationships
+- DocuSeal audit trails capture signer details
+- HSH agreement PDFs provide a permanent cancellation record
+
+### Error Handling
+
+- Frontend errors surface through Sonner toasts
+- Edge Function errors are logged with full stack traces to Supabase logs
+- Stripe and DocuSeal webhook failures rely on provider retry semantics; our
+  handlers are idempotent
+- Email delivery errors land in the Resend dashboard
+- PDF generation uses exponential backoff (three attempts)
+- Google Calendar sync failures are fire-and-forget — they never block the
+  primary operation
+
+## Download
+
+A plain-Markdown copy of this document is available at
+[`/user-manual/app-overview/download.md`](/user-manual/app-overview/download.md)
+(endpoint wired in **change-535**).

@@ -1,0 +1,10 @@
+# Tauri build output
+target/
+
+# Tauri 2 mobile project generation output (Xcode project, Gradle project, etc.)
+# Regenerated via `pnpm tauri ios init` / `pnpm tauri android init`.
+gen/
+
+# Cargo lockfile — application-level lockfile is not committed for this
+# scaffold while the Rust deps are still in flux. Revisit before 1.0.
+Cargo.lock
