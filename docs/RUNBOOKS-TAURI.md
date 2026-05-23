@@ -191,10 +191,18 @@ of mobile per RULE 4.
 
 ## 6. CI
 
-`.github/workflows/tauri-mobile.yml` builds both targets in debug,
-without signing, on every PR that touches `src-tauri/` or `src/`. The
-build proves the toolchain composes; runtime device validation stays
-manual via § 4.
+**Tauri mobile is local-only — no CI builds iOS or Android.**
+
+The web build that ships to GKE goes through
+`.github/workflows/deploy.yml` (web-only, `linux/amd64` nginx image,
+no Rust/Tauri toolchain involvement). Mobile validation is a manual
+local task: run § 4 on your own machine when you want to verify a
+change works inside the WebView.
+
+If you want CI mobile builds back later, add a new workflow that
+mirrors the example-app build's tag + Artifact Registry pattern but
+targets iOS Simulator + Android Emulator. The scaffold under
+`src-tauri/` is ready when that day comes.
 
 ---
 

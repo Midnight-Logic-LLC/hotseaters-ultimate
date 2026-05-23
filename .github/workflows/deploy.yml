@@ -1,0 +1,208 @@
+# Deploy hotseaters-ultimate to the prometheus GKE cluster.
+#
+# Mirrors latest-data's .github/workflows/deploy.yml — same registry, same
+# concurrency model, same tag-bump pattern. Web build only (nginx + Vite
+# static bundle). The Tauri mobile workflow is separate (tauri-mobile.yml).
+#
+# On every push to main: build & push a linux/amd64 web image to GCP
+# Artifact Registry, then open a tag-bump commit on the latest-data repo
+# so ArgoCD picks up the new tag and rolls out the cluster.
+#
+# Required repository secrets:
+#   GCP_SA_KEY                  JSON key, roles: artifactregistry.writer
+#                               (no container.developer needed — we only
+#                               push images; the cross-repo PR handles
+#                               kustomization updates without kubectl)
+#   LATEST_DATA_PUSH_TOKEN      Personal Access Token with `contents: write`
+#                               on Midnight-Logic-LLC/hotseaters-data-migration-system
+#                               (used to push the tag-bump commit there)
+#   VITE_SUPABASE_URL           https://hotbase.prometheusags.ai
+#   VITE_SUPABASE_ANON_KEY      from latest-data's hotseaters-secrets ANON_KEY
+#   VITE_ELECTRIC_URL           https://electricsql.prometheusags.ai
+#
+# Self-hosted Supabase only (RULE 1) — VITE_SUPABASE_URL must NEVER
+# match *.supabase.co. The Vite config enforces this at build time.
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Serialize deploys — two pushes never race the cross-repo tag-bump.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT: prometheus-461323
+  GAR_LOCATION: us-central1-docker.pkg.dev
+  GAR_REPO: prometheus
+  IMAGE_NAME: hotseaters-ultimate
+  LATEST_DATA_REPO: Midnight-Logic-LLC/hotseaters-data-migration-system
+  OVERLAY_FILE: k8s/overlays/prometheus/app/kustomization.yaml
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- self-hosted guard rail ----------------------------------------
+      # Bail before docker auth if someone tries to ship a Supabase Cloud
+      # build by accident. Defence in depth — vite.config.ts also enforces.
+      - name: Refuse Supabase Cloud URLs (RULE 1)
+        run: |
+          set -euo pipefail
+          if [[ "${{ secrets.VITE_SUPABASE_URL }}" =~ \.supabase\.co ]]; then
+            echo "::error::VITE_SUPABASE_URL points at Supabase Cloud — self-hosted only." >&2
+            exit 1
+          fi
+          if [[ -z "${{ secrets.VITE_SUPABASE_URL }}" || -z "${{ secrets.VITE_SUPABASE_ANON_KEY }}" || -z "${{ secrets.VITE_ELECTRIC_URL }}" ]]; then
+            echo "::error::Missing VITE_* secret(s); cannot build." >&2
+            exit 1
+          fi
+
+      # --- vendor/prometheus-entity-management sanity --------------------
+      # The Dockerfile resolves the entity-mgmt library via the vendored
+      # dist at vendor/prometheus-entity-management/. Until the library is
+      # published to a private npm registry, the vendor dir is committed
+      # and the build uses it verbatim. Verify the dist files exist.
+      - name: Verify vendored entity-mgmt dist
+        run: |
+          set -euo pipefail
+          required=(
+            vendor/prometheus-entity-management/package.json
+            vendor/prometheus-entity-management/dist/index.js
+            vendor/prometheus-entity-management/dist/index.mjs
+            vendor/prometheus-entity-management/dist/index.d.ts
+          )
+          for f in "${required[@]}"; do
+            if [[ ! -f "$f" ]]; then
+              echo "::error::Missing vendored file: $f" >&2
+              echo "::error::Re-vendor by running, in latest-data:" >&2
+              echo "::error::  pnpm --filter @prometheus-ags/prometheus-entity-management build" >&2
+              echo "::error::then copy dist/ + package.json into hotseaters-ultimate/vendor/prometheus-entity-management/" >&2
+              exit 1
+            fi
+          done
+          VERSION=$(node -p "require('./vendor/prometheus-entity-management/package.json').version")
+          echo "Vendored entity-mgmt version: ${VERSION}"
+
+      # --- image tag = short commit SHA ----------------------------------
+      - name: Compute image tag
+        id: tag
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # --- GCP auth + docker login ---------------------------------------
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GAR_LOCATION }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # --- build & push: hotseaters-ultimate (web image) -----------------
+      # platforms: linux/amd64 only. Single-arch by design — GKE node pool is
+      # x86_64; we don't need an arm64 manifest. The build context is the
+      # repo root (this repo); the Dockerfile vendors the entity-mgmt dist
+      # in via `vendor/`.
+      - name: Build & push hotseaters-ultimate image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+            VITE_ELECTRIC_URL=${{ secrets.VITE_ELECTRIC_URL }}
+            VITE_APP_NAME=HotSeaters
+            VITE_APP_VERSION=${{ steps.tag.outputs.sha }}
+          tags: |
+            ${{ env.GAR_LOCATION }}/${{ env.GCP_PROJECT }}/${{ env.GAR_REPO }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sha }}
+            ${{ env.GAR_LOCATION }}/${{ env.GCP_PROJECT }}/${{ env.GAR_REPO }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- cross-repo tag bump (latest-data overlay) ---------------------
+      # Pattern mirrors latest-data's own bump-and-push step, but here we
+      # clone latest-data, edit the overlay, and push back. ArgoCD's
+      # auto-sync on latest-data then rolls the cluster.
+      - name: Checkout latest-data
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LATEST_DATA_REPO }}
+          token: ${{ secrets.LATEST_DATA_PUSH_TOKEN }}
+          path: latest-data
+
+      - name: Bump hotseaters-ultimate tag in latest-data overlay
+        working-directory: latest-data
+        env:
+          NEW_SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          set -euo pipefail
+          REG="${GAR_LOCATION}/${GCP_PROJECT}/${GAR_REPO}"
+          cd "$(dirname "${OVERLAY_FILE}")"
+          # `kustomize` ships on ubuntu-latest.
+          kustomize edit set image \
+            "hotseaters/hotseaters-ultimate=${REG}/${IMAGE_NAME}:${NEW_SHA}"
+          cd -
+
+      - name: Commit tag bump
+        working-directory: latest-data
+        env:
+          NEW_SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- "${OVERLAY_FILE}"; then
+            echo "No image-tag change to commit on latest-data."
+            exit 0
+          fi
+          git add "${OVERLAY_FILE}"
+          git commit -m "ci(hotseaters-ultimate): deploy ${NEW_SHA} [skip ci]"
+          # Rebase-and-retry: latest-data has its own deploy bot, so the
+          # branch may advance between checkout and now.
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              echo "tag bump pushed on attempt ${attempt}"
+              exit 0
+            fi
+            echo "push rejected — rebasing on origin/main (attempt ${attempt})"
+            git fetch origin main
+            git rebase origin/main
+            sleep 3
+          done
+          echo "::error::could not push tag bump after 5 attempts" >&2
+          exit 1
+
+      - name: Deploy summary
+        env:
+          NEW_SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          {
+            echo "## hotseaters-ultimate deploy"
+            echo ""
+            echo "**Image:** \`${GAR_LOCATION}/${GCP_PROJECT}/${GAR_REPO}/${IMAGE_NAME}:${NEW_SHA}\`"
+            echo ""
+            echo "Bumped tag on \`${LATEST_DATA_REPO}\`:"
+            echo "  \`${OVERLAY_FILE}\`"
+            echo ""
+            echo "ArgoCD will roll the cluster automatically."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -6,6 +6,47 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Web CI deploy workflow (2026-05-24)
+
+- **`.github/workflows/deploy.yml`** — mirrors the `latest-data` deploy CI
+  pattern. On every push to `main`:
+  1. Refuses any `*.supabase.co` URL in `VITE_SUPABASE_URL` (RULE 1).
+  2. Verifies the vendored entity-mgmt dist is present.
+  3. Builds a **single-arch `linux/amd64`** web image with build-args
+     wired from repository secrets (`VITE_SUPABASE_URL`,
+     `VITE_SUPABASE_ANON_KEY`, `VITE_ELECTRIC_URL`). No Tauri toolchain
+     involvement — pure Vite + nginx.
+  4. Pushes to
+     `us-central1-docker.pkg.dev/prometheus-461323/prometheus/hotseaters-ultimate:<sha>`
+     and `:latest`.
+  5. Clones `latest-data`, edits the overlay's
+     `k8s/overlays/prometheus/app/kustomization.yaml` via
+     `kustomize edit set image`, commits
+     `ci(hotseaters-ultimate): deploy <sha> [skip ci]` back to
+     `latest-data`'s `main`. ArgoCD on the cluster auto-syncs.
+- **Concurrency-serialised** (`concurrency.group: deploy-main`,
+  `cancel-in-progress: false`) so two pushes never race the cross-repo
+  tag-bump. Rebase-and-retry loop (5 attempts) handles the case where
+  `latest-data`'s own deploy bot lands between checkout and push.
+- **Required new repo secrets:** `GCP_SA_KEY`,
+  `LATEST_DATA_PUSH_TOKEN`, `VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_ANON_KEY`, `VITE_ELECTRIC_URL`. (No `kubectl` access
+  needed — this workflow doesn't touch the cluster directly; ArgoCD
+  reads the tag-bump commit.)
+
+### Removed — Tauri mobile CI (2026-05-24)
+
+- Deleted `.github/workflows/tauri-mobile.yml`. **Tauri mobile is
+  local-only:** the `src-tauri/` scaffold, the `tauri:*` `package.json`
+  scripts, the `@tauri-apps/cli` devDep, the `verify-pglite-in-webview.mjs`
+  script, and `docs/RUNBOOKS-TAURI.md` are all retained so developers
+  can `pnpm tauri:ios:dev` / `pnpm tauri:android:dev` on their own
+  machines. Only the CI workflow that built mobile targets on every PR
+  is gone.
+- `docs/RUNBOOKS-TAURI.md` §6 updated to reflect "local-only — no CI."
+- The earlier Change-9 CHANGELOG entry annotated to mark the workflow as
+  removed.
+
 ### Added — Change 12: feature template and docs (2026-05-23)
 
 - `docs/ARCHITECTURE.md` — comprehensive architecture document covering the
@@ -162,10 +203,11 @@ Self-hosted Supabase only. HotSeatersMVP is the bible.
   IndexedDB, and a PGlite `SELECT 1` round-trip inside the live
   WebView. Documents the iOS Safari Web Inspector / Android
   `chrome://inspect` flow.
-- **`.github/workflows/tauri-mobile.yml`** — CI matrix that compiles
-  iOS (`aarch64-apple-ios-sim` on macOS) and Android (`aarch64-linux-android`
-  on Ubuntu, JDK 21, NDK r26) on every PR touching `src-tauri/` or
-  `src/`. Cargo + node caches. No signing, no device run.
+- ~~`.github/workflows/tauri-mobile.yml`~~ — **REMOVED 2026-05-24.**
+  Tauri mobile is local-only: no CI iOS or Android builds. The scaffold
+  under `src-tauri/` is retained for local experimentation
+  (`pnpm tauri:ios:dev`, `pnpm tauri:android:dev`); the GKE web image is
+  built by `.github/workflows/deploy.yml` exclusively.
 - **`docs/RUNBOOKS-TAURI.md`** — full operator runbook: prerequisites,
   one-time bootstrap, dev loop, **PGlite-in-WebView smoke test**
   procedure, production builds, known issues.
