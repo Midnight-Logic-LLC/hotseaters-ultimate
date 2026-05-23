@@ -65,3 +65,4 @@ pnpm-debug.log*
 # library is published to a private npm registry, this directory can be
 # removed and the package.json can switch to a semver dep — until then,
 # checking it in is intentional.
+.playwright-mcp/

@@ -7,6 +7,39 @@ in this repo. It defines the **hard rules**. Read in full before editing.
 
 ## Hard constraints (NON-NEGOTIABLE)
 
+### RULE 0 — Pixel parity with `HotSeatersMVP` is the project
+
+Every page in `hotseaters-ultimate` must be **visually indistinguishable**
+from the corresponding page in
+`/Users/gqadonis/Projects/courtroom/HotSeatersMVP/src/pages/<Name>.jsx`
+when rendered side-by-side at the same viewport. Every CSS rule, font,
+color, spacing, copy string, icon, panel, tab, dialog, animation, and
+word must match. The customer must NOT be able to tell which app they
+are looking at.
+
+The job is to map the bible's exact UI/UX onto our new backend
+architecture — that is the entire job.
+
+**Per-page acceptance gate.** A page is NOT done until:
+
+- Bible source read end-to-end in a single read pass (no partial reads).
+- DOM structure matches section-for-section.
+- Every visible string appears verbatim in the port.
+- Every image asset is locally-hosted under `public/brand/` (no CDNs).
+- Every `var(--theme-*)` reference from the bible's inline styles is
+  present.
+- Every keyframe / animation block from the bible is reproduced.
+- Live side-by-side screenshot comparison at **1440×900** AND
+  **375×667** (mobile) against the production bible deployment.
+- Deep links and CTAs route to the same destinations as the bible.
+- **All business rules and calculations from the source page are
+  preserved** — read the bible's component logic, identify every
+  computation, validation, derived value, conditional render, and
+  side-effect, and reproduce them faithfully in the port.
+
+Wrong copy, wrong colors, missing sections, wrong fonts, or missing
+business logic are **blocking defects**, not polish.
+
 ### RULE 1 — Self-hosted Supabase only
 
 **Never** use Supabase Cloud (`*.supabase.co`, `app.supabase.com`).
@@ -219,6 +252,157 @@ Local pre-commit (opt-in): `cp .githooks/pre-commit.example .git/hooks/pre-commi
               ▼
      PGlite (synced/local/view trio) ← Electric ← Postgres (supabase)
 ```
+
+## Immutable code rules (RULES A–H)
+
+These hold across the entire `hotseaters-ultimate/` tree. They sit
+alongside RULE 0–9 above; violations are blocking.
+
+### RULE A — Kebab-case filenames
+
+Every source file in `src/**`, `public/**`, and `tests/**` uses
+kebab-case (`landing-page.tsx`, `policy-viewer-modal.tsx`,
+`use-auth.ts`). No PascalCase. No camelCase. The component or hook
+*exported from* the file keeps its idiomatic case
+(`export function LandingPage()`, `export function useAuth()`); the
+**filename** is kebab.
+
+### RULE B — Components → hooks only
+
+A React component MUST NOT import from `stores/*` or call a Zustand
+store directly. Components import hooks; hooks own all access to state
+and side-effect machinery. ESLint (`eslint-plugin-boundaries`) enforces
+this.
+
+### RULE C — Hooks → stores only
+
+A custom hook MUST NOT call `fetch`, the supabase client, the electric
+client, PGlite, or any external service directly. Hooks only call into
+stores (and other hooks). Stores expose a stable surface that hides the
+network.
+
+### RULE D — Stores own all I/O
+
+Stores are the only layer that holds API calls, supabase subscriptions,
+electric sync, PGlite reads/writes, realtime updates, and any external
+service interaction. Stores expose plain JS state + actions; everything
+above them is pure.
+
+### RULE E — `@prometheus-ags/prometheus-entity-management` instead of TanStack Query
+
+All client management of server-derived entities flows through the
+entity graph from
+`@prometheus-ags/prometheus-entity-management`. No `useQuery`, no
+`useMutation`, no `QueryClient`. The entity graph is the cache, the
+subscription manager, and the optimistic-update surface.
+
+### RULE F — Feature-based clean architecture
+
+Code lives under `src/features/<feature>/{pages,components,hooks,stores,entities,business-rules}`.
+The only cross-feature buckets are `src/components/ui/` (shadcn
+primitives) and `src/shared/`. No top-level `pages/` or `components/`
+outside those.
+
+### RULE G — shadcn/ui components over raw HTML
+
+Where a primitive exists in `@/components/ui/*`, use it instead of the
+raw HTML element. `<Button>` over `<button>`, `<Card>` over a styled
+`<div>`, `<Dialog>` over a custom modal, `<Input>` over `<input>`, and
+so on. Bare semantic HTML (`<header>`, `<footer>`, `<section>`,
+`<main>`, `<nav>`, `<aside>`) IS allowed and encouraged when the page
+needs a semantic landmark and no primitive applies.
+
+### RULE H — Base UI v1 over Radix UI
+
+Headless primitives come from `@base-ui-components/react` (Base UI v1).
+No new `@radix-ui/*` imports. Existing Radix-based shadcn primitives
+will be migrated to Base UI over time; new code uses Base UI from the
+start.
+
+### RULE I — Mobile-first, PWA-capable, Tauri-compatible
+
+Every view must adapt to mobile viewports (375×667 minimum) and must
+behave like a native PWA in mobile form. The same view also has to
+work inside Tauri's WebView (iOS WKWebView + Android Chromium) — no
+desktop-only assumptions, no APIs that fail in mobile WebViews, no
+fixed-pixel layouts that overflow at 375px. Touch targets ≥ 44pt.
+Sidebar collapses to bottom-tab + drawer at `< md`. PGlite has to
+work in mobile WebViews (already tested).
+
+### RULE J — Preserve all business rules from the source page
+
+When porting a view from `HotSeatersMVP`, read the bible component end-
+to-end and identify every:
+
+- calculation (totals, multipliers, projections, derived fields)
+- validation (form rules, conditional submit blocks)
+- conditional render (role gates, feature flags, state-machine branches)
+- side-effect (toast, email, e-sign, calendar sync)
+- formatting rule (currency, date locale, phone, address)
+
+Each of these must be reproduced in the port. A page is not done if a
+single bible calculation or rule is missing.
+
+---
+
+## Process discipline (Karpathy + Cherny)
+
+These are working-style rules that govern *how* an agent edits code in
+this repo, not what it edits.
+
+### Think before coding
+
+Don't assume; surface tradeoffs. If multiple interpretations exist,
+present them — don't pick silently. If a simpler approach exists, say
+so. If something is unclear, stop and ask.
+
+### Simplicity first
+
+Minimum code that solves the problem. No features beyond what was
+asked. No abstractions for single-use code. No "flexibility" or
+"configurability" that wasn't requested. No error handling for
+impossible scenarios. If you wrote 200 lines and 50 would do, rewrite
+it. Ask: "would a senior engineer call this overcomplicated?" If yes,
+simplify.
+
+### Surgical changes
+
+Touch only what you must. Clean up only your own mess. Don't "improve"
+adjacent code, comments, or formatting. Don't refactor what isn't
+broken. Match existing style even if you'd do it differently. If you
+notice unrelated dead code, mention it — don't delete it. Every changed
+line must trace directly to the user's request.
+
+### Goal-driven execution
+
+Define success criteria. Loop until verified.
+
+- "Add validation" → "Write tests for invalid inputs, then make them pass."
+- "Fix the bug" → "Write a test that reproduces it, then make it pass."
+- "Refactor X" → "Ensure tests pass before AND after."
+
+For multi-step tasks, state a brief plan with verification steps before
+touching code.
+
+### No laziness — find root causes
+
+No temporary fixes. No band-aids. No "this should work for now."
+Investigate until you have the actual cause, then fix that. Hold to
+senior-developer standards.
+
+### Minimal impact
+
+Only touch what's necessary. No side effects. No introducing new bugs
+while fixing old ones. Every commit should be defensible in isolation.
+
+### Self-improvement loop
+
+Anytime Claude does something wrong here, add a rule to
+[`docs/LESSONS.md`](./docs/LESSONS.md) (or this file, if it's an
+architectural rule) so the mistake doesn't repeat. The file is a living
+record of every correction. Over time the agent learns this project.
+
+---
 
 ## Workflow
 

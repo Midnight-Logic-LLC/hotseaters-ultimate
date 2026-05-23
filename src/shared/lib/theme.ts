@@ -470,6 +470,27 @@ export function generateThemeVars(theme: CompanyTheme | null | undefined): Recor
 }
 
 /**
+ * Build the full `<style>`-injectable CSS block for a given company theme.
+ * Mirrors the bible's `themeUtils.jsx::generateThemeCSS`: emits a `:root`
+ * selector with every `--theme-*` variable, plus a `@media (max-width: 640px)`
+ * mobile override for `--theme-page-padding`. Pure — no DOM access.
+ *
+ * Marketing pages use:
+ *   <style>{generateThemeCSS(MARKETING_THEME)}</style>
+ *
+ * which is functionally identical to the bible's
+ *   <style>{generateThemeCSS(defaultTheme)}</style>.
+ */
+export function generateThemeCSS(theme: CompanyTheme | null | undefined): string {
+  const vars = generateThemeVars(theme);
+  const lines = Object.entries(vars)
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join('\n');
+  // Mobile padding override mirrors the bible: tighter page padding under 640px.
+  return `:root {\n${lines}\n}\n@media (max-width: 640px) {\n  :root {\n    --theme-page-padding: 1rem;\n  }\n}`;
+}
+
+/**
  * Apply the generated vars to `document.documentElement`. Side-effect.
  * Safe to call repeatedly; setting the same value is idempotent.
  */

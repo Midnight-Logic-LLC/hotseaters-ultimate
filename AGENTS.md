@@ -8,6 +8,14 @@ in CLAUDE.md applies to every agent.
 
 ## Short version (full text in CLAUDE.md)
 
+### Bible + architectural rules
+
+0. **RULE 0 — Pixel parity with HotSeatersMVP is the project.** Every page
+   must be visually indistinguishable from the bible side-by-side at the
+   same viewport. Every CSS rule, font, color, spacing, copy string, icon,
+   panel, tab, dialog, animation, word, AND business rule must match.
+   Wrong copy / colors / sections / fonts / calculations are blocking
+   defects.
 1. **Self-hosted Supabase only.** `localhost:8000` or `hotbase.prometheusags.ai`.
    Never `*.supabase.co`.
 2. **HotSeatersMVP is the bible.** `midnight/hotseaters` is prior art only.
@@ -17,6 +25,32 @@ in CLAUDE.md applies to every agent.
 6. **`user_info.auth_user_id` bridges to `auth.users(id)`.**
 7. **Docs are content (MDX), not pages.**
 8. **No secrets in git.** `.env` is gitignored.
+
+### Immutable code rules (RULES A–J)
+
+- **A.** Kebab-case filenames everywhere (`landing-page.tsx`).
+- **B.** Components → hooks only (no store imports in components).
+- **C.** Hooks → stores only (no fetch/supabase/electric in hooks).
+- **D.** Stores own all I/O.
+- **E.** `@prometheus-ags/prometheus-entity-management` instead of
+  TanStack Query for server-object client management.
+- **F.** Feature-based clean architecture
+  (`src/features/<x>/{pages,components,hooks,stores,entities,business-rules}`).
+- **G.** shadcn/ui primitives over raw HTML where one exists.
+- **H.** Base UI v1 (`@base-ui-components/react`) instead of Radix.
+- **I.** Mobile-first, PWA-capable, Tauri-WebView-compatible at 375px+.
+- **J.** Preserve every business rule + calculation when porting a bible page.
+
+### Process discipline (Karpathy + Cherny)
+
+- Think before coding — surface tradeoffs, don't pick silently.
+- Simplicity first — minimum code that solves the problem.
+- Surgical changes — touch only what you must.
+- Goal-driven execution — define success, loop until verified.
+- No laziness — find root causes, no band-aids.
+- Minimal impact — no side effects, no new bugs in old code.
+- Self-improvement loop — every correction goes into `docs/LESSONS.md` so it
+  doesn't repeat.
 
 ## Constraints file (workspace-level)
 

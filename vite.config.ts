@@ -86,6 +86,7 @@ export default defineConfig(({ mode }) => {
       port: 5174,
     },
     resolve: {
+      dedupe: ['react', 'react-dom', 'zustand'],
       alias: {
         '@':            fileURLToPath(new URL('./src', import.meta.url)),
         '@/components': fileURLToPath(new URL('./src/components', import.meta.url)),

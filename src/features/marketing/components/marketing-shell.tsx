@@ -1,4 +1,23 @@
 /**
+ * ⚠️  DO NOT USE WITHOUT BIBLE AUDIT  ⚠️
+ *
+ * MarketingShell was an early abstraction attempt for "shared marketing
+ * chrome." Landing's pixel-parity port (RULE 0) revealed the abstraction
+ * diverges from the bible — bible Landing inlines its own header/footer
+ * with specific copy, classes, and the chameleon-logo PNG. Wrapping
+ * Landing in MarketingShell hid bugs.
+ *
+ * Until each public page (Pricing, ReferralLanding, PrivacyPolicy,
+ * TermsOfService) has been audited side-by-side against its bible file
+ * and the chrome is confirmed bible-identical, this shell MUST NOT be
+ * added to any page's render tree. Landing intentionally bypasses it
+ * and inlines header+footer (see `landing-page.tsx`).
+ *
+ * Keeping the file here as a reference scaffold — delete or rebuild it
+ * during each subsequent page's parity port.
+ *
+ * ───────────────────────────────────────────────────────────────────────
+ *
  * MarketingShell — shared sticky-header + footer for public pages.
  *
  * Bible: `HotSeatersMVP/src/pages/Landing.jsx` header (lines 100-125) +
@@ -23,7 +42,7 @@ import type { PropsWithChildren, ReactNode } from 'react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { AuthOptionsDialog } from '@/features/auth/components/AuthOptionsDialog';
-import { PolicyViewerModal } from '@/features/marketing/components/PolicyViewerModal';
+import { PolicyViewerModal } from '@/features/marketing/components/policy-viewer-modal';
 
 interface MarketingShellProps {
   /** Override the post-auth redirect URL passed to AuthOptionsDialog. */

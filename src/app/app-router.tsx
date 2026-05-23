@@ -21,7 +21,7 @@ import { PendingApprovalPage } from '@/features/auth/pages/PendingApprovalPage';
 import { AccountRejectedPage } from '@/features/auth/pages/AccountRejectedPage';
 import { CompanySettingsPage } from '@/features/company/pages/CompanySettingsPage';
 import { TeamPage } from '@/features/company/pages/TeamPage';
-import { LandingPage } from '@/features/landing/pages/LandingPage';
+import { LandingPage } from '@/features/landing/pages/landing-page';
 
 // Register feature entity schemas at module load — idempotent.
 registerClientEntities();
@@ -116,10 +116,6 @@ export function AppRouter() {
         {/* Authenticated app shell — protected subtree */}
         <Route element={<AppShell />}>
           <Route element={<AuthGate />}>
-            {/* index now redirects authenticated users to /Dashboard;
-                unauthenticated users never reach this — they hit the
-                top-level '/' → LandingPage above. AuthGate enforces this. */}
-            <Route index element={<Navigate to="/Dashboard" replace />} />
             <Route path="Dashboard" element={<DashboardPage />} />
 
             {/* Clients (Change 6) */}
