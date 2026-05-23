@@ -7,6 +7,11 @@ dist
 dist-manual
 *.tsbuildinfo
 build
+# Vendored prometheus-entity-management dist is INTENTIONALLY tracked — the
+# `dist` exclude above would otherwise silently swallow it. See the
+# "vendor/" note at the bottom of this file for the full rationale.
+!vendor/prometheus-entity-management/dist/
+!vendor/prometheus-entity-management/dist/**
 
 # Vite
 .vite
