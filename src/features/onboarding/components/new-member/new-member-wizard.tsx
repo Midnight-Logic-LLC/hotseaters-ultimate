@@ -8,12 +8,27 @@
  * already linked the user to the company. This wizard just collects
  * profile photo + shows context. Calling onComplete navigates to
  * /Dashboard.
+ *
+ * change-208: explicit "Use Google photo" button (no auto-apply),
+ * role-permission-card, assigned-services preview w/ green badges,
+ * upload progress bar, error/retry path, photo-drop-zone for the
+ * photo step.
  */
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, ArrowLeft, CheckCircle2, Sparkles, Camera, Shield, Briefcase, User } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import {
+  ArrowRight,
+  ArrowLeft,
+  CheckCircle2,
+  Sparkles,
+  Briefcase,
+  Check,
+} from 'lucide-react';
+import { useEffect } from 'react';
 import { useNewMemberOnboarding } from '@/features/onboarding/hooks/use-new-member-onboarding';
+import { PhotoDropZone } from './photo-drop-zone';
+import { RolePermissionCard, type MemberRole } from './role-permission-card';
+import { cn } from '@/shared/lib/cn';
 
 interface Props {
   companyName: string;
@@ -23,24 +38,20 @@ interface Props {
   onComplete?: () => void;
 }
 
-const ROLE_DESCRIPTIONS: Record<string, string> = {
-  Owner: 'Full access to all features, billing, and team management.',
-  Admin: 'Manage all deals, trials, clients, and team members. Can change roles.',
-  Sales: 'Manage deals, clients, and move opportunities through the sales pipeline.',
-  'Trial Consultant': 'Track time, view assigned trials, and manage your own tasks.',
-};
-
-const ROLE_ICONS: Record<string, typeof Shield> = {
-  Owner: Shield,
-  Admin: Shield,
-  Sales: Briefcase,
-  'Trial Consultant': User,
-};
+// Map labelled roles (Owner, Admin, …) to the canonical MemberRole key the
+// RolePermissionCard expects. Defaults to `trial_consultant` for unknown.
+function toMemberRole(role: string): MemberRole {
+  const normalized = role.trim().toLowerCase();
+  if (normalized === 'owner') return 'owner';
+  if (normalized === 'admin') return 'admin';
+  if (normalized === 'sales') return 'sales';
+  if (normalized === 'trial consultant' || normalized === 'trial_consultant') return 'trial_consultant';
+  return 'trial_consultant';
+}
 
 export function NewMemberWizard({ companyName, role, firstName, assignedServiceNames = [], onComplete }: Props) {
   const wiz = useNewMemberOnboarding();
   const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     wiz.setContext({ companyName, role, assignedServiceNames });
@@ -52,7 +63,9 @@ export function NewMemberWizard({ companyName, role, firstName, assignedServiceN
     else navigate('/Dashboard', { replace: true });
   }
 
-  const RoleIcon = ROLE_ICONS[role] ?? User;
+  const memberRole = toMemberRole(role);
+  const usingGooglePhoto =
+    !!wiz.googlePhotoUrl && wiz.photoPreview === wiz.googlePhotoUrl;
 
   return (
     <div
@@ -79,11 +92,10 @@ export function NewMemberWizard({ companyName, role, firstName, assignedServiceN
         {wiz.step === 'welcome' && (
           <div>
             <h2 className="text-xl font-bold text-stone-900 mb-1">Your role at {companyName}</h2>
-            <p className="text-sm text-stone-500 mb-5">You've been invited as a <strong>{role}</strong>.</p>
-            <div className="flex gap-3 items-start p-4 rounded-lg bg-indigo-50 border border-indigo-200 mb-6">
-              <RoleIcon className="w-6 h-6 text-indigo-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-indigo-900">{ROLE_DESCRIPTIONS[role] ?? 'You have been granted access by your team Owner.'}</p>
-            </div>
+            <p className="text-sm text-stone-500 mb-5">
+              You've been invited as a <strong>{role}</strong>.
+            </p>
+            <RolePermissionCard role={memberRole} className="mb-6" />
             <NavButtons onBack={wiz.goBack} onNext={wiz.goNext} />
           </div>
         )}
@@ -96,15 +108,20 @@ export function NewMemberWizard({ companyName, role, firstName, assignedServiceN
                 ? "Your Owner has assigned these services to your queue. You can clock time against them and they'll show on your dashboard."
                 : "Your team hasn't assigned specific services yet — you'll see them as soon as your Owner adds you to one."}
             </p>
-            {assignedServiceNames.length > 0 && (
+            {assignedServiceNames.length > 0 ? (
               <ul className="space-y-2 mb-6">
                 {assignedServiceNames.map((name) => (
                   <li key={name} className="flex items-center gap-2 text-sm text-stone-700">
-                    <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    <CheckCircle2 className="w-4 h-4 text-green-600" aria-hidden />
                     {name}
                   </li>
                 ))}
               </ul>
+            ) : (
+              <div className="text-center py-6 border border-dashed border-stone-300 rounded-xl mb-6">
+                <Briefcase className="w-10 h-10 text-stone-300 mx-auto mb-2" aria-hidden />
+                <p className="text-stone-500 text-sm">Your admin will assign services to your profile.</p>
+              </div>
             )}
             <NavButtons onBack={wiz.goBack} onNext={wiz.goNext} />
           </div>
@@ -116,43 +133,72 @@ export function NewMemberWizard({ companyName, role, firstName, assignedServiceN
             <p className="text-sm text-stone-500 mb-5">Helps your team recognize you in mentions and on documents.</p>
 
             <div className="flex flex-col items-center gap-3 mb-6">
-              <div className="w-32 h-32 rounded-full bg-stone-100 overflow-hidden flex items-center justify-center">
-                {wiz.photoPreview ? (
-                  <img src={wiz.photoPreview} alt="Profile preview" className="w-full h-full object-cover" />
-                ) : (
-                  <Camera className="w-12 h-12 text-stone-400" />
-                )}
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={(e) => void wiz.setPhoto(e.target.files?.[0] ?? null)}
-                className="hidden"
+              <PhotoDropZone
+                onFileSelected={(f) => void wiz.setPhoto(f)}
+                currentPreviewUrl={wiz.photoPreview ?? undefined}
               />
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                  Choose file
+
+              {wiz.googlePhotoUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={wiz.useGooglePhoto}
+                  className={cn(
+                    'gap-1.5',
+                    usingGooglePhoto && 'border-primary text-primary bg-primary/5'
+                  )}
+                  aria-pressed={usingGooglePhoto}
+                >
+                  {usingGooglePhoto && <Check className="w-3.5 h-3.5" aria-hidden />}
+                  Use Google photo
                 </Button>
-                {wiz.googlePhotoUrl && (
-                  <Button variant="outline" onClick={wiz.useGooglePhoto}>
-                    Use Google photo
+              )}
+
+              {wiz.uploading && (
+                <div className="w-full" aria-live="polite">
+                  <p className="text-xs text-stone-500 mb-1">Uploading…</p>
+                  <div className="bg-muted h-2 rounded overflow-hidden">
+                    <div
+                      className="bg-primary h-2 rounded transition-all animate-pulse"
+                      style={{ width: '60%' }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {wiz.error && !wiz.uploading && (
+                <div role="alert" className="flex items-center gap-3 text-xs text-red-600">
+                  <span>Upload failed — </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void wiz.savePhoto()}
+                    className="h-7 px-2 text-xs"
+                  >
+                    Retry
                   </Button>
-                )}
-              </div>
-              {wiz.error && (
-                <p role="alert" className="text-xs text-red-600">{wiz.error}</p>
+                </div>
               )}
             </div>
+
             <div className="flex justify-between gap-3">
               <Button variant="outline" onClick={wiz.goBack}>
                 <ArrowLeft className="w-4 h-4 mr-1" /> Back
               </Button>
               <div className="flex gap-3">
-                <button onClick={() => { wiz.setStep('done'); }} className="text-sm text-stone-500 hover:text-stone-700">
+                <button
+                  onClick={() => {
+                    wiz.setStep('done');
+                  }}
+                  className="text-sm text-stone-500 hover:text-stone-700"
+                >
                   Skip
                 </button>
-                <Button onClick={() => void wiz.savePhoto()} disabled={wiz.uploading} style={{ backgroundColor: 'var(--theme-brand-primary)', color: 'white' }}>
+                <Button
+                  onClick={() => void wiz.savePhoto()}
+                  disabled={wiz.uploading}
+                  style={{ backgroundColor: 'var(--theme-brand-primary)', color: 'white' }}
+                >
                   {wiz.uploading ? 'Uploading…' : 'Save & Continue'}
                   <ArrowRight className="w-4 h-4 ml-1" />
                 </Button>
