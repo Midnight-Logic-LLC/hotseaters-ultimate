@@ -102,22 +102,16 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Build the entity-mgmt library from latest-data's submodule source,
-      # then copy the freshly-built dist + package.json into
-      # vendor/prometheus-entity-management/. Replaces whatever was
-      # committed in this repo at HEAD — CI is canonical on every push.
-      - name: Rebuild + vendor @prometheus-ags/prometheus-entity-management
+      # Build the entity-mgmt library from latest-data's submodule source.
+      # Build BEFORE install so the freshly-built dist is available when
+      # pnpm resolves the workspace dependency.
+      - name: Rebuild entity-mgmt from submodule source
         run: |
           set -euo pipefail
           SUBMODULE=latest-data/packages/prometheus-entity-management
           VENDOR_DIR=vendor/prometheus-entity-management
           echo "Building entity-mgmt from ${SUBMODULE}..."
           pushd "${SUBMODULE}"
-          # The submodule may or may not be part of latest-data's pnpm
-          # workspace; install + build standalone to be safe.
           pnpm install --frozen-lockfile || pnpm install
           pnpm build
           popd
@@ -128,9 +122,16 @@ jobs:
           cp    "${SUBMODULE}/package.json" "${VENDOR_DIR}/package.json"
           echo "Vendored files:"
           ls -la "${VENDOR_DIR}/dist" | head -10
-          # Re-run pnpm install so workspace symlinks pick up the fresh
-          # vendor dir (otherwise consumers see the stale committed copy).
-          pnpm install --frozen-lockfile
+
+      # Rewrite the package.json link:../latest-data ref to file:./vendor
+      # so pnpm resolves the package against the freshly-vendored dist
+      # instead of the sibling-repo path (which doesn't exist in CI layout).
+      # Same script the Dockerfile runs. Idempotent.
+      - name: Repoint @prometheus-ags/prometheus-entity-management to vendor
+        run: node scripts/dockerize-deps.mjs
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --prefer-offline
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
