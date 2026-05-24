@@ -64,14 +64,15 @@ export default defineConfig(({ mode }) => {
           // shell; never cache /rest/* or /auth/* responses.
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/auth/, /^\/rest/, /^\/storage/, /^\/realtime/, /^\/functions/],
-          // Raise the precache size limit. The default 2 MiB is sized for
-          // a marketing site; this is a full SPA with PGlite (WASM), Electric
-          // sync, dnd-kit, lucide, etc. Code-splitting via manualChunks below
-          // keeps individual chunks small in normal operation, but vendor
-          // chunks (React + PGlite + Electric) can legitimately approach this
-          // ceiling. 6 MiB is generous headroom; we still want CI to fail if
-          // we ever go past that (something is wrong if main bundle is 6+ MiB).
-          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+          // Default workbox limit is 2 MiB. This is a full SPA with PGlite
+          // (WASM), Electric sync, dnd-kit, lucide, base-ui, supabase, etc.
+          // With the single-vendor-chunk strategy below, vendor.js consolidates
+          // all of node_modules into one chunk for cycle safety; that chunk
+          // approaches but does not exceed a few MiB. 8 MiB is generous
+          // headroom — if vendor.js ever climbs near this, that's the loud
+          // build-time signal to revisit dependency footprint, not a silent
+          // runtime failure mode.
+          maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         },
       }),
     ],
@@ -107,34 +108,41 @@ export default defineConfig(({ mode }) => {
       exclude: ['@electric-sql/pglite'],
     },
     build: {
-      // Code-split ONLY the truly large, leaf-position deps into their own
-      // chunks (PGlite WASM, Electric sync). For everything else we let
-      // Rollup's automatic splitting do its thing — manualChunks that
-      // forces React + React's transitive deps into separate buckets
-      // creates cross-chunk circular references that blow up at runtime
-      // with "Cannot access 'X' before initialization" (TDZ).
+      // Single-vendor-chunk strategy. Every node_modules import lands in
+      // ONE chunk called `vendor`. Every src/** import lands in `index`.
       //
-      // Trade-off: the auto-split vendor chunk(s) may be larger than the
-      // old hand-named ones, but we already raised workbox's precache
-      // limit to 6 MiB, so this is fine. The main entry chunk stays
-      // under workbox's previous 2 MiB ceiling because PGlite + Electric
-      // (the worst offenders) are still split out by name below.
+      // This is the only chunking shape that is mathematically immune to
+      // chunk-level circular dependencies (a two-node graph index→vendor
+      // cannot cycle). It is the pattern endorsed by Rollup's maintainer
+      // in https://github.com/rollup/rollup/discussions/4992:
+      //
+      //   "manualChunks is a crude and unsafe tool... It is usually safe
+      //    to put the entire node_modules into a single manual chunk
+      //    because stuff in node_modules does not import from your
+      //    regular code, so no danger of cycles."
+      //
+      // Earlier attempts to split node_modules into per-family chunks
+      // (vendor-react, vendor-dnd, vendor-icons, vendor-router,
+      // vendor-supabase, vendor-zustand, vendor-base-ui + a generic
+      // catch-all) caused production crashes:
+      //   Uncaught ReferenceError: Cannot access 'H' before initialization
+      //     at vendor-Cdu5HLyV.js:12:1406
+      // because packages whose transitive deps spanned the families
+      // created chunk-graph triangles. Do NOT reintroduce that pattern.
+      //
+      // Trade-off: vendor.js is ~1.6 MB. Browser caches it across all
+      // source-only changes (cache busts only when a dependency changes,
+      // which is rare). Real first-paint perf comes from route-level
+      // React.lazy() splitting on the source side — that is the planned
+      // Phase B follow-up to this config and is orthogonal to chunking.
       rollupOptions: {
         output: {
-          manualChunks: (id) => {
-            if (!id.includes('node_modules')) return undefined;
-            // PGlite ships its own WASM blob and is independent of React;
-            // safe to split into its own chunk.
-            if (id.includes('@electric-sql/pglite')) return 'vendor-pglite';
-            if (id.includes('@electric-sql')) return 'vendor-electric';
-            // Everything else: let Rollup decide. Returning undefined here
-            // means Rollup applies its default per-import-graph splitting,
-            // which keeps cyclic module groups in the same chunk.
-            return undefined;
-          },
+          manualChunks: (id) => (id.includes('node_modules') ? 'vendor' : undefined),
         },
       },
-      chunkSizeWarningLimit: 1500,
+      // Surface build-time warning if any single chunk grows past 2 MB.
+      // Not an error — Workbox's 8 MiB limit above is the actual ceiling.
+      chunkSizeWarningLimit: 2000,
     },
     worker: {
       format: 'es',
