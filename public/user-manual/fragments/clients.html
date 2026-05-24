@@ -1,0 +1,66 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="clients">
+<h1 id="clients--contacts"><a href="#clients--contacts">Clients &#x26; Contacts</a></h1>
+<p>Manages client organizations (<code>client_firms</code>) and their contacts (attorneys, stored as <code>contacts</code>). Supports grouping by client type, list/card views, search, filtering, client type management, and CSV import. All queries filter by <code>tenant_id</code>.</p>
+<h2 id="header-controls"><a href="#header-controls">Header Controls</a></h2>
+<ul>
+<li><strong>Add Client Type button</strong> — Opens inline form to create a new client type with name and default pricing multiplier (<code>owner</code>/<code>admin</code> only).</li>
+<li><strong>Add New Client button</strong> — Opens the New Client wizard (select/create client type → enter firm name, phone, website, notes → initial address → sales lead).</li>
+<li><strong>Import button</strong> — Opens the Client Import Wizard for CSV/Excel upload with AI-powered data extraction (via Supabase Edge Function) and bulk client firm creation.</li>
+</ul>
+<h2 id="filter-bar"><a href="#filter-bar">Filter Bar</a></h2>
+<ul>
+<li><strong>Search</strong> — Filters by firm name, contact first/last name, or contact email.</li>
+<li><strong>List / Card toggle</strong> — Switches view type. Persisted to user preferences as <code>clientsViewType</code>.</li>
+<li><strong>Active / Inactive switch</strong> — Toggles between showing active or inactive client firms (via <code>is_active</code> flag).</li>
+<li><strong>Hide Empty Types switch</strong> — Hides client type groups that have zero matching client firms.</li>
+<li><strong>Sales Person dropdown</strong> — Filters client firms by assigned sales lead (<code>user_profiles</code> with owner or sales roles).</li>
+</ul>
+<h2 id="client-type-groups"><a href="#client-type-groups">Client Type Groups</a></h2>
+<p>Client firms are grouped under their assigned client type. Groups are drag-and-drop reorderable via @dnd-kit (persists <code>order</code>). Each group header shows type name, client count, and edit/delete buttons (<code>owner</code>/<code>admin</code> only). Default types show a lock icon instead of delete. Collapsible via chevron.</p>
+<h2 id="list-view"><a href="#list-view">List View</a></h2>
+<p>Each client card shows: firm name, phone, primary address (city/state), up to 2 contacts with email, and the assigned sales lead. Responsive grid collapses columns at smaller breakpoints. Clicking a card opens the Client Details panel.</p>
+<h2 id="card-view"><a href="#card-view">Card View</a></h2>
+<p>3-column grid of cards showing firm name, client type badge, phone, and address. Clicking opens the Client Details panel.</p>
+<h2 id="client-details-panel"><a href="#client-details-panel">Client Details Panel</a></h2>
+<p>Full detail view when a client firm is selected. Includes:</p>
+<ul>
+<li>Editable client info (firm name, type, phone, website, status, sales lead, notes)</li>
+<li>Address management (multiple addresses per client firm with primary flag)</li>
+<li>Contact/Attorney management (add, edit, delete <code>contacts</code> rows with email, phone, title, address assignment)</li>
+<li>Service rate overrides (<code>client_service_rates</code> — custom rates per client firm per service type)</li>
+<li>Associated trials list</li>
+<li>URL parameter support: <code>?client=ID&#x26;contact=ID</code> auto-opens client and pre-selects contact for editing</li>
+</ul>
+<h2 id="client-type-form"><a href="#client-type-form">Client Type Form</a></h2>
+<p>Inline card for creating/editing client types. Fields: Type Name (disabled for default types) and Default Pricing Multiplier (1.0 = standard, 0.85 = 15% discount). Info banner explains the purpose of client types.</p>
+<h2 id="contact-transfer"><a href="#contact-transfer">Contact Transfer</a></h2>
+<p>Contacts (attorneys) can be transferred between client firms via a dedicated dialog, preserving historical data at the original firm while creating a new active record at the destination.</p>
+<ul>
+<li><strong>Trigger</strong> — "Transfer" button on the Attorney form (only shown when editing an existing contact).</li>
+<li><strong>Destination Firm Selection</strong> — Search/filter existing active client firms (excludes the contact's current firm). Or click "New Firm" to create a client firm inline.</li>
+<li><strong>Address Selection</strong> — If the destination firm has addresses, auto-selects the single address or primary address. Multiple addresses show a dropdown.</li>
+<li><strong>New Contact Details</strong> — Title (pre-populated from original contact), New Email, Work Phone (auto-formatted as phone number). Mobile number is carried over automatically from the original record.</li>
+<li><strong>On Transfer</strong>
+<ul>
+<li>Creates a new <code>contacts</code> record at the destination firm with <code>contact_status: "active"</code>, carrying over first name, last name, mobile, and a transfer note.</li>
+<li>Updates the original <code>contacts</code> record: appends transfer note to existing notes (preserving historical notes) and sets <code>contact_status: "transferred"</code>.</li>
+</ul>
+</li>
+<li><strong>Search Exclusion</strong> — Contacts with <code>contact_status = "transferred"</code> are excluded from the client firm search results on the Clients page, preventing confusion.</li>
+</ul>
+<h2 id="deletion-rules"><a href="#deletion-rules">Deletion Rules</a></h2>
+<ul>
+<li>Default client types cannot be deleted (shows lock icon).</li>
+<li>Client types with assigned client firms show a blocking message requiring reassignment first.</li>
+<li>Deleting a client firm also deletes all associated <code>contacts</code> rows (cascade handled at the database level).</li>
+</ul>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul>
+<li><a href="/user-manual/deals">Deals</a></li>
+<li><a href="/user-manual/sales-hub">Sales Hub</a></li>
+<li><a href="/user-manual/trials">Trials</a></li>
+<li><a href="/user-manual/database-schema">Database Schema</a></li>
+</ul>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/clients/download.md"><code>/user-manual/clients/download.md</code></a>.</p>
+</article>

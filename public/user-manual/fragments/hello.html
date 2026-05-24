@@ -1,0 +1,42 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="hello">
+<h1 id="hello-from-the-mdx-pipeline"><a href="#hello-from-the-mdx-pipeline">Hello from the MDX pipeline</a></h1>
+<p>This page exists to prove the MDX compile path, manifest lookup, and HTMX
+fragment swap all work end-to-end. Real manual content begins in
+<strong>change-534</strong> (pilot port of <code>Doc01AppOverview</code>).</p>
+<h2 id="what-this-verifies"><a href="#what-this-verifies">What this verifies</a></h2>
+<ul>
+<li><code>content/user-manual/*.mdx</code> compiles through <code>next-mdx-remote</code></li>
+<li><code>remark-gfm</code> table + checklist support renders</li>
+<li><code>rehype-slug</code> + <code>rehype-autolink-headings</code> generate anchor links</li>
+<li><code>rehype-highlight</code> tokenizes code blocks</li>
+</ul>
+<h2 id="example-gfm-table"><a href="#example-gfm-table">Example GFM table</a></h2>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Segment layout</td>
+<td>scaffolded (change-532)</td>
+</tr>
+<tr>
+<td>MDX pipeline</td>
+<td>this change (533)</td>
+</tr>
+<tr>
+<td>Pilot port</td>
+<td>change-534</td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-code"><a href="#example-code">Example code</a></h2>
+<pre><code class="hljs language-ts">
+  <span class="hljs-keyword">return</span> <span class="hljs-string">`hello, <span class="hljs-subst">${name}</span>`</span>
+}
+</code></pre>
+<p><a href="/user-manual">Back to the manual landing</a>.</p>
+</article>

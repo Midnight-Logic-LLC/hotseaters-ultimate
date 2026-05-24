@@ -1,0 +1,259 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="notification-system">
+<h1 id="notification-system"><a href="#notification-system">Notification System</a></h1>
+<p>HotSeaters delivers in-app and email notifications through a decoupled, event-driven architecture. Notifications are treated as <strong>side effects</strong> of core business operations — they must never block or fail a user's primary action (assigning a consultant, posting an HSH request, marking a trial continued, etc.).</p>
+<p>The transport layer is <strong>Supabase Realtime</strong> (WebSocket channel subscriptions) as the primary delivery mechanism, with a lightweight polling fallback for degraded-connection environments. Outbound email is sent via <strong>Resend</strong> from Edge Functions. See <a href="/user-manual/external-integrations">external integrations</a> for the broader integration map.</p>
+<h2 id="design-principles"><a href="#design-principles">Design principles</a></h2>
+<ol>
+<li><strong>Notifications are side effects.</strong> Failures in the notification pipeline must not roll back the triggering operation.</li>
+<li><strong>Centralized creation.</strong> All notification rows are written through a single Edge Function so validation, deduplication, and sender/recipient filtering live in one place.</li>
+<li><strong>Event-driven, not polled.</strong> Postgres triggers and Realtime channel broadcasts replace the legacy 15-second polling loop.</li>
+<li><strong>Service-role writes.</strong> The creation function runs with the Supabase service role so it never fails on a client's auth context.</li>
+<li><strong>Tenant-isolated.</strong> Every row carries <code>tenant_id</code>; RLS restricts reads to the recipient.</li>
+</ol>
+<h2 id="data-model"><a href="#data-model">Data model</a></h2>
+<h3 id="notifications-table"><a href="#notifications-table"><code>notifications</code> table</a></h3>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>uuid</td>
+<td>primary key</td>
+</tr>
+<tr>
+<td><code>tenant_id</code></td>
+<td>uuid</td>
+<td>FK → <code>tenant_firms.id</code>; indexed</td>
+</tr>
+<tr>
+<td><code>user_id</code></td>
+<td>uuid</td>
+<td>recipient; FK → <code>user_profiles.id</code>; indexed</td>
+</tr>
+<tr>
+<td><code>sender_user_id</code></td>
+<td>uuid | null</td>
+<td>optional; used to suppress self-notifications</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>text</td>
+<td>enum-like discriminator (<code>assignment.created</code>, <code>trial.dates_changed</code>, <code>hsh.posting.created</code>, <code>invoice.paid</code>, etc.)</td>
+</tr>
+<tr>
+<td><code>payload</code></td>
+<td>jsonb</td>
+<td>arbitrary typed metadata (trial id, service name, amounts, links)</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>text</td>
+<td>short, display-ready</td>
+</tr>
+<tr>
+<td><code>message</code></td>
+<td>text</td>
+<td>full body for toast + bell menu</td>
+</tr>
+<tr>
+<td><code>read_at</code></td>
+<td>timestamptz | null</td>
+<td>null until user dismisses/reads</td>
+</tr>
+<tr>
+<td><code>created_at</code></td>
+<td>timestamptz</td>
+<td>default <code>now()</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="rls"><a href="#rls">RLS</a></h3>
+<ul>
+<li><code>SELECT</code>: <code>auth.uid() = user_id</code></li>
+<li><code>UPDATE</code> (mark read): <code>auth.uid() = user_id</code>, restricted to <code>read_at</code> column</li>
+<li><code>INSERT</code>: service role only — never from client code</li>
+</ul>
+<h2 id="architecture"><a href="#architecture">Architecture</a></h2>
+<h3 id="event-sources"><a href="#event-sources">Event sources</a></h3>
+<p>Notifications originate from Postgres triggers on the following tables. Each trigger calls a single <code>NOTIFY</code> or invokes an Edge Function via <code>pg_net</code> that writes into <code>notifications</code> and emits a Realtime broadcast.</p>
+<table>
+<thead>
+<tr>
+<th>Source table</th>
+<th>Event</th>
+<th>Notification type(s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>assignments</code></td>
+<td>insert</td>
+<td><code>assignment.created</code></td>
+</tr>
+<tr>
+<td><code>assignments</code></td>
+<td>update (status → inactive) / delete</td>
+<td><code>assignment.removed</code></td>
+</tr>
+<tr>
+<td><code>trials</code></td>
+<td>update <code>start_date</code> / <code>end_date</code></td>
+<td><code>trial.dates_changed</code></td>
+</tr>
+<tr>
+<td><code>trials</code></td>
+<td>update <code>pipeline_stage_id</code></td>
+<td><code>trial.stage_changed</code></td>
+</tr>
+<tr>
+<td><code>trials</code></td>
+<td>update <code>completion_type</code></td>
+<td><code>trial.continued</code> / <code>trial.uncontinued</code></td>
+</tr>
+<tr>
+<td><code>hsh_postings</code></td>
+<td>insert</td>
+<td><code>hsh.posting.created</code> (invited users OR public marketplace)</td>
+</tr>
+<tr>
+<td><code>hsh_postings</code></td>
+<td>update (status → cancelled)</td>
+<td><code>hsh.posting.cancelled</code></td>
+</tr>
+<tr>
+<td><code>hsh_applications</code></td>
+<td>insert</td>
+<td><code>hsh.response.received</code></td>
+</tr>
+<tr>
+<td><code>hsh_applications</code></td>
+<td>update (status → accepted/declined)</td>
+<td><code>hsh.response.resolved</code></td>
+</tr>
+<tr>
+<td><code>hsh_contracts</code></td>
+<td>insert</td>
+<td><code>hsh.contract.created</code></td>
+</tr>
+<tr>
+<td><code>generated_documents</code></td>
+<td>update (all parties signed)</td>
+<td><code>document.signed</code></td>
+</tr>
+<tr>
+<td><code>invoices</code></td>
+<td>update (status → paid)</td>
+<td><code>invoice.paid</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-create-notification-edge-function"><a href="#the-create-notification-edge-function">The <code>create-notification</code> Edge Function</a></h3>
+<p>A single Edge Function owns all notification writes. It accepts:</p>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">type</span> <span class="hljs-title class_">CreateNotificationInput</span> = {
+  <span class="hljs-attr">tenantId</span>: <span class="hljs-built_in">string</span>;
+  <span class="hljs-attr">recipientUserIds</span>: <span class="hljs-built_in">string</span>[];
+  <span class="hljs-attr">senderUserId</span>: <span class="hljs-built_in">string</span> | <span class="hljs-literal">null</span>;
+  <span class="hljs-attr">type</span>: <span class="hljs-built_in">string</span>;
+  <span class="hljs-attr">title</span>: <span class="hljs-built_in">string</span>;
+  <span class="hljs-attr">message</span>: <span class="hljs-built_in">string</span>;
+  <span class="hljs-attr">payload</span>: <span class="hljs-title class_">Record</span>&#x3C;<span class="hljs-built_in">string</span>, <span class="hljs-built_in">unknown</span>>;
+};
+</code></pre>
+<p>Responsibilities:</p>
+<ul>
+<li>Skip any recipient where <code>recipientUserId === senderUserId</code>.</li>
+<li>Skip inactive users (<code>user_profiles.is_active = false</code>).</li>
+<li>Insert one row per remaining recipient in a single batched statement.</li>
+<li>Never throw — return a structured result <code>{ inserted, skipped, errors }</code> for observability.</li>
+<li>Fan out email via Resend for notification types flagged in the user's preferences.</li>
+</ul>
+<h3 id="delivery-to-the-client"><a href="#delivery-to-the-client">Delivery to the client</a></h3>
+<ol>
+<li>The trigger inserts rows into <code>notifications</code>.</li>
+<li>Supabase Realtime broadcasts the <code>INSERT</code> on channel <code>notifications:user_id=eq.&#x3C;uuid></code>.</li>
+<li>The client subscription pushes the row into local state.</li>
+<li>The bell-menu badge increments; a toast renders if the user's preferences opt in for that <code>type</code>.</li>
+</ol>
+<h3 id="frontend-subscription"><a href="#frontend-subscription">Frontend subscription</a></h3>
+<p>The <code>useNotifications</code> hook performs one initial fetch and then holds a Realtime subscription for the session. No polling, no refetch-on-focus.</p>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">const</span> supabase = <span class="hljs-title function_">useSupabaseClient</span>();
+<span class="hljs-keyword">const</span> { user } = <span class="hljs-title function_">useUser</span>();
+
+<span class="hljs-title function_">useEffect</span>(<span class="hljs-function">() =></span> {
+  <span class="hljs-keyword">if</span> (!user) <span class="hljs-keyword">return</span>;
+
+  <span class="hljs-comment">// Initial fetch</span>
+  supabase
+    .<span class="hljs-title function_">from</span>(<span class="hljs-string">"notifications"</span>)
+    .<span class="hljs-title function_">select</span>(<span class="hljs-string">"*"</span>)
+    .<span class="hljs-title function_">order</span>(<span class="hljs-string">"created_at"</span>, { <span class="hljs-attr">ascending</span>: <span class="hljs-literal">false</span> })
+    .<span class="hljs-title function_">limit</span>(<span class="hljs-number">50</span>)
+    .<span class="hljs-title function_">then</span>(<span class="hljs-function">(<span class="hljs-params">{ data }</span>) =></span> <span class="hljs-title function_">setNotifications</span>(data ?? []));
+
+  <span class="hljs-comment">// Realtime subscription</span>
+  <span class="hljs-keyword">const</span> channel = supabase
+    .<span class="hljs-title function_">channel</span>(<span class="hljs-string">`notifications:<span class="hljs-subst">${user.id}</span>`</span>)
+    .<span class="hljs-title function_">on</span>(
+      <span class="hljs-string">"postgres_changes"</span>,
+      {
+        <span class="hljs-attr">event</span>: <span class="hljs-string">"*"</span>,
+        <span class="hljs-attr">schema</span>: <span class="hljs-string">"public"</span>,
+        <span class="hljs-attr">table</span>: <span class="hljs-string">"notifications"</span>,
+        <span class="hljs-attr">filter</span>: <span class="hljs-string">`user_id=eq.<span class="hljs-subst">${user.id}</span>`</span>,
+      },
+      <span class="hljs-function">(<span class="hljs-params">payload</span>) =></span> {
+        <span class="hljs-keyword">if</span> (payload.<span class="hljs-property">eventType</span> === <span class="hljs-string">"INSERT"</span>) {
+          <span class="hljs-title function_">setNotifications</span>(<span class="hljs-function">(<span class="hljs-params">prev</span>) =></span> [payload.<span class="hljs-property">new</span>, ...prev]);
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (payload.<span class="hljs-property">eventType</span> === <span class="hljs-string">"UPDATE"</span>) {
+          <span class="hljs-title function_">setNotifications</span>(<span class="hljs-function">(<span class="hljs-params">prev</span>) =></span>
+            prev.<span class="hljs-title function_">map</span>(<span class="hljs-function">(<span class="hljs-params">n</span>) =></span> (n.<span class="hljs-property">id</span> === payload.<span class="hljs-property">new</span>.<span class="hljs-property">id</span> ? payload.<span class="hljs-property">new</span> : n)),
+          );
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (payload.<span class="hljs-property">eventType</span> === <span class="hljs-string">"DELETE"</span>) {
+          <span class="hljs-title function_">setNotifications</span>(<span class="hljs-function">(<span class="hljs-params">prev</span>) =></span> prev.<span class="hljs-title function_">filter</span>(<span class="hljs-function">(<span class="hljs-params">n</span>) =></span> n.<span class="hljs-property">id</span> !== payload.<span class="hljs-property">old</span>.<span class="hljs-property">id</span>));
+        }
+      },
+    )
+    .<span class="hljs-title function_">subscribe</span>();
+
+  <span class="hljs-keyword">return</span> <span class="hljs-function">() =></span> {
+    supabase.<span class="hljs-title function_">removeChannel</span>(channel);
+  };
+}, [user, supabase]);
+</code></pre>
+<h3 id="polling-fallback"><a href="#polling-fallback">Polling fallback</a></h3>
+<p>If the Realtime channel fails to connect (restrictive network, proxy, etc.), the hook falls back to a 60-second polling query keyed by the most recent <code>created_at</code> it has seen. The fallback is announced to telemetry so operators can identify environments where the primary transport is unreachable.</p>
+<h2 id="ui-surfaces"><a href="#ui-surfaces">UI surfaces</a></h2>
+<ul>
+<li><strong>Toast</strong> — shadcn/ui <code>Sonner</code> toaster mounted at the app root. Each incoming notification renders one toast with a link to the relevant record (trial, invoice, posting).</li>
+<li><strong>Bell menu</strong> — navbar button with an unread-count badge. Opens a scrollable popover listing the last 50 notifications. Clicking a row marks it read and navigates to the source.</li>
+<li><strong>Per-user preferences</strong> — <code>/settings</code> profile panel exposes per-<code>type</code> toggles for toast, email, and both.</li>
+</ul>
+<h2 id="email"><a href="#email">Email</a></h2>
+<p>Email is sent from the <code>create-notification</code> Edge Function via Resend for types a user has opted into. Templates live alongside the function and use the same <code>payload</code> shape. Failures are logged but never block the database write.</p>
+<h2 id="adding-a-new-notification-type"><a href="#adding-a-new-notification-type">Adding a new notification type</a></h2>
+<ol>
+<li>Identify the source table and the mutation that should trigger it.</li>
+<li>Add a Postgres trigger (or extend an existing one) that invokes <code>create-notification</code> with the new <code>type</code> and payload.</li>
+<li>Add the <code>type</code> to the preferences schema so users can opt in or out.</li>
+<li>Add a toast renderer and (optionally) an email template.</li>
+</ol>
+<h2 id="migration-notes-from-legacy-base44-architecture"><a href="#migration-notes-from-legacy-base44-architecture">Migration notes from legacy Base44 architecture</a></h2>
+<p>The legacy system polled a <code>Notification</code> entity every 15 seconds, wrote notifications from many frontend call sites, and invoked a <code>processNotification</code> Base44 function without a reliable auth context. That approach produced 429 rate-limit errors, silent drops, and occasional blocking failures on the triggering operation.</p>
+<p>The HotSeaters implementation replaces all of that with:</p>
+<ul>
+<li>A single <strong><code>notifications</code></strong> Postgres table (RLS-scoped per user).</li>
+<li>Postgres <strong>triggers</strong> as the only event source.</li>
+<li>One <strong><code>create-notification</code></strong> Edge Function as the only writer.</li>
+<li><strong>Supabase Realtime</strong> channels as the primary delivery transport.</li>
+<li><strong>Resend</strong> for outbound email (Base44 mail is not used).</li>
+</ul>
+<p>See <a href="/user-manual/backend-functions">backend functions</a> for the full Edge Function catalog and <a href="/user-manual/technical-reference">technical reference</a> for the data-layer conventions these triggers follow.</p>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/notification-system/download.md"><code>/user-manual/notification-system/download.md</code></a>.</p>
+</article>

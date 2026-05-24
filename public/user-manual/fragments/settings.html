@@ -1,0 +1,889 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="settings">
+<h1 id="settings"><a href="#settings">Settings</a></h1>
+<p>The Settings page is a single <code>/settings</code> route with a tabbed UI. Each tab configures one slice of tenant-scoped behavior. The active tab is controlled by <code>?tab=...</code> in the URL.</p>
+<p>All data is persisted in Supabase, scoped by <code>tenant_id</code> with RLS enforcement. Related: <a href="/user-manual/database-schema">Database Schema</a>, <a href="/user-manual/backend-functions">Backend Functions</a>, <a href="/user-manual/style-guide">Style Guide</a>, <a href="/user-manual/external-integrations">External Integrations</a>.</p>
+<h2 id="tab-visibility"><a href="#tab-visibility">Tab visibility</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tab</th>
+<th>Visibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Company, Time Tracking, Billing Config, Services, Pipeline, Tiers, Documents</td>
+<td>All authenticated members</td>
+</tr>
+<tr>
+<td>Team</td>
+<td>Cross-link to <a href="/user-manual/consultants">Consultants</a></td>
+</tr>
+<tr>
+<td>Subscription</td>
+<td>Owner only (<code>user_roles</code> = <code>owner</code>)</td>
+</tr>
+<tr>
+<td>Marketplace</td>
+<td>Owner only, and only when <code>tenant_firms.has_hsh_addon = true</code></td>
+</tr>
+<tr>
+<td>Theme, Database, Admin</td>
+<td>Platform admin only</td>
+</tr>
+</tbody>
+</table>
+<p>All tenant-config fields below are columns on <code>tenant_firms</code> unless otherwise noted.</p>
+<h2 id="company"><a href="#company">Company</a></h2>
+<p>Company identity, financial targets, and debug toggle. Save persists all identity + financial fields in a single <code>tenant_firms</code> update.</p>
+<h3 id="identity"><a href="#identity">Identity</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Column</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Company Name</td>
+<td><code>name</code></td>
+<td>Text</td>
+</tr>
+<tr>
+<td>Website</td>
+<td><code>website</code></td>
+<td>URL</td>
+</tr>
+<tr>
+<td>Phone</td>
+<td><code>phone</code></td>
+<td>Auto-masked <code>(XXX) XXX-XXXX</code> on input</td>
+</tr>
+<tr>
+<td>Street Address</td>
+<td><code>address</code></td>
+<td>Text</td>
+</tr>
+<tr>
+<td>City / State / ZIP</td>
+<td><code>city</code> / <code>state</code> / <code>zip</code></td>
+<td>State is a 50-state + DC dropdown</td>
+</tr>
+<tr>
+<td>Logo</td>
+<td><code>logo_url</code></td>
+<td>240×240 container; upload via Supabase Storage (<code>branding</code> bucket); PNG/SVG ≤ 500KB recommended</td>
+</tr>
+</tbody>
+</table>
+<h3 id="financial"><a href="#financial">Financial</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Column</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fiscal Year Start Month</td>
+<td><code>fiscal_year_start_month</code> (1-12)</td>
+<td>Yearly number resets, revenue projections</td>
+</tr>
+<tr>
+<td>Annual Revenue Target</td>
+<td><code>annual_revenue_target</code></td>
+<td>SalesHub / Dashboard charts</td>
+</tr>
+<tr>
+<td>Monthly Breakeven</td>
+<td><code>monthly_breakeven</code></td>
+<td>Reference line in revenue charts</td>
+</tr>
+</tbody>
+</table>
+<h3 id="debug-toggle"><a href="#debug-toggle">Debug toggle</a></h3>
+<ul>
+<li><strong>Show Debug Info</strong> — platform admin only. Sets <code>show_debug_info</code>. Saves immediately on toggle (not gated by the Save button). When on, diagnostic cards with JSON state appear on various pages.</li>
+</ul>
+<h2 id="time-tracking"><a href="#time-tracking">Time Tracking</a></h2>
+<p>Rounding rules and retainer formula. Save persists all fields in one update; toggles save immediately.</p>
+<h3 id="rounding"><a href="#rounding">Rounding</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Column</th>
+<th>Options</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Time Entry Rounding</td>
+<td><code>time_rounding_minutes</code></td>
+<td>1, 6, 15, 30, 60 min</td>
+</tr>
+<tr>
+<td>Clock-In Rounding</td>
+<td><code>clock_in_rounding</code></td>
+<td><code>down</code> / <code>nearest</code> / <code>up</code></td>
+</tr>
+<tr>
+<td>Clock-Out Rounding</td>
+<td><code>clock_out_rounding</code></td>
+<td><code>down</code> / <code>nearest</code> / <code>up</code></td>
+</tr>
+<tr>
+<td>Hide Deals from Time Clock</td>
+<td><code>hide_deals_from_time_clock</code></td>
+<td>Owner/admin only; when on, only operations-stage items appear in the Time Clock task picker</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="/user-manual/time-clock-workflows">Time Clock Workflows</a> for the full rounding model.</p>
+<h3 id="retainer-formula"><a href="#retainer-formula">Retainer formula</a></h3>
+<p>Natural-language builder with inline inputs:</p>
+<blockquote>
+<p>Every retainer has a minimum of <code>$[retainer_minimum]</code>. For every <code>$[retainer_divisor]</code> of estimated budget, add <code>$[retainer_multiplier]</code> to the retainer.</p>
+</blockquote>
+<p>Formula: <code>retainer = max(minimum, floor(budget / divisor) * multiplier)</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Column</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Minimum</td>
+<td><code>retainer_minimum</code></td>
+<td>1000</td>
+</tr>
+<tr>
+<td>Divisor</td>
+<td><code>retainer_divisor</code></td>
+<td>15000</td>
+</tr>
+<tr>
+<td>Multiplier</td>
+<td><code>retainer_multiplier</code></td>
+<td>5000</td>
+</tr>
+</tbody>
+</table>
+<p>An inline <strong>Test Your Formula</strong> calculator computes the retainer from a hypothetical budget in real time.</p>
+<h2 id="billing-config"><a href="#billing-config">Billing Config</a></h2>
+<p>Daily minimums, tax, numbering, billing period, and sender email. Period selectors, reset-yearly switches, and sender email save immediately; all other fields use the Save button.</p>
+<h3 id="core-billing"><a href="#core-billing">Core billing</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Column</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Default Daily Minimum Hours</td>
+<td><code>default_daily_minimum_hours</code></td>
+<td>Trial-level override via <code>trials.daily_minimum_hours</code></td>
+</tr>
+<tr>
+<td>Default Tax Rate (%)</td>
+<td><code>default_tax_rate</code></td>
+<td>If 0, invoice tax field is hidden</td>
+</tr>
+<tr>
+<td>Invoice Due Date</td>
+<td><code>invoice_due_days</code></td>
+<td>Net 7 / 14 / 30 / 45 / 60 / 90</td>
+</tr>
+</tbody>
+</table>
+<h3 id="number-formatting"><a href="#number-formatting">Number formatting</a></h3>
+<p>Both invoice and job numbers share the same three-field pattern.</p>
+<table>
+<thead>
+<tr>
+<th>Entity</th>
+<th>Format column</th>
+<th>Start column</th>
+<th>Reset column</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Invoice</td>
+<td><code>invoice_number_format</code></td>
+<td><code>invoice_number_start</code></td>
+<td><code>invoice_number_reset_yearly</code></td>
+</tr>
+<tr>
+<td>Job</td>
+<td><code>job_number_format</code></td>
+<td><code>job_number_start</code></td>
+<td><code>job_number_reset_yearly</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Format tokens:</strong> <code>YY</code>, <code>YYYY</code>, <code>MM</code>, and consecutive <code>0</code>s for the auto-increment width (e.g., <code>INV-0000</code> → <code>INV-0001</code>). <code>generateInvoiceNumber</code> / <code>generateJobNumber</code> Edge Functions compute the next value by taking <code>max(existing) + 1</code> within the tenant, resetting at fiscal year start when the corresponding reset flag is on.</p>
+<h3 id="invoice-period"><a href="#invoice-period">Invoice period</a></h3>
+<table>
+<thead>
+<tr>
+<th>Frequency</th>
+<th>Column</th>
+<th>Extra field</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Weekly</td>
+<td><code>invoice_period = 'weekly'</code></td>
+<td><code>weekly_billing_day</code> (Mon–Sun, default Fri)</td>
+</tr>
+<tr>
+<td>Monthly</td>
+<td><code>invoice_period = 'monthly'</code></td>
+<td><code>monthly_billing_date</code> (1-31, default 1)</td>
+</tr>
+<tr>
+<td>Per Trial</td>
+<td><code>invoice_period = 'per_trial'</code></td>
+<td><code>per_trial_billing_days_after_end</code> (default 7)</td>
+</tr>
+</tbody>
+</table>
+<p><code>pg_cron</code> jobs drive scheduled invoice generation at these cadences; see <a href="/user-manual/backend-functions">Backend Functions</a>.</p>
+<h3 id="sender-email"><a href="#sender-email">Sender email</a></h3>
+<p><code>sender_email</code> is the From address used by Resend when sending invoices and documents. The domain must be verified in Resend.</p>
+<h3 id="default-template-assignments"><a href="#default-template-assignments">Default template assignments</a></h3>
+<p>Set here rather than inside the Documents tab:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Column</th>
+<th>Consumer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Default Invoice Template</td>
+<td><code>default_invoice_template_id</code></td>
+<td><code>generateInvoicePdf</code></td>
+</tr>
+<tr>
+<td>Default Statement Template</td>
+<td><code>default_statement_template_id</code></td>
+<td>Statement generation</td>
+</tr>
+<tr>
+<td>Default Invoice Email Template</td>
+<td><code>default_invoice_email_template_id</code></td>
+<td><code>sendInvoiceEmail</code> body</td>
+</tr>
+</tbody>
+</table>
+<h3 id="quickbooks-graceful-degradation"><a href="#quickbooks-graceful-degradation">QuickBooks (graceful degradation)</a></h3>
+<p>QuickBooks Online sync is <strong>deferred</strong>. The UI exposes a disabled "Connect QuickBooks" control with a "Coming soon" helper. All billing features continue to operate without QuickBooks; nothing in the flow blocks on a missing connection. See <a href="/user-manual/quickbooks-integration">QuickBooks Integration</a> for the planned shape.</p>
+<h2 id="team"><a href="#team">Team</a></h2>
+<p>Team management lives primarily on <a href="/user-manual/consultants">Consultants</a>. The Settings → Team tab is a thin cross-reference that links to that page. It embeds no redundant UI: invitations, role assignment, tier assignment, service qualifications, deactivation, and the HotSeatHub Favorites list are all managed there.</p>
+<h2 id="services"><a href="#services">Services</a></h2>
+<p>Service categories, service definitions, ordering, active/inactive state. Also hosts a duplicate of the Retainer Formula card from Time Tracking.</p>
+<h3 id="header-controls"><a href="#header-controls">Header controls</a></h3>
+<ul>
+<li><strong>Show Inactive</strong> toggle — reveals deactivated categories/services with an "Inactive" badge.</li>
+<li><strong>Add Category</strong> — inline form at the top of the list.</li>
+<li><strong>Add Service</strong> — opens the full service form.</li>
+</ul>
+<h3 id="categories"><a href="#categories">Categories</a></h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Create</td>
+<td>Inline row with grip, color bar, name input; Enter saves, Esc cancels; new categories take <code>order = 0</code> and bump others down</td>
+</tr>
+<tr>
+<td>Rename</td>
+<td>Inline edit with same keyboard shortcuts</td>
+</tr>
+<tr>
+<td>Reorder</td>
+<td><code>@dnd-kit</code> drag; optimistic update, persist per-row, rollback on error</td>
+</tr>
+<tr>
+<td>Collapse</td>
+<td>Category header toggles child service visibility; all start collapsed</td>
+</tr>
+<tr>
+<td>Delete</td>
+<td>Confirms with three scenarios: active services (blocked), only inactive services (soft-deactivate), empty (hard delete). Default categories (<code>is_default = true</code>) cannot be deleted.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="services-1"><a href="#services-1">Services</a></h3>
+<p>Each service renders as a card with an orange left accent. Displays name, description, availability badges (Pre-Trial / In-Trial), rate pill (<code>$/hr</code>, <code>$/day</code>, <code>$ flat</code>), and a daily-minimum calculation when <code>has_daily_minimum = true</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Inline edit</td>
+<td>Click pencil; the row is replaced with the service form in place</td>
+</tr>
+<tr>
+<td>Reorder</td>
+<td>Nested drag within the parent category; rollback on error</td>
+</tr>
+<tr>
+<td>Delete</td>
+<td>If referenced by any <code>trial_services</code> row, offers soft-deactivate; otherwise hard delete</td>
+</tr>
+</tbody>
+</table>
+<p>Travel Time is a built-in service (<code>is_default = true</code>) that stores its rate as a multiplier (displayed as a percentage, e.g. <code>50%</code>).</p>
+<h3 id="uncategorized"><a href="#uncategorized">Uncategorized</a></h3>
+<p>Services without a <code>category_id</code> collect into a final "Uncategorized" section, sorted alphabetically, with no drag reordering.</p>
+<h3 id="data-dependencies"><a href="#data-dependencies">Data dependencies</a></h3>
+<ul>
+<li><code>service_types</code> (catalog)</li>
+<li><code>service_categories</code> (sort order, active flag)</li>
+<li><code>trial_services</code> (used to gate hard-delete)</li>
+</ul>
+<h2 id="pipeline"><a href="#pipeline">Pipeline</a></h2>
+<p>Two side-by-side sections for <code>deal_stages.type = 'sales'</code> and <code>'operations'</code>.</p>
+<h3 id="per-stage-configuration"><a href="#per-stage-configuration">Per-stage configuration</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td>Display label</td>
+</tr>
+<tr>
+<td>Color</td>
+<td>Badge color token (<code>stone</code>, <code>blue</code>, <code>green</code>, <code>indigo</code>, …)</td>
+</tr>
+<tr>
+<td>Order</td>
+<td>Drag-and-drop; determines Kanban column order</td>
+</tr>
+<tr>
+<td>Revenue Probability</td>
+<td>Decimal 0–1; drives Dashboard / SalesHub forecasts</td>
+</tr>
+</tbody>
+</table>
+<h3 id="auto-move-triggers"><a href="#auto-move-triggers">Auto-move triggers</a></h3>
+<p>Per stage, any of the four triggers may be configured:</p>
+<table>
+<thead>
+<tr>
+<th>Trigger</th>
+<th>Column</th>
+<th>Event</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Document Sent</td>
+<td><code>auto_move_on_document_sent_category_id</code></td>
+<td>A document in this category is emailed</td>
+</tr>
+<tr>
+<td>Document Signed</td>
+<td><code>auto_move_on_document_signed_category_id</code></td>
+<td>All signers complete a document in this category</td>
+</tr>
+<tr>
+<td>Earliest Service Start</td>
+<td><code>auto_move_on_earliest_task_start</code> (bool)</td>
+<td>Earliest <code>trial_services.start_date</code> reached</td>
+</tr>
+<tr>
+<td>Trial Start</td>
+<td><code>auto_move_on_trial_start</code> (bool)</td>
+<td><code>trials.start_date</code> reached</td>
+</tr>
+</tbody>
+</table>
+<p>Signed-document advancement into an operations stage auto-generates a job number. Date-driven triggers fire from <code>pg_cron</code>.</p>
+<h3 id="delete-gating"><a href="#delete-gating">Delete gating</a></h3>
+<p>Deletion is blocked if any <code>trials</code> row currently references the stage.</p>
+<h2 id="tiers"><a href="#tiers">Tiers</a></h2>
+<p>CRUD for <code>consultant_tiers</code>. Tiers modify service base rates.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td>e.g., "Junior", "Senior", "Principal"</td>
+</tr>
+<tr>
+<td>Multiplier</td>
+<td>Decimal (e.g., <code>0.8</code>, <code>1.0</code>, <code>1.3</code>)</td>
+</tr>
+<tr>
+<td>Active</td>
+<td>Inactive tiers hidden from assignment dropdowns but preserved historically</td>
+</tr>
+</tbody>
+</table>
+<p>Final rate calculation: <code>service.base_rate * client_type_multiplier * tier.multiplier</code>. Consultants are tier-assigned on <a href="/user-manual/consultants">Consultants</a>.</p>
+<h2 id="documents"><a href="#documents">Documents</a></h2>
+<p>WYSIWYG document template system organized into three tabs by <code>category_type</code>. A shared <strong>Manage Fonts</strong> modal (top-right) manages <code>tenant_firms.custom_fonts</code> (string array of Google Font names) and exposes them to all rich-text editors and table cell toolbars.</p>
+<h3 id="template-tabs"><a href="#template-tabs">Template tabs</a></h3>
+<table>
+<thead>
+<tr>
+<th>Tab</th>
+<th><code>category_type</code></th>
+<th>Default categories</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Document</td>
+<td><code>document</code></td>
+<td>Proposals, Engagement Letters</td>
+<td>Richest section palette. Engagement Letters with <code>is_contract = true</code> support e-signature placeholders; signing locks deal pricing.</td>
+</tr>
+<tr>
+<td>Billing</td>
+<td><code>billing</code></td>
+<td>Invoices, Statements</td>
+<td>Consumed by <code>generateInvoicePdf</code> and statement generation</td>
+</tr>
+<tr>
+<td>Email</td>
+<td><code>email</code></td>
+<td>Invoice Emails, e-Signature Emails</td>
+<td>Page size defaults to "email" (no pagination), 0" margins</td>
+</tr>
+</tbody>
+</table>
+<h3 id="category-management"><a href="#category-management">Category management</a></h3>
+<ul>
+<li><strong>Add / rename / delete</strong> with inline editing. Default categories cannot be renamed or deleted; their description is editable.</li>
+<li><strong>Reorder</strong> via <code>@dnd-kit</code>.</li>
+<li><strong>Delete</strong> is blocked if the category contains active templates; otherwise soft-deletes.</li>
+</ul>
+<h3 id="template-editor"><a href="#template-editor">Template editor</a></h3>
+<p>A two-box form:</p>
+<ol>
+<li><strong>Settings box</strong> — Name, Category (filtered to the current tab), Description, <code>is_contract</code> checkbox. Right column: Page Size (Letter / Legal / A4 / Email), margin presets (0, ½, ¾, 1 inch) and per-edge inputs.</li>
+<li><strong>Sections box</strong> — ordered list of sections. Each section is a row on the <code>template_sections</code> table.</li>
+</ol>
+<h3 id="section-types"><a href="#section-types">Section types</a></h3>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th><code>section_type</code></th>
+<th>Tab scope</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Rich Text</td>
+<td><code>rich_text</code></td>
+<td>All</td>
+</tr>
+<tr>
+<td>Table</td>
+<td><code>table</code></td>
+<td>All</td>
+</tr>
+<tr>
+<td>Services Table</td>
+<td><code>services_table</code></td>
+<td>Document only — auto-populated from <code>trial_services</code> at render time</td>
+</tr>
+<tr>
+<td>Invoice Line Items</td>
+<td><code>invoice_line_items</code></td>
+<td>Billing → Invoices only; 4 cols: Description / Qty / Rate / Amount</td>
+</tr>
+<tr>
+<td>Statement Line Items</td>
+<td><code>statement_line_items</code></td>
+<td>Billing → Statements only; 5 cols: Date / Invoice # / Description / Charges / Payments</td>
+</tr>
+<tr>
+<td>Full Page Start / End</td>
+<td><code>full_page_start</code>, <code>full_page_end</code></td>
+<td>Document only; sections between the markers render on a background image</td>
+</tr>
+</tbody>
+</table>
+<p>Rich-text editing uses TipTap with a full toolbar (fonts, sizes, headers, color, alignment, lists, blockquote, links). The placeholder sidebar inserts tokens at cursor position.</p>
+<h3 id="section-features-all-types"><a href="#section-features-all-types">Section features (all types)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reorder</td>
+<td><code>@dnd-kit</code> drag with recomputed 0-indexed <code>order</code></td>
+</tr>
+<tr>
+<td>Collapse/expand</td>
+<td>Header row toggles the inline editor</td>
+</tr>
+<tr>
+<td>Include Condition</td>
+<td><code>always</code> / <code>user_choice</code> / <code>has_services</code> / <code>no_services</code> / <code>has_retainer</code> / <code>no_retainer</code> / <code>has_frp</code> / <code>no_frp</code></td>
+</tr>
+<tr>
+<td>Keep Together</td>
+<td>PDF generator avoids splitting across pages</td>
+</tr>
+<tr>
+<td>Page Break After</td>
+<td>Forces page break after the section</td>
+</tr>
+<tr>
+<td>Duplicate</td>
+<td>Clones with <code>(Copy)</code> suffix appended</td>
+</tr>
+</tbody>
+</table>
+<h3 id="placeholder-system"><a href="#placeholder-system">Placeholder system</a></h3>
+<p>Sidebar panel opened from the rich-text toolbar. Placeholders are organized by category, filterable by search. Which categories appear depends on tab, selected category, and <code>is_contract</code>.</p>
+<p><strong>Always-visible categories:</strong> Case Information, Client Details, Primary Contact, Trial Information, Services &#x26; Pricing (including dynamic <code>category_subtotal_&#x3C;slug></code> placeholders generated from the tenant's service categories), Company &#x26; Sales.</p>
+<p><strong>Contract-only (is_contract = true):</strong> <code>sales_esignature</code>, <code>client_signature</code>, <code>client_signer_{name,title,email}</code>, <code>frp_signature</code>, <code>frp_signer_{...}</code>, and matching signature-date tokens. Signature placeholders render as SVG stand-ins that are replaced with the actual signature image during generation.</p>
+<p><strong>Billing-only:</strong> <code>bill_to_*</code> (resolves to FRP when one exists, else primary client), Invoice &#x26; Billing tokens (<code>invoice_number</code>, <code>invoice_date</code>, <code>due_date</code>, <code>subtotal</code>, <code>tax</code>, <code>total</code>, …), Statement tokens (<code>statement_number</code>, <code>period_start</code>, <code>period_end</code>, <code>balance_due</code>, …).</p>
+<h3 id="e-signatures-via-docuseal"><a href="#e-signatures-via-docuseal">E-signatures via DocuSeal</a></h3>
+<p>Signing is delivered through <strong>DocuSeal</strong>, not a canvas-based signer. The template marks which placeholders are signature fields; on "Send for Signature" the backend creates a DocuSeal submission and embeds the resulting signature image into the generated PDF. Email delivery of the signing link uses the <strong>e-Signature Emails</strong> template. See <a href="/user-manual/external-integrations">External Integrations</a>.</p>
+<h3 id="save-flow"><a href="#save-flow">Save flow</a></h3>
+<ol>
+<li>Validate name, category, at least one section.</li>
+<li>Sanitize content (strip blockquotes, zero-width spaces, BOM, nbsp).</li>
+<li>Detect signature fields and set <code>document_templates.has_signature_fields</code>.</li>
+<li>Upsert <code>document_templates</code> row (name, <code>category_id</code>, <code>page_settings</code>, <code>is_contract</code>, <code>has_signature_fields</code>).</li>
+<li>Diff and persist <code>template_sections</code> (delete removed, update existing, insert new).</li>
+<li>Post-save re-scan to confirm signature flag (catches table-level signatures).</li>
+</ol>
+<h3 id="data-model"><a href="#data-model">Data model</a></h3>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Columns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>document_template_categories</code></td>
+<td><code>tenant_id</code>, <code>name</code>, <code>description</code>, <code>category_type</code>, <code>order</code>, <code>is_default</code>, <code>is_active</code></td>
+</tr>
+<tr>
+<td><code>document_templates</code></td>
+<td><code>tenant_id</code>, <code>name</code>, <code>description</code>, <code>category_id</code>, <code>page_settings</code>, <code>has_signature_fields</code>, <code>is_contract</code>, <code>is_default</code>, <code>is_active</code></td>
+</tr>
+<tr>
+<td><code>template_sections</code></td>
+<td><code>template_id</code>, <code>name</code>, <code>content</code>, <code>order</code>, <code>condition_type</code>, <code>condition_label</code>, <code>section_type</code>, <code>page_break_after</code>, <code>keep_together</code>, <code>background_image</code>, <code>table_data</code> (jsonb)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="theme"><a href="#theme">Theme</a></h2>
+<p>Platform-admin-only tab. <strong>HotSeaters v1 ships a single theme; dual-theme (light/dark switching) is architected and deferred.</strong> All values persist as a single JSON blob in <code>tenant_firms.theme</code>, applied as CSS custom properties by the root layout.</p>
+<h3 id="behavior"><a href="#behavior">Behavior</a></h3>
+<ul>
+<li>On mount, merges <code>tenant_firms.theme</code> with the bundled default theme (deep-merge per category).</li>
+<li><strong>Save Theme</strong> writes to <code>tenant_firms.theme</code> and invalidates the tenant query so the layout re-renders with new variables.</li>
+<li><strong>Reset All to Defaults</strong> resets local state without persisting.</li>
+<li><strong>Copy Theme Code</strong> (super-admin only) exports the current theme as a JS object for updating bundled defaults.</li>
+</ul>
+<h3 id="theme-cards"><a href="#theme-cards">Theme cards</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Card</th>
+<th>Stored under</th>
+<th>Notable CSS vars</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>HotSeaters Brand Colors</td>
+<td><code>brand.*</code></td>
+<td><code>--theme-brand-primary</code>, <code>--theme-brand-primary-hover</code>, <code>--theme-brand-operations</code>, <code>--theme-brand-emphasis</code>, <code>--theme-brand-accent-warm</code>, <code>--theme-brand-accent-urgent</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>HotSeatHub Brand Colors</td>
+<td><code>hsh.*</code></td>
+<td><code>--theme-hsh-primary</code>, <code>--theme-hsh-primary-hover</code>, <code>--theme-hsh-accent-light</code>, <code>--theme-hsh-background</code>, <code>--theme-hsh-secondary</code>, <code>--theme-hsh-secondary-light</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Semantic Colors</td>
+<td><code>semantic.*</code></td>
+<td><code>--theme-success{,-light}</code>, <code>--theme-warning{,-light}</code>, <code>--theme-danger{,-light}</code>, <code>--theme-info{,-light}</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Page &#x26; Sidebar Background</td>
+<td>—</td>
+<td><code>--theme-page-background</code>, <code>--theme-sidebar-background</code> (supports literal <code>transparent</code>)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Neutral Palette</td>
+<td><code>neutral.*</code></td>
+<td><code>--theme-stone-{50,100,200,500,600,900}</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td>Dialogs</td>
+<td><code>components.dialogs</code></td>
+<td>radius, shadow, border, backgrounds, paddings</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Cards</td>
+<td><code>components.cards</code></td>
+<td>same dimensions as dialogs</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Buttons</td>
+<td><code>components.buttons</code></td>
+<td>radius, shadow, text size, group shadow/background</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Tab Controls</td>
+<td><code>components.buttons.tab*</code></td>
+<td>dedicated styling for Kanban/Cards/List switchers</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Section Headers</td>
+<td><code>components.sectionHeaders</code></td>
+<td>font size, colors, padding, border, spacing</td>
+</tr>
+<tr>
+<td>11</td>
+<td>List Containers</td>
+<td><code>components.listContainers</code></td>
+<td>radius, border, spacing, bg, padding</td>
+</tr>
+<tr>
+<td>12</td>
+<td>List Items</td>
+<td><code>components.listItems</code></td>
+<td>radius, shadow, border, bg, padding</td>
+</tr>
+<tr>
+<td>13</td>
+<td>Form Inputs</td>
+<td><code>components.forms</code></td>
+<td>radius, border, bg</td>
+</tr>
+<tr>
+<td>14</td>
+<td>Spacing &#x26; Layout</td>
+<td><code>spacing.*</code></td>
+<td>page padding (mobile/desktop), max content width, section/card/element gaps</td>
+</tr>
+<tr>
+<td>15</td>
+<td>Typography</td>
+<td><code>typography.*</code></td>
+<td>brand title/subtitle, body, sidebar fonts; 5 text-size tokens; shared <strong>Manage Fonts</strong> modal</td>
+</tr>
+</tbody>
+</table>
+<h3 id="dropdown-option-sets-reference"><a href="#dropdown-option-sets-reference">Dropdown option sets (reference)</a></h3>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Options</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Border radius</td>
+<td><code>0</code> / <code>0.25rem</code> / <code>0.5rem</code> / <code>0.75rem</code> / <code>1rem</code></td>
+</tr>
+<tr>
+<td>Shadow</td>
+<td>None / Subtle / Medium / Strong / Very Strong</td>
+</tr>
+<tr>
+<td>Border width</td>
+<td>0 / 1 / 2 / 3 px</td>
+</tr>
+<tr>
+<td>Spacing</td>
+<td>0.25 / 0.5 / 0.75 / 1 / 1.5 / 2 rem</td>
+</tr>
+<tr>
+<td>Font size</td>
+<td>0.625rem → 2.25rem (9 steps)</td>
+</tr>
+<tr>
+<td>Max width</td>
+<td>64 / 72 / 80 / 96 rem, or 100%</td>
+</tr>
+</tbody>
+</table>
+<p>Each card provides a live preview that updates in real time. See <a href="/user-manual/style-guide">Style Guide</a> for token usage conventions.</p>
+<h2 id="subscription"><a href="#subscription">Subscription</a></h2>
+<p>Owner-only. Stripe-backed subscription management.</p>
+<ul>
+<li><strong>Current plan</strong> — displays <code>tenant_firms.subscription_tier</code> (Single User / Multi-User).</li>
+<li><strong>Billing portal</strong> — opens Stripe's hosted portal via the <code>createPortalSession</code> Edge Function (payment methods, invoice history, plan changes).</li>
+<li><strong>Upgrade</strong> — <code>createUpgradeSession</code> / <code>createCheckoutSession</code> Edge Functions.</li>
+<li><strong>HSH add-on</strong> — toggles <code>has_hsh_addon</code>.</li>
+<li><strong>Seat updates</strong> — <code>updateSubscriptionQuantity</code> for per-seat billing.</li>
+<li><strong>Details</strong> — fetched via <code>getSubscriptionDetails</code>.</li>
+</ul>
+<p>Stripe webhooks authenticate via <strong>HMAC signature verification</strong> (no bearer tokens, no Vercel-specific auth). See <a href="/user-manual/external-integrations">External Integrations</a>.</p>
+<h3 id="legal-policies"><a href="#legal-policies">Legal policies</a></h3>
+<p>Two inline links render the Privacy Policy and Terms of Service in a modal.</p>
+<h2 id="marketplace"><a href="#marketplace">Marketplace</a></h2>
+<p>Owner-only, and only when <code>has_hsh_addon = true</code>. All toggles save immediately.</p>
+<h3 id="feature-toggles"><a href="#feature-toggles">Feature toggles</a></h3>
+<table>
+<thead>
+<tr>
+<th>Toggle</th>
+<th>Column</th>
+<th>When on</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Enable Help Wanted</td>
+<td><code>marketplace_post_jobs</code></td>
+<td>Help Wanted + Favorites nav items become visible; tenant can post <code>hsh_postings</code></td>
+</tr>
+<tr>
+<td>Enable Potential Gigs</td>
+<td><code>marketplace_fill_jobs</code></td>
+<td>Potential Gigs nav item becomes visible; consultants can respond to others' postings</td>
+</tr>
+</tbody>
+</table>
+<h3 id="profit-margin-target"><a href="#profit-margin-target">Profit margin target</a></h3>
+<p>Shown only when Help Wanted is on.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Column</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Margin Type</td>
+<td><code>profit_margin_type</code></td>
+<td><code>percentage</code></td>
+</tr>
+<tr>
+<td>Margin Value</td>
+<td><code>profit_margin_value</code></td>
+<td>10</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Applied payout:</strong> percentage → <code>billing_rate * (1 - margin/100)</code>; dollar → <code>billing_rate - margin_amount</code>.</p>
+<h3 id="decline-notifications"><a href="#decline-notifications">Decline notifications</a></h3>
+<p>Controls bell-menu notifications when subcontractors decline public postings. Stored on <code>user_profiles.preferences</code> (per-user, not tenant-wide).</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Only when they provide a reason (recommended)</td>
+<td><code>with_message_only</code></td>
+</tr>
+<tr>
+<td>All declines (aggregated count)</td>
+<td><code>all</code> + <code>hsh_decline_notification_threshold</code> (default 10)</td>
+</tr>
+<tr>
+<td>No decline notifications</td>
+<td><code>none</code></td>
+</tr>
+</tbody>
+</table>
+<p>When <code>all</code> is selected, a Frequency input appears: "Send notification every [N] declines."</p>
+<h2 id="database"><a href="#database">Database</a></h2>
+<p>Platform-admin-only. Renders a direct entity browser for querying and troubleshooting Supabase records across all tenant tables. Intended for debugging only. Consider this view a read-mostly diagnostic surface; destructive ops go through the Admin tab.</p>
+<h2 id="admin"><a href="#admin">Admin</a></h2>
+<p>Platform-admin-only. Renders the AdminPanel.</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Function</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Company Management</td>
+<td>List all tenants; view user counts, subscription status</td>
+</tr>
+<tr>
+<td>Delete Company</td>
+<td><code>deleteCompanyWithProgress</code> Edge Function — tracked progress across FK-ordered cascades</td>
+</tr>
+<tr>
+<td>Migration Runners</td>
+<td><code>migrateClientTypes</code>, <code>migrateDocumentSends</code>, <code>migrateTrialServiceAssignments</code>, etc. — schema evolution and data backfills</td>
+</tr>
+<tr>
+<td>System Maintenance</td>
+<td><code>cleanupOrphanedAssignments</code>, <code>cleanupOrphanedCompanies</code>, etc.</td>
+</tr>
+</tbody>
+</table>
+<p>All maintenance work runs as Supabase Edge Functions triggered from this UI; scheduled maintenance runs via <code>pg_cron</code>. See <a href="/user-manual/backend-functions">Backend Functions</a>.</p>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/settings/download.md"><code>/user-manual/settings/download.md</code></a>.</p>
+</article>

@@ -1,0 +1,221 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="travel-time">
+<p>HotSeaters lets consultants log billable travel to and from trial locations and reimburse mileage in a single paired workflow. Drive time is billed at a tenant-configurable multiplier of the underlying service rate; miles are reimbursed as an expense. Both sides flow through the same approval queue and land on the client invoice as an ordinary line item with a transparent rate.</p>
+<h2 id="overview"><a href="#overview">Overview</a></h2>
+<p>The Travel Time feature pairs two records for every logged trip:</p>
+<ul>
+<li>A <strong>billable time entry</strong> with <code>is_travel = true</code>, priced at <code>service_rate × travel_rate_multiplier</code>.</li>
+<li>A <strong>mileage expense</strong> with miles captured from Google Maps Directions API.</li>
+</ul>
+<p>Both records share an <code>entry_group_id</code> so the approval workflow and invoice generator treat them as a single reimbursement event. The travel rate multiplier is configured once per tenant in <strong>Settings → Time Tracking</strong> and applied at clock-out.</p>
+<h2 id="data-model"><a href="#data-model">Data Model</a></h2>
+<p>All travel records live on the existing <code>time_entries</code> and <code>expense_entries</code> tables with a small set of travel-specific columns. <code>tenant_id</code> scopes every row and RLS enforces isolation. See <a href="/user-manual/database-schema">Database Schema</a> for full definitions.</p>
+<h3 id="time_entries--travel-columns"><a href="#time_entries--travel-columns"><code>time_entries</code> — travel columns</a></h3>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>is_travel</code></td>
+<td><code>boolean</code></td>
+<td><code>true</code> for travel time entries; <code>false</code> for regular work.</td>
+</tr>
+<tr>
+<td><code>travel_rate_multiplier</code></td>
+<td><code>numeric</code></td>
+<td>Snapshot of the multiplier applied at clock-out (e.g. <code>0.50</code>).</td>
+</tr>
+<tr>
+<td><code>origin_address</code></td>
+<td><code>text</code></td>
+<td>Starting address resolved against Google Maps.</td>
+</tr>
+<tr>
+<td><code>destination_address</code></td>
+<td><code>text</code></td>
+<td>Trial-location address.</td>
+</tr>
+<tr>
+<td><code>miles</code></td>
+<td><code>numeric</code></td>
+<td>Distance returned by the Directions API, rounded to one decimal.</td>
+</tr>
+<tr>
+<td><code>entry_group_id</code></td>
+<td><code>uuid</code></td>
+<td>Links this time entry to its paired mileage <code>expense_entries</code> row.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="expense_entries--travel-columns"><a href="#expense_entries--travel-columns"><code>expense_entries</code> — travel columns</a></h3>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>category</code></td>
+<td><code>text</code></td>
+<td>Set to <code>mileage</code> for travel-linked expenses.</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td><code>numeric</code></td>
+<td><code>miles × tenant.mileage_rate</code> (IRS rate or custom).</td>
+</tr>
+<tr>
+<td><code>origin_address</code></td>
+<td><code>text</code></td>
+<td>Same address as the paired time entry.</td>
+</tr>
+<tr>
+<td><code>destination_address</code></td>
+<td><code>text</code></td>
+<td>Same address as the paired time entry.</td>
+</tr>
+<tr>
+<td><code>miles</code></td>
+<td><code>numeric</code></td>
+<td>Mirrored from the paired time entry.</td>
+</tr>
+<tr>
+<td><code>entry_group_id</code></td>
+<td><code>uuid</code></td>
+<td>Foreign key back to the <code>time_entries</code> row.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tenant-configuration"><a href="#tenant-configuration">Tenant configuration</a></h3>
+<p>Travel multiplier and mileage rate live on <code>tenant_firms</code>:</p>
+<pre><code class="hljs language-sql"><span class="hljs-keyword">alter table</span> tenant_firms
+  <span class="hljs-keyword">add</span> <span class="hljs-keyword">column</span> travel_rate_multiplier <span class="hljs-type">numeric</span> <span class="hljs-keyword">default</span> <span class="hljs-number">0.50</span>,
+  <span class="hljs-keyword">add</span> <span class="hljs-keyword">column</span> mileage_rate <span class="hljs-type">numeric</span> <span class="hljs-keyword">default</span> <span class="hljs-number">0.67</span>;
+</code></pre>
+<p>Owners and admins edit these in <strong>Settings → Time Tracking</strong> (see <a href="/user-manual/settings">Settings</a>).</p>
+<h2 id="google-maps-directions-api"><a href="#google-maps-directions-api">Google Maps Directions API</a></h2>
+<p>The Directions API is the single source of truth for both distance and estimated drive time. Calls happen server-side from a Supabase Edge Function; the client never sees the API key.</p>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// supabase/functions/resolve-travel/index.ts</span>
+<span class="hljs-keyword">const</span> params = <span class="hljs-keyword">new</span> <span class="hljs-title class_">URLSearchParams</span>({
+  <span class="hljs-attr">origin</span>: originAddress,
+  <span class="hljs-attr">destination</span>: destinationAddress,
+  <span class="hljs-attr">mode</span>: <span class="hljs-string">"driving"</span>,
+  <span class="hljs-attr">departure_time</span>: <span class="hljs-string">"now"</span>,
+  <span class="hljs-attr">key</span>: <span class="hljs-title class_">Deno</span>.<span class="hljs-property">env</span>.<span class="hljs-title function_">get</span>(<span class="hljs-string">"GOOGLE_MAPS_API_KEY"</span>)!,
+});
+
+<span class="hljs-keyword">const</span> res = <span class="hljs-keyword">await</span> <span class="hljs-title function_">fetch</span>(
+  <span class="hljs-string">`https://maps.googleapis.com/maps/api/directions/json?<span class="hljs-subst">${params}</span>`</span>,
+);
+<span class="hljs-keyword">const</span> data = <span class="hljs-keyword">await</span> res.<span class="hljs-title function_">json</span>();
+<span class="hljs-keyword">const</span> leg = data.<span class="hljs-property">routes</span>[<span class="hljs-number">0</span>]?.<span class="hljs-property">legs</span>[<span class="hljs-number">0</span>];
+
+<span class="hljs-keyword">return</span> {
+  <span class="hljs-attr">miles</span>: leg.<span class="hljs-property">distance</span>.<span class="hljs-property">value</span> / <span class="hljs-number">1609.344</span>,
+  <span class="hljs-attr">estimatedDriveMinutes</span>: leg.<span class="hljs-property">duration</span>.<span class="hljs-property">value</span> / <span class="hljs-number">60</span>,
+};
+</code></pre>
+<p>See <a href="/user-manual/external-integrations">External Integrations</a> for key rotation and quota notes.</p>
+<h2 id="workflow"><a href="#workflow">Workflow</a></h2>
+<h3 id="1-consultant-starts-a-travel-entry"><a href="#1-consultant-starts-a-travel-entry">1. Consultant starts a travel entry</a></h3>
+<p>From the time clock, the consultant picks <strong>Travel Time</strong> for an assigned trial service. The UI asks for origin and destination addresses (pre-filled from the trial site when available). The Edge Function resolves miles and drive estimate on submit.</p>
+<h3 id="2-clock-out-creates-paired-records"><a href="#2-clock-out-creates-paired-records">2. Clock-out creates paired records</a></h3>
+<p>At clock-out, HotSeaters:</p>
+<ol>
+<li>Reads <code>tenant_firms.travel_rate_multiplier</code> and snapshots it onto the time entry.</li>
+<li>Computes <code>rate = assigned_service.rate × travel_rate_multiplier</code>.</li>
+<li>Inserts the time entry with <code>is_travel = true</code>, <code>status = 'pending'</code>, and a fresh <code>entry_group_id</code>.</li>
+<li>Inserts the paired mileage expense with the same <code>entry_group_id</code>.</li>
+</ol>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">const</span> groupId = crypto.<span class="hljs-title function_">randomUUID</span>();
+<span class="hljs-keyword">const</span> rate = service.<span class="hljs-property">rate</span> * tenant.<span class="hljs-property">travel_rate_multiplier</span>;
+
+<span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">"time_entries"</span>).<span class="hljs-title function_">insert</span>({
+  <span class="hljs-attr">tenant_id</span>: tenant.<span class="hljs-property">id</span>,
+  <span class="hljs-attr">trial_service_id</span>: service.<span class="hljs-property">id</span>,
+  <span class="hljs-attr">is_travel</span>: <span class="hljs-literal">true</span>,
+  <span class="hljs-attr">travel_rate_multiplier</span>: tenant.<span class="hljs-property">travel_rate_multiplier</span>,
+  <span class="hljs-attr">origin_address</span>: origin,
+  <span class="hljs-attr">destination_address</span>: destination,
+  miles,
+  <span class="hljs-attr">duration_hours</span>: durationHours,
+  rate,
+  <span class="hljs-attr">amount</span>: durationHours * rate,
+  <span class="hljs-attr">entry_group_id</span>: groupId,
+  <span class="hljs-attr">status</span>: <span class="hljs-string">"pending"</span>,
+});
+
+<span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">"expense_entries"</span>).<span class="hljs-title function_">insert</span>({
+  <span class="hljs-attr">tenant_id</span>: tenant.<span class="hljs-property">id</span>,
+  <span class="hljs-attr">trial_service_id</span>: service.<span class="hljs-property">id</span>,
+  <span class="hljs-attr">category</span>: <span class="hljs-string">"mileage"</span>,
+  <span class="hljs-attr">origin_address</span>: origin,
+  <span class="hljs-attr">destination_address</span>: destination,
+  miles,
+  <span class="hljs-attr">amount</span>: miles * tenant.<span class="hljs-property">mileage_rate</span>,
+  <span class="hljs-attr">entry_group_id</span>: groupId,
+  <span class="hljs-attr">status</span>: <span class="hljs-string">"pending"</span>,
+});
+</code></pre>
+<h3 id="3-approval"><a href="#3-approval">3. Approval</a></h3>
+<p>Both records enter the standard <code>approval_workflows</code> queue. Approvers see the time entry and mileage expense grouped by <code>entry_group_id</code>. Approving or rejecting one side prompts the approver to act on the other; rejections cascade within the group so a trip never ends up half-approved. See <a href="/user-manual/approvals">Approvals</a>.</p>
+<h3 id="4-invoicing"><a href="#4-invoicing">4. Invoicing</a></h3>
+<p>On the client invoice:</p>
+<ul>
+<li>The <strong>time entry</strong> appears as a normal line with the parent service name, the travel rate, and the consultant's notes.</li>
+<li>The <strong>mileage expense</strong> appears under reimbursable expenses at the tenant mileage rate.</li>
+</ul>
+<p>No special grouping on the invoice itself — clarity comes from the rate and description. See <a href="/user-manual/billing">Billing</a>.</p>
+<h2 id="settings--time-tracking"><a href="#settings--time-tracking">Settings → Time Tracking</a></h2>
+<p>Configurable per tenant:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>travel_rate_multiplier</code></td>
+<td><code>0.50</code></td>
+<td>Applied to service rate for travel time.</td>
+</tr>
+<tr>
+<td><code>mileage_rate</code></td>
+<td><code>0.67</code></td>
+<td>USD per mile. IRS business rate used as default.</td>
+</tr>
+<tr>
+<td><code>require_addresses</code></td>
+<td><code>true</code></td>
+<td>Forces origin/destination entry before clock-out.</td>
+</tr>
+<tr>
+<td><code>round_miles_to</code></td>
+<td><code>0.1</code></td>
+<td>Display/storage precision.</td>
+</tr>
+</tbody>
+</table>
+<p>Editing <code>travel_rate_multiplier</code> affects only future entries — existing rows keep their snapshot. See <a href="/user-manual/time-clock-workflows">Time Clock Workflows</a> and <a href="/user-manual/expense-workflows">Expense Workflows</a>.</p>
+<h2 id="hsh-subcontractor-travel"><a href="#hsh-subcontractor-travel">HSH Subcontractor Travel</a></h2>
+<p>When the subcontractor logs travel on an HSH assignment, HotSeaters writes two linked pairs — one in the subcontractor's tenant, one in the hiring firm's — each with its own <code>entry_group_id</code>. The subcontractor pair uses the agreed subcontract rate; the hiring-firm pair uses the hiring tenant's service rate. Both apply the same <code>travel_rate_multiplier</code> from their respective tenants. See <a href="/user-manual/external-integrations">External Integrations</a> for HSH mirroring rules.</p>
+<h2 id="validation-rules"><a href="#validation-rules">Validation Rules</a></h2>
+<ul>
+<li><code>origin_address</code> and <code>destination_address</code> are required when <code>is_travel = true</code>.</li>
+<li><code>miles ≥ 0</code> on both paired records; values must match exactly.</li>
+<li><code>travel_rate_multiplier</code> is snapshotted at clock-out — never recomputed from tenant settings after the fact.</li>
+<li>A travel time entry must have a matching <code>expense_entries</code> row with the same <code>entry_group_id</code>, or the approval workflow will flag it.</li>
+</ul>
+<h2 id="download"><a href="#download">Download</a></h2>
+<p><a href="/user-manual/travel-time/download.md"><code>/user-manual/travel-time/download.md</code></a></p>
+</article>

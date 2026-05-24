@@ -1,0 +1,131 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="time-tracking">
+<h1 id="time-tracking"><a href="#time-tracking">Time Tracking</a></h1>
+<p>The Time Tracking page is a multi-tab data-entry surface for logging billable time, reviewing entries, managing expenses and reports, and requesting time off. Approvals live on the dedicated <a href="/user-manual/approvals">Approvals</a> page, and invoice creation lives on <a href="/user-manual/billing">Billing</a>.</p>
+<p>All data is persisted in the Supabase <code>time_entries</code> and <code>expense_entries</code> tables, scoped by <code>tenant_id</code>. Receipt extraction runs in the <code>extract-receipt</code> Edge Function. The active tab is persisted to <code>user_profiles.preferences.myWorkHubTab</code>. Related: <a href="/user-manual/time-clock-workflows">Time Clock Workflows</a>, <a href="/user-manual/expense-workflows">Expense Workflows</a>, <a href="/user-manual/travel-time">Travel Time</a>, <a href="/user-manual/auto-expense-reporting">Auto Expense Reporting</a>.</p>
+<h2 id="tab-1--time-clock"><a href="#tab-1--time-clock">Tab 1 — Time Clock</a></h2>
+<p>Real-time timer interface. Features:</p>
+<ul>
+  <li>Pick a trial, then a service, to start the timer. Only trials and services the user is assigned to (via <code>assignments</code>) are listed.</li>
+  <li>HSH subcontract gigs appear as separate purple-themed entries.</li>
+  <li><strong>Start</strong> creates an in-progress <code>time_entries</code> row. <strong>Stop</strong> finalizes it with end time, duration, rate, and amount. <strong>Cancel</strong> deletes the in-progress row.</li>
+  <li>Time rounding is applied on clock-in and clock-out per tenant settings (<em>nearest</em>, <em>up</em>, or <em>down</em>).</li>
+  <li>Manual-entry mode captures time after the fact (start time, end time, description).</li>
+  <li>For HSH work, creates bidirectional linked entries: <code>entry_type = 'subcontractor'</code> in the subcontractor's tenant and <code>entry_type = 'hiring_company'</code> in the hiring tenant. The pair is joined by <code>linked_time_entry_id</code>.</li>
+  <li>Supabase Realtime subscriptions update the UI without polling.</li>
+  <li>The tenant setting <code>hide_deals_from_time_clock</code> suppresses deal-stage trials from the dropdown.</li>
+</ul>
+<h2 id="tab-2--time-table"><a href="#tab-2--time-table">Tab 2 — Time Table</a></h2>
+<p>Spreadsheet view of time entries with KPI cards for Today, This Week, This Month, and Pending Approval hours.</p>
+<h3 id="date-filter"><a href="#date-filter">Date filter</a></h3>
+<p>Dropdown presets: Today, This Week, This Month, Last Week, Last Month, This Year, Last Year, and Custom (opens a dual-month range calendar picker). Filters all rendered entries to the selected range.</p>
+<h3 id="group-by-toggles-owner--admin-only"><a href="#group-by-toggles-owner--admin-only">Group-by toggles (owner / admin only)</a></h3>
+<p>Three independent switches that compose hierarchically (Team → Trial → Person). Each is persisted to <code>user_profiles.preferences.time_tracking</code>:</p>
+<ul>
+  <li><strong>Group by Team</strong> (<code>groupByTeamSpreadsheet</code>) — Visible only when <code>tenant_firms.marketplace_post_jobs</code> is enabled. When ON, splits the spreadsheet into two bordered sections:
+    <ul>
+      <li><strong>"[Tenant Name] Team"</strong> — Regular and subcontractor entries where <code>tenant_id</code> matches.</li>
+      <li><strong>"HotSeatHub Subcontractors"</strong> — <code>hiring_company</code> entries (work performed by external subcontractors for your tenant), with names and photos resolved from the HSH contract.</li>
+    </ul>
+    When OFF, everything collapses into a single "All Team Members" section.
+  </li>
+  <li><strong>Group by Trial</strong> (<code>groupByTrialSpreadsheet</code>) — Within each team section, entries are grouped under collapsible trial headers showing case name and per-trial totals.</li>
+  <li><strong>Group by Person</strong> (<code>groupByPersonSpreadsheet</code>) — Within each team / trial section, entries are grouped under collapsible person headers with photo and per-person totals.</li>
+</ul>
+<h3 id="additional-controls"><a href="#additional-controls">Additional controls</a></h3>
+<ul>
+  <li><strong>My Time / All Time</strong> — Owner / admin only. "My Time" filters to rows where <code>consultant_id</code> matches the current user; "All Time" shows all tenant entries.</li>
+  <li><strong>+ Time Entry</strong> — Opens a manual-entry row inline at the top of the spreadsheet.</li>
+  <li>Editable inline cells for start time, end time, description, and rate.</li>
+  <li>Approve / Reject / Reset actions per row (owner / admin) and bulk selection with Select All and batch actions.</li>
+  <li>Status color coding: pending (yellow), approved (green), rejected (red), billed (blue).</li>
+  <li>HSH entries render subcontractor names resolved from the linked HSH contract snapshot.</li>
+</ul>
+<h3 id="approval-mode-vs-spreadsheet-mode"><a href="#approval-mode-vs-spreadsheet-mode">Approval mode vs. spreadsheet mode</a></h3>
+<p>The same spreadsheet component is shared with the Approvals page (<code>approvalMode = true</code>). In approval mode:</p>
+<ul>
+  <li>Group by Team splits into three sections: Internal Team, HotSeatHub Subcontractors, and HotSeatHub Assignments (your consultants' entries written into other tenants' books).</li>
+  <li>Each section has its own Select All button for bulk operations.</li>
+  <li>A bulk action bar appears when rows are selected: Approve, Reject, Reset to Pending, Clear.</li>
+</ul>
+<h2 id="tab-3--expenses"><a href="#tab-3--expenses">Tab 3 — Expenses</a></h2>
+<p>Expense management with KPI cards for This Month, Pending Reimbursement, and Unbilled totals.</p>
+<h3 id="expense-list"><a href="#expense-list">Expense list</a></h3>
+<p>The expense list reuses the same component as the Approvals page:</p>
+<ul>
+  <li><strong>Status filter tabs</strong> — All, Pending, Approved, Rejected, Billed, Reimbursed.</li>
+  <li><strong>Date filter</strong> — Today, This Week, This Month, Last Week, Last Month, This Year, Last Year, Custom.</li>
+  <li><strong>Group by Team / Trial / Person</strong> — Three independent toggles, composed hierarchically. Person defaults to ON. Preferences persist to <code>user_profiles.preferences</code>.</li>
+  <li><strong>Search</strong> — Filters by description or category.</li>
+  <li><strong>My Expenses / All Expenses</strong> — Owner / admin can view tenant-wide expenses.</li>
+  <li><strong>Add Expense</strong> — Opens the expense wizard.</li>
+  <li>Expense tables use fixed layout with explicit column widths so receipt and mileage rows align cleanly.</li>
+  <li>Each row shows checkbox, date, person (when not grouped), trial / client (when not grouped), description, category badge, amount, receipt icon (opens the document viewer dialog), and edit / delete buttons.</li>
+  <li>Edit and Delete are only available while the expense is in <code>pending</code> status. Deleting an HSH-linked expense also deletes its bidirectional counterpart.</li>
+</ul>
+<h3 id="add-expense-wizard"><a href="#add-expense-wizard">Add Expense wizard</a></h3>
+<p>A two-step flow that branches on expense type.</p>
+<h4 id="step-1--type-selection-and-data-capture"><a href="#step-1--type-selection-and-data-capture">Step 1 — type selection and data capture</a></h4>
+<ul>
+  <li><strong>Receipt mode</strong> — Drag-and-drop upload zone accepting images and PDFs; on mobile the same control triggers the camera or file picker. On upload:
+    <ol>
+      <li>The file is stored in Supabase Storage.</li>
+      <li>For images, an Edge Function straightens, crops, and cleans the photo to produce a scan-quality image.</li>
+      <li>The <code>extract-receipt</code> Edge Function calls the configured AI provider to extract amount, date (YYYY-MM-DD), description, category (one of the eight predefined values), and merchant name.</li>
+      <li>On success a toast confirms the extraction and advances to Step 2 with fields pre-filled.</li>
+    </ol>
+  </li>
+  <li><strong>Mileage mode</strong> — Two address inputs with Google Places autocomplete:
+    <ul>
+      <li><strong>Start Address</strong> (green pin) — Place names, street addresses, or business names; biased to the user's detected location.</li>
+      <li><strong>End Address</strong> (red pin) — Biased toward the start address.</li>
+      <li><strong>Current IRS rate</strong> display (2025 standard mileage rate).</li>
+      <li><strong>Calculate Route</strong> — Calls the <code>calculate-route</code> Edge Function which uses the Google Maps Directions API to compute distance and generate a static map image. Returns miles, duration, and map URL.</li>
+    </ul>
+  </li>
+</ul>
+<h4 id="step-2--expense-form"><a href="#step-2--expense-form">Step 2 — expense form</a></h4>
+<p>A three-column form pre-filled from Step 1:</p>
+<ul>
+  <li><strong>Column 1 — Receipt / map preview</strong>: receipt image with rotate (90° L/R), View Full Size, Remove, Retry Image Processing, and Retry Data Extraction; or the Google Maps static route with start / end pins, distance, and IRS rate.</li>
+  <li><strong>Column 2 — Core details</strong>: amount (auto-computed for mileage = miles × IRS rate, editable for receipts), date, Paid To (receipts, required), Miles (mileage, editable; amount recalculates live), description (required).</li>
+  <li><strong>Column 3 — Classification</strong>: category (travel, meals, lodging, materials, equipment, software, parking, other; locked to "travel" for mileage), trial selector (owner/admin sees all operations-stage trials; others see only trials they are assigned to — client is derived from the trial), and Reimbursable / Billable to Client toggles (default ON).</li>
+</ul>
+<p>Validation requires amount > 0, description, trial, and either <code>paid_to</code> (receipt) or <code>miles</code> (mileage). For mileage, the static map URL is saved in <code>receipt_url</code> so it shows in receipt previews.</p>
+<h3 id="hsh-bidirectional-expenses"><a href="#hsh-bidirectional-expenses">HSH bidirectional expenses</a></h3>
+<p>When the wizard is opened from an HSH subcontract context, submitting creates two linked <code>expense_entries</code> rows — one in the subcontractor's tenant (<code>entry_type = 'subcontractor'</code>) and one in the hiring tenant (<code>entry_type = 'hiring_company'</code>) — joined via <code>linked_expense_id</code>. Deleting either row deletes its counterpart.</p>
+<h2 id="tab-4--expense-reports"><a href="#tab-4--expense-reports">Tab 4 — Expense Reports</a></h2>
+<p>Read-only view of generated expense reports for the current user (owner / admin see all with an All / Mine toggle). Each card shows report number, period, consultant, expense count, total, and status. Click to view or download the generated PDF. Consultants cannot modify or delete reports. Reports are generated by admins from the <a href="/user-manual/billing">Billing</a> page during period close.</p>
+<h2 id="tab-5--time-off"><a href="#tab-5--time-off">Tab 5 — Time Off</a></h2>
+<p>Time-off request management. Uses a standalone entity with its own approval workflow, independent from time and expense approvals.</p>
+<h3 id="consultant-view"><a href="#consultant-view">Consultant view</a></h3>
+<ul>
+  <li><strong>Request Time Off</strong> — Leave type (Vacation, Sick Leave, Personal Day, Other), date range, optional notes.</li>
+  <li><strong>View own requests</strong> — Filtered to the current user by default.</li>
+  <li><strong>Delete</strong> — Consultants can delete their own pending requests.</li>
+  <li><strong>Status tracking</strong> — Pending / Approved / Denied per request.</li>
+</ul>
+<h3 id="owner--admin-view"><a href="#owner--admin-view">Owner / admin view</a></h3>
+<ul>
+  <li><strong>Show Mine / Show All</strong> — View tenant-wide requests.</li>
+  <li><strong>Approve / Deny</strong> — Available on any pending request that isn't their own.</li>
+  <li><strong>Delete</strong> — Admins can delete any request regardless of status.</li>
+  <li><strong>Pending badge</strong> — Tab header shows pending request count from other consultants.</li>
+</ul>
+<h3 id="special-rules"><a href="#special-rules">Special rules</a></h3>
+<ul>
+  <li><strong>Owner auto-approval</strong> — When the tenant owner creates a request, it is automatically Approved.</li>
+  <li><strong>Cannot self-approve</strong> — Admins cannot approve or deny their own requests.</li>
+  <li><strong>Year filter</strong> — Requests are filtered by year based on <code>start_date</code>.</li>
+  <li><strong>Timeline integration</strong> — Approved time-off renders as a colored bar behind the consultant row on the [Schedule](/user-manual/schedule) Gantt.</li>
+</ul>
+<h2 id="entity-mappings"><a href="#entity-mappings">Entity mappings</a></h2>
+<ul>
+  <li><code>TimeEntry</code> → <code>time_entries</code></li>
+  <li><code>Expense</code> → <code>expense_entries</code></li>
+  <li><code>TrialServiceAssignment</code> → <code>assignments</code></li>
+  <li><code>UserInfo</code> → <code>user_profiles</code> + <code>user_roles</code></li>
+  <li><code>company_id</code> → <code>tenant_id</code> (enforced by RLS on every query)</li>
+</ul>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/time-tracking/download.md"><code>/user-manual/time-tracking/download.md</code></a>.</p>
+</article>

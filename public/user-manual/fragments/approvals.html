@@ -1,0 +1,59 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="approvals">
+<h1 id="approvals"><a href="#approvals">Approvals</a></h1>
+<p>The <strong>Approvals</strong> page is a dedicated hub for owners and admins to review, approve, reject, or reset time entries and expenses submitted by their team. It supports bulk actions, status filtering, and group-by toggles across two tabs: <strong>Approve Time</strong> and <strong>Approve Expenses</strong>. The active tab is persisted per user so the page reopens where it was left.</p>
+<p>All data is scoped by <code>tenant_id</code> in Supabase. Entries are drawn from <code>time_entries</code> and <code>expense_entries</code>, and approval state lives on those records (<code>status</code>, <code>approved_by</code>, <code>approved_at</code>, <code>rejection_reason</code>). Related surfaces: <a href="/user-manual/time-tracking">Time Tracking</a>, <a href="/user-manual/time-clock-workflows">Time Clock Workflows</a>, <a href="/user-manual/expense-workflows">Expense Workflows</a>, <a href="/user-manual/billing">Billing</a>, <a href="/user-manual/collections">Collections</a>.</p>
+<h2 id="summary-panel"><a href="#summary-panel">Summary Panel</a></h2>
+<p>An informational strip at the top of the page gives admins an at-a-glance view of their approval workload. It never gates or blocks actions.</p>
+<ul>
+<li><strong>Current billing cycle entries</strong> — count of pending time entries and expenses whose dates fall within the current billing period. The period is derived from the tenant's <code>invoice_period</code> setting (weekly uses <code>weekly_billing_day</code>; monthly uses <code>monthly_billing_date</code>).</li>
+<li><strong>Straggler entries</strong> — count of pending items whose dates fall <em>before</em> the current billing period. These are shown with a distinct warning treatment so older items can be prioritized first.</li>
+<li>The panel auto-refreshes as items are approved or rejected below, and counts every entry type (regular, subcontractor, hiring_company mirror).</li>
+<li>Approved and billed items are excluded — only pending and rejected entries are counted.</li>
+</ul>
+<h2 id="page-header"><a href="#page-header">Page Header</a></h2>
+<p>Title "Approvals" with the subtitle "Review and approve time entries and expenses". Two tabs — <strong>Approve Time</strong> and <strong>Approve Expenses</strong> — each show a pending-count badge. The active tab is persisted to the user's profile preferences and restored on reload.</p>
+<h2 id="tab-1-approve-time"><a href="#tab-1-approve-time">Tab 1: Approve Time</a></h2>
+<p>Renders the shared time spreadsheet in <strong>approval mode</strong>. All tenant time entries are loaded sorted by <code>-start_time</code>.</p>
+<h3 id="status-filter"><a href="#status-filter">Status Filter</a></h3>
+<p>Five options: <strong>All</strong>, <strong>Pending</strong>, <strong>Approved</strong>, <strong>Rejected</strong>, <strong>Billed</strong>. Client-side filtering is applied before rendering. The selection is persisted per user.</p>
+<h3 id="date-filter"><a href="#date-filter">Date Filter</a></h3>
+<p>Preset ranges (today, this week, last week, this month, custom) passed into the spreadsheet. Defaults to <strong>This Week</strong> and is persisted per user.</p>
+<h3 id="group-by-toggles"><a href="#group-by-toggles">Group-By Toggles</a></h3>
+<p>Three independent toggles, each persisted per user:</p>
+<ul>
+<li><strong>Group by Person</strong> — default off.</li>
+<li><strong>Group by Team</strong> — default on. When enabled in approval mode, entries split into three sections: <strong>Internal Team</strong>, <strong>HotSeatHub Subcontractors</strong> (inbound work by external firms), and <strong>HotSeatHub Assignments</strong> (your own consultants' entries that have been mirrored into other tenants, shown read-only).</li>
+<li><strong>Group by Trial</strong> — default off.</li>
+</ul>
+<p>Toggles compose hierarchically; toggle changes are written optimistically to the query cache.</p>
+<h3 id="approval-actions"><a href="#approval-actions">Approval Actions</a></h3>
+<ul>
+<li><strong>Approve</strong> — sets <code>status='approved'</code>, records <code>approved_by</code> (current user) and <code>approved_at</code> (ISO timestamp). For <code>hiring_company</code> mirror entries, the change is synced to the linked subcontractor entry via <code>linked_time_entry_id</code>.</li>
+<li><strong>Reject</strong> — sets <code>status='rejected'</code> with a <code>rejection_reason</code> captured from a prompt dialog. Also synced to the linked HSH entry.</li>
+<li><strong>Reset to Pending</strong> — sets <code>status='pending'</code> and clears <code>approved_by</code>, <code>approved_at</code>, and <code>rejection_reason</code>. Optimistic updates with rollback on error, synced across HSH links.</li>
+<li><strong>Bulk actions</strong> — when rows are selected, a bulk action bar offers Approve, Reject, Reset to Pending, and Clear. All selected entries are processed in parallel.</li>
+<li><strong>Inline edit</strong> — start time, end time, description, and rate can be edited inline. For <code>hiring_company</code> entries, edits to <code>start_time</code>, <code>end_time</code>, <code>duration_hours</code>, and <code>description</code> are synced in both directions across the HSH link.</li>
+</ul>
+<h2 id="tab-2-approve-expenses"><a href="#tab-2-approve-expenses">Tab 2: Approve Expenses</a></h2>
+<p>Renders the expense approval grid. All tenant expenses are loaded sorted by <code>-date</code>.</p>
+<h3 id="status-filter-1"><a href="#status-filter-1">Status Filter</a></h3>
+<p>Six options: <strong>All</strong>, <strong>Pending</strong>, <strong>Approved</strong>, <strong>Rejected</strong>, <strong>Billed</strong>, <strong>Reimbursed</strong>. Persisted per user.</p>
+<h3 id="date-filter-1"><a href="#date-filter-1">Date Filter</a></h3>
+<p>Same preset set as the time tab, persisted per user.</p>
+<h3 id="group-by-toggles-1"><a href="#group-by-toggles-1">Group-By Toggles</a></h3>
+<p>Three independent switches, composable in any permutation:</p>
+<ul>
+<li><strong>Group by Team</strong> — splits expenses into a <code>[Tenant Name] Team</code> section and a <code>HotSeatHub Subcontractors</code> section based on the consultant's tenant.</li>
+<li><strong>Group by Trial</strong> — collapsible trial headers showing case name, count, and total.</li>
+<li><strong>Group by Person</strong> — collapsible person headers showing name, count, and total. Defaults on.</li>
+</ul>
+<p>Toggles compose hierarchically: Team → Trial → Person. Enabling all three yields Team → Trial → Person → individual rows.</p>
+<h3 id="expense-display"><a href="#expense-display">Expense Display</a></h3>
+<p>Expense tables use fixed-width columns for consistent alignment across receipt and mileage types. Each row shows a selection checkbox, date, person, trial/client, description, category badge, amount, receipt indicator, and edit/delete actions. Clicking the receipt icon opens the in-app document viewer (not a new tab).</p>
+<h2 id="data-loading"><a href="#data-loading">Data Loading</a></h2>
+<p>The page fetches these entities in parallel, all scoped by <code>tenant_id</code>: <code>time_entries</code>, <code>expense_entries</code>, <code>trials</code>, <code>client_firms</code>, <code>service_types</code>, <code>trial_services</code>, the current tenant record, <code>deal_stages</code>, <code>hsh_contracts</code> where the current tenant is the hiring party, and the consultant roster. Queries only run when the user is owner or admin.</p>
+<h2 id="role-visibility"><a href="#role-visibility">Role Visibility</a></h2>
+<p>Accessible only to <strong>Owner</strong> and <strong>Admin</strong> roles. The sidebar item is hidden from Sales and Trial Consultant users, and the underlying queries are gated by the same role check.</p>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/approvals/download.md"><code>/user-manual/approvals/download.md</code></a>.</p>
+</article>

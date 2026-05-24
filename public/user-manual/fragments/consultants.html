@@ -1,0 +1,78 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="consultants">
+<h1 id="consultants"><a href="#consultants">Consultants</a></h1>
+<p>The Consultants page manages team members, their roles, consultant tiers, service qualifications, invitation state, and Google Calendar connections. It is the primary surface for inviting new users into a tenant and keeping who-does-what accurate.</p>
+<p>All data is persisted in the Supabase <code>user_profiles</code>, <code>user_roles</code>, <code>consultant_tiers</code>, and <code>service_qualifications</code> tables, scoped by <code>tenant_id</code>. Invitations are sent through Supabase Auth plus a Resend email that points to <code>/accept-invite</code>. Related: <a href="/user-manual/settings">Settings</a>, <a href="/user-manual/database-schema">Database Schema</a>, <a href="/user-manual/notification-system">Notification System</a>.</p>
+<h2 id="header-controls"><a href="#header-controls">Header controls</a></h2>
+<p>Title "Team" with a "Manage your team members" subtitle.</p>
+<ul>
+  <li><strong>Invite Team Member</strong> — Visible to owner and admin when <code>tenant_firms.subscription_tier = 'multi_user'</code>. Opens the inline invite form.</li>
+  <li><strong>Single-user upgrade notice</strong> — If <code>subscription_tier = 'single_user'</code>, owner and admin see an amber card prompting upgrade to the Multi-User plan with pricing info and a link to the Pricing page.</li>
+</ul>
+<h2 id="invite-form"><a href="#invite-form">Invite form</a></h2>
+<p>Inline card form:</p>
+<ul>
+  <li><strong>First Name / Last Name</strong> — Optional; pre-fills the invitation record.</li>
+  <li><strong>Email Address</strong> — Required; the invitation email is sent here.</li>
+  <li><strong>Role</strong> — Admin, Sales, or Trial Consultant.</li>
+  <li><strong>Team Member Tier</strong> — Populated from active <code>consultant_tiers</code> rows (shows name and multiplier).</li>
+</ul>
+<p>Submitting calls the <code>invite-team-member</code> Edge Function which:</p>
+<ol>
+  <li>Creates a pending invitation row (tenant_id, email, name, role, consultant_tier_id, token, invited_by).</li>
+  <li>Issues a Supabase Auth invite for that email.</li>
+  <li>Sends a Resend email with the invitation link pointing at <code>/accept-invite</code>.</li>
+</ol>
+<p>Cancel clears and closes the form.</p>
+<h3 id="coexistence-with-oauth-sub-user-approval"><a href="#coexistence-with-oauth-sub-user-approval">Coexistence with OAuth sub-user approval</a></h3>
+<p>If a new user signs in via OAuth before their invitation is accepted, the invitation email acts as the linking token — the OAuth account is matched to the pending row on accept, the role and tier are applied, and the user lands in the tenant. Owner and admin still see the pending entry in the Pending Invitations panel until it is accepted or cancelled.</p>
+<h2 id="filter-bar"><a href="#filter-bar">Filter bar</a></h2>
+<ul>
+  <li><strong>Search</strong> — Filters by first name, last name, or email (case-insensitive).</li>
+  <li><strong>List / Card toggle</strong> — Animated pill toggle. Persisted to <code>user_profiles.preferences.teamViewType</code>. Default: card.</li>
+  <li><strong>Active / Inactive switch</strong> — Owner and admin only. When toggled to Inactive, shows only consultants where <code>is_active = false</code>.</li>
+</ul>
+<h2 id="consultant-groups"><a href="#consultant-groups">Consultant groups</a></h2>
+<p>Consultants are grouped into collapsible sections:</p>
+<ul>
+  <li><strong>By Consultant Tier</strong> — Each tier gets its own section with a colored bar, tier name, multiplier (e.g. ×1.0), and member count. The header is clickable to collapse. Members are sorted alphabetically by last name, then first name.</li>
+  <li><strong>HotSeatHub Favorites</strong> — Favorited subcontractor consultants from other tenants, resolved from the favorites network. Rendered read-only with the HSH primary color.</li>
+  <li><strong>No Tier</strong> — Consultants without a <code>consultant_tier_id</code>. Uses a neutral-colored bar.</li>
+</ul>
+<h2 id="consultant-card--row"><a href="#consultant-card--row">Consultant card / row</a></h2>
+<p>Each consultant renders as a card (grid) or a list row depending on <code>teamViewType</code>. Both show:</p>
+<ul>
+  <li>Profile photo, or a gradient initials avatar with first + last initials.</li>
+  <li>Full name, title (italic), email, phone (formatted).</li>
+  <li>Assigned services list — resolved from <code>service_qualifications</code>, sorted by category and service order.</li>
+  <li>Tier badge, color-coded by multiplier — purple for ≥ 1.2, blue for ≥ 1.0, green otherwise.</li>
+  <li>Role badge — Owner, Admin, Sales, or Trial Consultant.</li>
+  <li>Google Calendar status badge — Connected, Expired, Checking, or No Calendar. Health is checked per consultant via an Edge Function on mount.</li>
+  <li>Inactive badge — shown when <code>is_active = false</code>; the card renders at 60% opacity.</li>
+</ul>
+<p>Click behavior: owner and admin open the form in edit mode; own profile opens in edit mode; other users see the form in read-only mode.</p>
+<h2 id="consultant-form"><a href="#consultant-form">Consultant form</a></h2>
+<p>Inline edit form that replaces the list or grid. Fields depend on permissions:</p>
+<ul>
+  <li><strong>All users editing own profile</strong> — First name, last name, phone, title, profile photo upload, signature image upload.</li>
+  <li><strong>Owner / admin editing any member</strong> — All of the above, plus role dropdown (Admin / Sales / Trial Consultant — cannot change own role), tier dropdown, service qualification checkboxes (grouped by service category, sorted by category and service order), active / inactive status, and Google Calendar connect / disconnect.</li>
+  <li><strong>Read-only mode</strong> — All fields displayed as text with no edit controls; shown when a non-admin views another member.</li>
+  <li><strong>Deactivate</strong> — Available in the form for owner and admin.</li>
+  <li><strong>Reactivate</strong> — Available for inactive members.</li>
+</ul>
+<p>On save, updates <code>user_profiles</code> and replaces the consultant's <code>service_qualifications</code> rows (deletes existing, bulk-inserts the newly selected <code>service_id</code> values). Non-admins editing their own profile can only update personal fields — role, tier, status, and qualifications are preserved from the original data.</p>
+<h2 id="pending-invitations"><a href="#pending-invitations">Pending invitations</a></h2>
+<p>A yellow card above the team list showing all pending invitations for the current tenant. Each row shows name (or email when no name is set), email, role badge, and a red Cancel button that deletes the invitation and revokes the Supabase Auth invite.</p>
+<h2 id="deactivation-flow"><a href="#deactivation-flow">Deactivation flow</a></h2>
+<p>An alert dialog titled "Deactivate Team Member" explains that historical data (time entries, expenses) is preserved. Confirming sets <code>user_profiles.is_active = false</code>. The member disappears from the active list but appears when toggling to Inactive, where a Reactivate button is available.</p>
+<h2 id="url-parameters"><a href="#url-parameters">URL parameters</a></h2>
+<p><code>?editConsultantId=ID</code> — Checked on mount and when the consultant list loads. If present, auto-opens that consultant's edit form and cleans the URL. The page listens for <code>popstate</code> events (for sidebar profile clicks) and for <code>postMessage</code> events of type <code>calendar_connected</code> (from the Google Calendar OAuth popup) to refresh the consultant and show a success toast.</p>
+<h2 id="entity-mappings"><a href="#entity-mappings">Entity mappings</a></h2>
+<ul>
+  <li><code>UserInfo</code> → <code>user_profiles</code> + <code>user_roles</code></li>
+  <li><code>UserService</code> → <code>service_qualifications</code></li>
+  <li><code>Tier</code> → <code>consultant_tiers</code></li>
+  <li><code>company_id</code> → <code>tenant_id</code> (enforced by RLS on every query)</li>
+</ul>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/consultants/download.md"><code>/user-manual/consultants/download.md</code></a>.</p>
+</article>

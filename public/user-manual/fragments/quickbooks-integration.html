@@ -1,0 +1,142 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="quickbooks-integration">
+<p><strong>Status: Deferred in v1.</strong> QuickBooks Online (QBO) integration is scoped, schema-ready, and wired as a graceful-degradation stub in HotSeaters v1. The UI paths exist; the sync itself does not run. Each section below marks whether it ships today or is deferred, and the "configured path" describes the shape the feature will take when it lands post-v1.</p>
+<p>All client invoicing in v1 happens inside HotSeaters itself — see <a href="/user-manual/billing">Billing</a>. QuickBooks export is an optional downstream step planned for a later release.</p>
+<blockquote>
+<p><strong>Graceful-degradation banner.</strong> Wherever a "Push to QuickBooks" or "Sync to QBO" action would appear in the UI (Settings, Invoice detail, Billing Kanban), v1 renders an inline notice instead:</p>
+<blockquote>
+<p><em>QuickBooks export is coming in a future release. You can keep invoicing clients directly from HotSeaters in the meantime.</em></p>
+</blockquote>
+<p>No network call is made. No tokens are read. No Edge Function executes QBO logic.</p>
+</blockquote>
+<h2 id="overview"><a href="#overview">Overview</a></h2>
+<p>The intended integration lets each tenant firm connect <strong>their own</strong> QuickBooks Online account, then:</p>
+<ul>
+<li>Sync Products &#x26; Services between HotSeaters service catalog and QBO items</li>
+<li>Map HotSeaters client firms to QBO customers</li>
+<li>Push invoices generated in HotSeaters into QBO</li>
+<li>Pull payment status back into HotSeaters when an invoice is marked paid in QBO</li>
+</ul>
+<p>This is a per-tenant OAuth connection, not a platform-wide integration. Each firm sees only their own QBO data.</p>
+<h2 id="v1-disposition"><a href="#v1-disposition">v1 disposition</a></h2>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>v1 behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Connect button in Settings</td>
+<td>Rendered, but disabled with "Deferred" tooltip</td>
+</tr>
+<tr>
+<td>Token columns on <code>tenant_firms</code></td>
+<td>Present in schema, <strong>NULL</strong> for every tenant</td>
+</tr>
+<tr>
+<td>Edge Function endpoints</td>
+<td>Deployed as stubs, return <strong>HTTP 501 Not Implemented</strong></td>
+</tr>
+<tr>
+<td>Invoice "Push to QBO" action</td>
+<td>Hidden behind feature flag; replaced by degradation banner</td>
+</tr>
+<tr>
+<td>Scheduled reconciliation</td>
+<td>Not scheduled. No <code>pg_cron</code> job exists. Will use <code>pg_cron</code> when the feature lands — <strong>no Vercel cron, ever</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="schema-ready-unused"><a href="#schema-ready-unused">Schema (ready, unused)</a></h2>
+<p><em>Deferred in v1 — configured path.</em> The columns exist on <code>tenant_firms</code> so the migration path is non-breaking, but they stay NULL.</p>
+<pre><code class="hljs language-sql"><span class="hljs-comment">-- Columns on tenant_firms (all NULL in v1)</span>
+<span class="hljs-keyword">alter table</span> tenant_firms
+  <span class="hljs-keyword">add</span> <span class="hljs-keyword">column</span> if <span class="hljs-keyword">not</span> <span class="hljs-keyword">exists</span> quickbooks_realm_id text,
+  <span class="hljs-keyword">add</span> <span class="hljs-keyword">column</span> if <span class="hljs-keyword">not</span> <span class="hljs-keyword">exists</span> quickbooks_access_token text,      <span class="hljs-comment">-- encrypted at rest</span>
+  <span class="hljs-keyword">add</span> <span class="hljs-keyword">column</span> if <span class="hljs-keyword">not</span> <span class="hljs-keyword">exists</span> quickbooks_refresh_token text,     <span class="hljs-comment">-- encrypted at rest</span>
+  <span class="hljs-keyword">add</span> <span class="hljs-keyword">column</span> if <span class="hljs-keyword">not</span> <span class="hljs-keyword">exists</span> quickbooks_token_expires_at timestamptz,
+  <span class="hljs-keyword">add</span> <span class="hljs-keyword">column</span> if <span class="hljs-keyword">not</span> <span class="hljs-keyword">exists</span> quickbooks_connected_at timestamptz,
+  <span class="hljs-keyword">add</span> <span class="hljs-keyword">column</span> if <span class="hljs-keyword">not</span> <span class="hljs-keyword">exists</span> quickbooks_last_sync_at timestamptz,
+  <span class="hljs-keyword">add</span> <span class="hljs-keyword">column</span> if <span class="hljs-keyword">not</span> <span class="hljs-keyword">exists</span> quickbooks_status text
+    <span class="hljs-keyword">check</span> (quickbooks_status <span class="hljs-keyword">in</span> (<span class="hljs-string">'disconnected'</span>,<span class="hljs-string">'connected'</span>,<span class="hljs-string">'error'</span>))
+    <span class="hljs-keyword">default</span> <span class="hljs-string">'disconnected'</span>;
+</code></pre>
+<p>Token values must be encrypted before insertion (Supabase Vault or an app-layer envelope key). Plaintext tokens must never land in the column. See <a href="/user-manual/database-schema">Database Schema</a> for the surrounding <code>tenant_firms</code> definition.</p>
+<h2 id="oauth-20-flow-deferred"><a href="#oauth-20-flow-deferred">OAuth 2.0 flow (deferred)</a></h2>
+<p><em>Deferred in v1 — configured path.</em> The intended flow is Intuit's standard authorization-code grant, scoped per tenant:</p>
+<ol>
+<li>Owner clicks <strong>Connect to QuickBooks</strong> in <a href="/user-manual/settings">Settings</a> → Integrations.</li>
+<li>Browser redirects to Intuit's consent screen with <code>client_id</code>, <code>scope=com.intuit.quickbooks.accounting</code>, and a signed <code>state</code> carrying the <code>tenant_id</code>.</li>
+<li>Intuit redirects back to the callback Edge Function with <code>code</code> and <code>realmId</code>.</li>
+<li>Edge Function exchanges <code>code</code> for <code>access_token</code> + <code>refresh_token</code>, encrypts both, writes the columns above, sets <code>quickbooks_status = 'connected'</code>.</li>
+<li>Subsequent API calls use the stored <code>realm_id</code> to target the correct QBO company.</li>
+</ol>
+<p>Tokens refresh automatically before expiration. Disconnect revokes at Intuit, clears the columns, and sets status back to <code>disconnected</code>.</p>
+<h2 id="edge-function-stubs"><a href="#edge-function-stubs">Edge Function stubs</a></h2>
+<p><em>Deferred in v1 — configured path.</em> These functions are deployed in v1 but return <strong>HTTP 501</strong> with a stable JSON body. Callers (and the UI) check the status and render the graceful-degradation banner.</p>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// supabase/functions/quickbooks-oauth-callback/index.ts</span>
+<span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Response</span>(
+  <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>({
+    <span class="hljs-attr">error</span>: <span class="hljs-string">"deferred"</span>,
+    <span class="hljs-attr">message</span>: <span class="hljs-string">"QuickBooks integration is deferred in v1."</span>,
+  }),
+  { <span class="hljs-attr">status</span>: <span class="hljs-number">501</span>, <span class="hljs-attr">headers</span>: { <span class="hljs-string">"content-type"</span>: <span class="hljs-string">"application/json"</span> } }
+);
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Edge Function</th>
+<th>v1 status</th>
+<th>Intended role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>quickbooks-oauth-callback</code></td>
+<td>501 deferred</td>
+<td>Exchange authorization code for tokens, persist encrypted</td>
+</tr>
+<tr>
+<td><code>quickbooks-sync-customer</code></td>
+<td>501 deferred</td>
+<td>Upsert a HotSeaters client firm as a QBO customer</td>
+</tr>
+<tr>
+<td><code>quickbooks-export-invoice</code></td>
+<td>501 deferred</td>
+<td>Push a HotSeaters invoice into QBO as an Invoice object</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="/user-manual/backend-functions">Backend Functions</a> for the surrounding Edge Function catalog and conventions.</p>
+<h2 id="scheduled-reconciliation"><a href="#scheduled-reconciliation">Scheduled reconciliation</a></h2>
+<p><em>Deferred in v1 — configured path.</em> When enabled, periodic reconciliation (pull QBO payment status back into HotSeaters) will run via <strong>Supabase <code>pg_cron</code></strong>. HotSeaters does not use Vercel, does not use Vercel Cron, and will not introduce Vercel infrastructure as part of this feature. See <a href="/user-manual/external-integrations">External Integrations</a> for the cron conventions used elsewhere.</p>
+<h2 id="required-secrets-when-enabled"><a href="#required-secrets-when-enabled">Required secrets (when enabled)</a></h2>
+<p><em>Deferred in v1 — configured path.</em> Stored as Supabase project secrets, never committed:</p>
+<ul>
+<li><code>QBO_CLIENT_ID</code> — Intuit OAuth client ID</li>
+<li><code>QBO_CLIENT_SECRET</code> — Intuit OAuth client secret</li>
+<li><code>QBO_REDIRECT_URI</code> — Callback URL pointing at the <code>quickbooks-oauth-callback</code> Edge Function</li>
+<li><code>QBO_ENVIRONMENT</code> — <code>sandbox</code> or <code>production</code></li>
+</ul>
+<p>See <a href="/user-manual/environment-setup">Environment Setup</a> for how project secrets are loaded into Edge Functions.</p>
+<h2 id="ui-surfaces-deferred"><a href="#ui-surfaces-deferred">UI surfaces (deferred)</a></h2>
+<p><em>Deferred in v1 — configured path.</em> When the feature ships, these surfaces become active. In v1 each renders the degradation banner instead of the live control.</p>
+<ul>
+<li><strong>Settings → Integrations:</strong> Connect / Disconnect card, sync status, last-sync timestamp</li>
+<li><strong>Clients:</strong> "QBO Customer" mapping field per client firm (see <a href="/user-manual/clients">Clients</a>)</li>
+<li><strong>Invoice detail:</strong> "Push to QuickBooks" action and sync-status badge</li>
+<li><strong>Billing Kanban:</strong> bulk "Export approved invoices to QBO" action on the <em>Send Invoices</em> column (see <a href="/user-manual/billing">Billing</a>)</li>
+</ul>
+<h2 id="dependencies-when-enabled"><a href="#dependencies-when-enabled">Dependencies (when enabled)</a></h2>
+<ul>
+<li>QuickBooks Online Accounting API v3</li>
+<li>Intuit OAuth 2.0 authorization-code flow</li>
+<li>Supabase Vault (or equivalent) for token encryption at rest</li>
+</ul>
+<h2 id="summary"><a href="#summary">Summary</a></h2>
+<p>v1 ships the schema columns, the Edge Function stubs (all returning HTTP 501), and the degradation banner in every surface that would otherwise expose a QBO action. No QBO traffic leaves the application in v1. When the feature is prioritized post-v1, the same columns, the same function names, and the same UI entry points light up without a breaking migration.</p>
+<p><a href="/user-manual/quickbooks-integration/download.md"><code>/user-manual/quickbooks-integration/download.md</code></a></p>
+</article>

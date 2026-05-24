@@ -1,0 +1,672 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="style-guide">
+<h1 id="style-guide"><a href="#style-guide">Style Guide</a></h1>
+<p>The HotSeaters design system. This document captures the color palette, typography scale, spacing tokens, and component rules used across the application. The authoritative branding sources are <code>docs/branding/hotseaters-brand-template.html</code> and <code>docs/branding/hotseaters-brand-guide.html</code> — this guide summarizes them for day-to-day implementation.</p>
+<p>For the larger picture, see <a href="/user-manual/app-overview">App Overview</a>, <a href="/user-manual/design-patterns">Design Patterns</a>, and <a href="/user-manual/technical-reference">Technical Reference</a>.</p>
+<blockquote>
+<p><strong>Theme scope (v1).</strong> HotSeaters ships a single light theme in v1. Dual-theme (light + dark) support is <strong>deferred</strong>. All tokens below describe the v1 light theme. Do not reach for <code>dark:</code> variants or conditional theme switching in new components.</p>
+</blockquote>
+<hr>
+<h2 id="brand-identities"><a href="#brand-identities">Brand Identities</a></h2>
+<p>HotSeaters contains two distinct brand surfaces. They must remain visually separate.</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Palette</th>
+<th>Where it applies</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>HotSeaters</strong> (core app)</td>
+<td>Cyan / blue / orange</td>
+<td>Deals, trials, clients, invoicing, schedule, team</td>
+</tr>
+<tr>
+<td><strong>HotSeatHub</strong> (marketplace)</td>
+<td>Purple / indigo</td>
+<td>Gig postings, HSH responses, subcontractor network, favorites</td>
+</tr>
+</tbody>
+</table>
+<p>Never mix palettes across surfaces. HSH elements are always paired with the marketplace-specific icon treatment (see <a href="/user-manual/design-patterns">Design Patterns</a>).</p>
+<hr>
+<h2 id="color-palette"><a href="#color-palette">Color Palette</a></h2>
+<h3 id="hotseaters-brand-colors"><a href="#hotseaters-brand-colors">HotSeaters brand colors</a></h3>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Hex</th>
+<th>Tailwind</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cyan Primary</td>
+<td><code>#06B6D4</code></td>
+<td><code>bg-cyan-500</code></td>
+<td>Primary brand color, main buttons, active states</td>
+</tr>
+<tr>
+<td>Cyan Hover</td>
+<td><code>#0891B2</code></td>
+<td><code>bg-cyan-600</code></td>
+<td>Hover state for primary cyan</td>
+</tr>
+<tr>
+<td>Blue</td>
+<td><code>#3B82F6</code></td>
+<td><code>bg-blue-500</code></td>
+<td>Core operations — deals, trials, schedule, analytics</td>
+</tr>
+<tr>
+<td>Blue Deep</td>
+<td><code>#1E3A8A</code></td>
+<td><code>bg-blue-900</code></td>
+<td>Professional headers, emphasis</td>
+</tr>
+<tr>
+<td>Orange</td>
+<td><code>#F97316</code></td>
+<td><code>bg-orange-500</code></td>
+<td>Warm accents, notifications, CTAs</td>
+</tr>
+<tr>
+<td>Red-Orange</td>
+<td><code>#EF4444</code></td>
+<td><code>bg-red-500</code></td>
+<td>Urgent actions, warm gradient partner</td>
+</tr>
+</tbody>
+</table>
+<h3 id="hotseathub-brand-colors"><a href="#hotseathub-brand-colors">HotSeatHub brand colors</a></h3>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Hex</th>
+<th>Tailwind</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Purple Primary</td>
+<td><code>#9333EA</code></td>
+<td><code>bg-purple-600</code></td>
+<td>HSH primary buttons, gig postings</td>
+</tr>
+<tr>
+<td>Purple Hover</td>
+<td><code>#6B21A8</code></td>
+<td><code>bg-purple-800</code></td>
+<td>HSH button hover / emphasis</td>
+</tr>
+<tr>
+<td>Purple Light</td>
+<td><code>#A78BFA</code></td>
+<td><code>bg-purple-400</code></td>
+<td>HSH accent highlights</td>
+</tr>
+<tr>
+<td>Purple Subtle</td>
+<td><code>#F5F3FF</code></td>
+<td><code>bg-purple-50</code></td>
+<td>HSH card backgrounds</td>
+</tr>
+<tr>
+<td>Indigo Accent</td>
+<td><code>#4F46E5</code></td>
+<td><code>bg-indigo-600</code></td>
+<td>HSH secondary actions</td>
+</tr>
+<tr>
+<td>Indigo Light</td>
+<td><code>#818CF8</code></td>
+<td><code>bg-indigo-400</code></td>
+<td>HSH light accents</td>
+</tr>
+</tbody>
+</table>
+<h3 id="semantic-colors"><a href="#semantic-colors">Semantic colors</a></h3>
+<p>Status colors apply across both surfaces.</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Hex</th>
+<th>Tailwind</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Success</td>
+<td><code>#059669</code></td>
+<td><code>bg-green-600</code></td>
+<td>Paid invoices, won deals, active states</td>
+</tr>
+<tr>
+<td>Success Light</td>
+<td><code>#DCFCE7</code></td>
+<td><code>bg-green-100</code></td>
+<td>Success badges and subtle fills</td>
+</tr>
+<tr>
+<td>Warning</td>
+<td><code>#F59E0B</code></td>
+<td><code>bg-amber-500</code></td>
+<td>Pending, attention needed</td>
+</tr>
+<tr>
+<td>Warning Light</td>
+<td><code>#FEF3C7</code></td>
+<td><code>bg-amber-100</code></td>
+<td>Warning badges</td>
+</tr>
+<tr>
+<td>Danger</td>
+<td><code>#DC2626</code></td>
+<td><code>bg-red-600</code></td>
+<td>Errors, destructive actions, overdue</td>
+</tr>
+<tr>
+<td>Danger Light</td>
+<td><code>#FEE2E2</code></td>
+<td><code>bg-red-100</code></td>
+<td>Error badges</td>
+</tr>
+<tr>
+<td>Info</td>
+<td><code>#2563EB</code></td>
+<td><code>bg-blue-600</code></td>
+<td>Informational messages, neutral actions</td>
+</tr>
+<tr>
+<td>Info Light</td>
+<td><code>#DBEAFE</code></td>
+<td><code>bg-blue-100</code></td>
+<td>Info badges</td>
+</tr>
+</tbody>
+</table>
+<h3 id="neutral-palette"><a href="#neutral-palette">Neutral palette</a></h3>
+<p>Stone grays for structure — backgrounds, borders, and text.</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Hex</th>
+<th>Tailwind</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stone 50</td>
+<td><code>#FAFAF9</code></td>
+<td><code>bg-stone-50</code></td>
+<td>Page background</td>
+</tr>
+<tr>
+<td>Stone 100</td>
+<td><code>#F5F5F4</code></td>
+<td><code>bg-stone-100</code></td>
+<td>Section backgrounds, disabled states</td>
+</tr>
+<tr>
+<td>Stone 200</td>
+<td><code>#E7E5E4</code></td>
+<td><code>bg-stone-200</code></td>
+<td>Borders, dividers, input borders</td>
+</tr>
+<tr>
+<td>Stone 500</td>
+<td><code>#78716C</code></td>
+<td><code>bg-stone-500</code></td>
+<td>Icons, placeholder text</td>
+</tr>
+<tr>
+<td>Stone 600</td>
+<td><code>#57534E</code></td>
+<td><code>bg-stone-600</code></td>
+<td>Secondary text, labels</td>
+</tr>
+<tr>
+<td>Stone 900</td>
+<td><code>#1C1917</code></td>
+<td><code>bg-stone-900</code></td>
+<td>Headings, primary text</td>
+</tr>
+</tbody>
+</table>
+<h3 id="css-variable-example"><a href="#css-variable-example">CSS variable example</a></h3>
+<p>Define semantic tokens as CSS custom properties so components stay theme-aware:</p>
+<pre><code class="hljs language-css"><span class="hljs-selector-pseudo">:root</span> {
+  <span class="hljs-attr">--color-bg-page</span>: <span class="hljs-number">#FAFAF9</span>;
+  <span class="hljs-attr">--color-surface-card</span>: <span class="hljs-number">#FFFFFF</span>;
+  <span class="hljs-attr">--color-border-default</span>: <span class="hljs-number">#E7E5E4</span>;
+  <span class="hljs-attr">--color-text-heading</span>: <span class="hljs-number">#1C1917</span>;
+  <span class="hljs-attr">--color-text-body</span>: <span class="hljs-number">#57534E</span>;
+
+  <span class="hljs-attr">--color-brand-primary</span>: <span class="hljs-number">#06B6D4</span>;   <span class="hljs-comment">/* cyan-500 */</span>
+  <span class="hljs-attr">--color-brand-primary-hover</span>: <span class="hljs-number">#0891B2</span>;
+  <span class="hljs-attr">--color-hsh-primary</span>: <span class="hljs-number">#9333EA</span>;     <span class="hljs-comment">/* purple-600 */</span>
+  <span class="hljs-attr">--color-hsh-primary-hover</span>: <span class="hljs-number">#6B21A8</span>;
+
+  <span class="hljs-attr">--color-status-success</span>: <span class="hljs-number">#059669</span>;
+  <span class="hljs-attr">--color-status-warning</span>: <span class="hljs-number">#F59E0B</span>;
+  <span class="hljs-attr">--color-status-danger</span>: <span class="hljs-number">#DC2626</span>;
+}
+</code></pre>
+<hr>
+<h2 id="typography"><a href="#typography">Typography</a></h2>
+<p>HotSeaters uses two brand fonts loaded via Google Fonts: <strong>Zen Dots</strong> for primary brand marks and <strong>Michroma</strong> for brand subtitles. Body and UI text use the system sans stack via Tailwind's default.</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Classes</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Page title</td>
+<td><code>text-3xl font-bold text-stone-900</code></td>
+<td>Dashboard</td>
+</tr>
+<tr>
+<td>Section title</td>
+<td><code>text-xl font-bold text-stone-900</code></td>
+<td>Recent Activity</td>
+</tr>
+<tr>
+<td>Card title</td>
+<td><code>text-lg font-semibold text-stone-900</code></td>
+<td>Revenue Trend</td>
+</tr>
+<tr>
+<td>Body text</td>
+<td><code>text-sm text-stone-600</code></td>
+<td>Descriptions and paragraph content</td>
+</tr>
+<tr>
+<td>Label</td>
+<td><code>text-sm font-medium text-stone-700</code></td>
+<td>Form field labels</td>
+</tr>
+<tr>
+<td>Caption</td>
+<td><code>text-xs text-stone-500</code></td>
+<td>Timestamps, metadata</td>
+</tr>
+<tr>
+<td>Brand title</td>
+<td><code>font-brand-title text-stone-900</code></td>
+<td>HotSeaters wordmark</td>
+</tr>
+<tr>
+<td>Brand subtitle</td>
+<td><code>font-brand-subtitle text-xs text-stone-500</code></td>
+<td>Trial Tech Toolkit</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="hljs language-css"><span class="hljs-selector-pseudo">:root</span> {
+  <span class="hljs-attr">--font-brand-title</span>: <span class="hljs-string">"Zen Dots"</span>, sans-serif;
+  <span class="hljs-attr">--font-brand-subtitle</span>: <span class="hljs-string">"Michroma"</span>, sans-serif;
+  <span class="hljs-attr">--font-ui</span>: ui-sans-serif, system-ui, sans-serif;
+}
+</code></pre>
+<hr>
+<h2 id="spacing--layout"><a href="#spacing--layout">Spacing &#x26; Layout</a></h2>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Token</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Page padding</td>
+<td><code>p-6 lg:p-8</code></td>
+<td>Standard page wrapper</td>
+</tr>
+<tr>
+<td>Section gap</td>
+<td><code>space-y-6</code> / <code>space-y-8</code></td>
+<td>Vertical rhythm between major sections</td>
+</tr>
+<tr>
+<td>Card gap</td>
+<td><code>gap-4</code> / <code>gap-6</code></td>
+<td>Grid spacing for card layouts</td>
+</tr>
+<tr>
+<td>Element gap</td>
+<td><code>gap-2</code> / <code>gap-3</code></td>
+<td>Spacing between related inline elements</td>
+</tr>
+<tr>
+<td>Content width</td>
+<td><code>max-w-7xl mx-auto</code></td>
+<td>Default content container</td>
+</tr>
+</tbody>
+</table>
+<p>Layouts are mobile-first. Use Tailwind breakpoints (<code>sm:</code>, <code>md:</code>, <code>lg:</code>, <code>xl:</code>) with the common responsive pattern <code>md:grid-cols-2 lg:grid-cols-3</code>.</p>
+<hr>
+<h2 id="border-radius--elevation"><a href="#border-radius--elevation">Border Radius &#x26; Elevation</a></h2>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Tailwind</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Radius sm</td>
+<td><code>rounded</code> (0.25rem)</td>
+<td>Badges, small inputs</td>
+</tr>
+<tr>
+<td>Radius md</td>
+<td><code>rounded-md</code> (0.375rem)</td>
+<td>Buttons, inputs</td>
+</tr>
+<tr>
+<td>Radius lg</td>
+<td><code>rounded-lg</code> (0.5rem)</td>
+<td>Cards, modals, media</td>
+</tr>
+<tr>
+<td>Radius xl</td>
+<td><code>rounded-xl</code> (0.75rem)</td>
+<td>Hero surfaces, feature cards</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Shadow</th>
+<th>Tailwind</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>None</td>
+<td>—</td>
+<td>Default resting cards</td>
+</tr>
+<tr>
+<td>Subtle</td>
+<td><code>shadow-sm</code></td>
+<td>Color swatches, thumbnails</td>
+</tr>
+<tr>
+<td>Default</td>
+<td><code>shadow</code></td>
+<td>Hover lift on interactive cards</td>
+</tr>
+<tr>
+<td>Elevated</td>
+<td><code>shadow-lg</code></td>
+<td>Elevated content cards, popovers</td>
+</tr>
+<tr>
+<td>Modal</td>
+<td><code>shadow-xl</code></td>
+<td>Modals, dialogs, command palettes</td>
+</tr>
+</tbody>
+</table>
+<p>Pair hover transitions with <code>transition-shadow</code> so elevation changes feel intentional.</p>
+<hr>
+<h2 id="components"><a href="#components">Components</a></h2>
+<p>HotSeaters components are built on <strong>shadcn/ui</strong> over Tailwind. Prefer shadcn primitives (<code>Card</code>, <code>Button</code>, <code>Input</code>, <code>Badge</code>, <code>Dialog</code>, <code>Select</code>) before introducing custom HTML controls.</p>
+<h3 id="buttons"><a href="#buttons">Buttons</a></h3>
+<table>
+<thead>
+<tr>
+<th>Purpose</th>
+<th>Classes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Primary (HotSeaters)</td>
+<td><code>bg-cyan-500 hover:bg-cyan-600 text-white</code></td>
+</tr>
+<tr>
+<td>Operations</td>
+<td><code>bg-blue-500 hover:bg-blue-600 text-white</code></td>
+</tr>
+<tr>
+<td>Accent / CTA</td>
+<td><code>bg-orange-500 hover:bg-red-500 text-white</code></td>
+</tr>
+<tr>
+<td>Primary (HotSeatHub)</td>
+<td><code>bg-purple-600 hover:bg-purple-800 text-white</code></td>
+</tr>
+<tr>
+<td>Destructive</td>
+<td><code>bg-red-600 hover:bg-red-700 text-white</code></td>
+</tr>
+<tr>
+<td>Outline</td>
+<td><code>border border-stone-200 text-stone-900 hover:bg-stone-50</code></td>
+</tr>
+</tbody>
+</table>
+<p>Always include a leading icon at <code>w-4 h-4 mr-2</code> when the button represents a concrete action.</p>
+<h3 id="cards"><a href="#cards">Cards</a></h3>
+<ul>
+<li>Border: <code>border-stone-200</code></li>
+<li>Background: <code>bg-white</code></li>
+<li>Padding: <code>p-6</code> for content</li>
+<li>Header: <code>border-b border-stone-100 bg-white rounded-t-lg</code></li>
+<li>Elevated variant: <code>shadow-lg hover:shadow-xl transition-shadow</code></li>
+<li>HSH accent variant: <code>border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50</code></li>
+</ul>
+<h3 id="inputs"><a href="#inputs">Inputs</a></h3>
+<ul>
+<li>Use shadcn's <code>Input</code>, <code>Textarea</code>, <code>Select</code>, and <code>Checkbox</code> primitives.</li>
+<li>Border: <code>border-stone-200</code></li>
+<li>Focus: <code>focus-visible:ring-2 focus-visible:ring-cyan-500</code></li>
+<li>Placeholder text uses <code>text-stone-500</code></li>
+<li>Labels use <code>text-sm font-medium text-stone-700</code></li>
+</ul>
+<h3 id="badges"><a href="#badges">Badges</a></h3>
+<table>
+<thead>
+<tr>
+<th>Purpose</th>
+<th>Classes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Success</td>
+<td><code>bg-green-100 text-green-700</code></td>
+</tr>
+<tr>
+<td>Warning</td>
+<td><code>bg-amber-100 text-amber-700</code> (or <code>bg-yellow-100 text-yellow-700</code>)</td>
+</tr>
+<tr>
+<td>Danger</td>
+<td><code>bg-red-100 text-red-700</code></td>
+</tr>
+<tr>
+<td>Info</td>
+<td><code>bg-blue-100 text-blue-700</code></td>
+</tr>
+<tr>
+<td>HotSeatHub</td>
+<td><code>bg-purple-100 text-purple-700</code> (always with HSH icon)</td>
+</tr>
+<tr>
+<td>Neutral</td>
+<td><code>bg-stone-100 text-stone-700</code></td>
+</tr>
+</tbody>
+</table>
+<p>Role-specific badges: Owner → purple, Admin → blue, Sales → green, Trial Consultant → stone.</p>
+<h3 id="modals"><a href="#modals">Modals</a></h3>
+<ul>
+<li>Use shadcn's <code>Dialog</code> for all modals.</li>
+<li>Consistent size tokens: <code>sm</code> (max-w-sm), <code>md</code> (max-w-md), <code>lg</code> (max-w-2xl), <code>xl</code> (max-w-4xl).</li>
+<li>Footer pattern: outline <strong>Cancel</strong> on the left, primary action on the right.</li>
+<li>Include a short description under the title for anything more complex than a confirmation.</li>
+</ul>
+<h3 id="empty-states"><a href="#empty-states">Empty states</a></h3>
+<p>Empty states should show an icon, a short title, a one-sentence description, and a single primary action that unblocks the user.</p>
+<h3 id="metric-cards"><a href="#metric-cards">Metric cards</a></h3>
+<p>Summary metric tiles follow this anatomy: small label, large value, optional delta percentage, and a tinted icon badge. Use semantic colors for positive (green) and negative (red) deltas.</p>
+<hr>
+<h2 id="interactive-states"><a href="#interactive-states">Interactive states</a></h2>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hover (card)</td>
+<td><code>hover:shadow-lg transition-shadow</code></td>
+</tr>
+<tr>
+<td>Active / selected</td>
+<td><code>bg-cyan-50 border-cyan-300</code> (HotSeaters) or <code>bg-purple-50 border-purple-300</code> (HSH)</td>
+</tr>
+<tr>
+<td>Disabled</td>
+<td><code>opacity-50 cursor-not-allowed</code></td>
+</tr>
+<tr>
+<td>Loading</td>
+<td><code>animate-spin</code> spinner in brand-primary color</td>
+</tr>
+<tr>
+<td>Focus (keyboard)</td>
+<td><code>focus-visible:ring-2 focus-visible:ring-offset-2</code> with brand-primary ring</td>
+</tr>
+</tbody>
+</table>
+<p>All interactive elements must have visible focus states — do not suppress the ring.</p>
+<hr>
+<h2 id="icons"><a href="#icons">Icons</a></h2>
+<p>The app uses <strong>lucide-react</strong> as its icon library. Use icons intentionally, never purely decoratively. Group usage into these categories:</p>
+<ul>
+<li><strong>Navigation &#x26; structure</strong> — dashboard, sidebar, and section affordances.</li>
+<li><strong>Sales &#x26; finance</strong> — deals, invoicing, payments, reporting.</li>
+<li><strong>Operations</strong> — trials, schedule, time tracking, approvals.</li>
+<li><strong>People</strong> — team, contacts, consultants, roles.</li>
+<li><strong>Marketplace (HotSeatHub)</strong> — gig postings, favorites, subcontractors; always color-paired with the HSH palette.</li>
+<li><strong>Status &#x26; feedback</strong> — success, warning, error, info indicators.</li>
+<li><strong>Actions</strong> — create, edit, delete, upload, download.</li>
+</ul>
+<p>Keep icon sizes consistent: <code>w-4 h-4</code> inside buttons and inline affordances; <code>w-5 h-5</code> or <code>w-6 h-6</code> for section headers and feature tiles.</p>
+<hr>
+<h2 id="tailwind-reference"><a href="#tailwind-reference">Tailwind reference</a></h2>
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Classes</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Page background</td>
+<td><code>bg-stone-50</code></td>
+<td>Main page wrapper</td>
+</tr>
+<tr>
+<td>Card background</td>
+<td><code>bg-white</code></td>
+<td>Card / modal surfaces</td>
+</tr>
+<tr>
+<td>Primary button</td>
+<td><code>bg-cyan-500 hover:bg-cyan-600</code></td>
+<td>Main HotSeaters actions</td>
+</tr>
+<tr>
+<td>Operations button</td>
+<td><code>bg-blue-500 hover:bg-blue-600</code></td>
+<td>Operations surfaces</td>
+</tr>
+<tr>
+<td>HSH button</td>
+<td><code>bg-purple-600 hover:bg-purple-800</code></td>
+<td>HotSeatHub only</td>
+</tr>
+<tr>
+<td>Accent button</td>
+<td><code>bg-orange-500 hover:bg-red-500</code></td>
+<td>CTAs, urgent actions</td>
+</tr>
+<tr>
+<td>Success badge</td>
+<td><code>bg-green-100 text-green-700</code></td>
+<td>Paid, accepted, won</td>
+</tr>
+<tr>
+<td>Warning badge</td>
+<td><code>bg-yellow-100 text-yellow-700</code></td>
+<td>Pending, review</td>
+</tr>
+<tr>
+<td>HSH badge</td>
+<td><code>bg-purple-100 text-purple-700</code></td>
+<td>HSH indicators</td>
+</tr>
+<tr>
+<td>Borders</td>
+<td><code>border-stone-200</code></td>
+<td>Card / section borders</td>
+</tr>
+<tr>
+<td>Heading text</td>
+<td><code>text-stone-900</code></td>
+<td>Titles</td>
+</tr>
+<tr>
+<td>Body text</td>
+<td><code>text-stone-600</code></td>
+<td>Descriptions, content</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="brand-separation-rules"><a href="#brand-separation-rules">Brand separation rules</a></h2>
+<ul>
+<li>HotSeaters palette (cyan / blue / orange) is reserved for core app features.</li>
+<li>HotSeatHub palette (purple / indigo) is reserved for marketplace features and is always paired with the HSH icon treatment.</li>
+<li>Do not mix palettes across surfaces. Status colors (green / amber / red / blue) are shared.</li>
+<li>Gradients: HotSeaters uses <code>cyan → blue → orange</code>; HotSeatHub uses <code>purple → indigo</code>.</li>
+</ul>
+<hr>
+<h2 id="deferred"><a href="#deferred">Deferred</a></h2>
+<ul>
+<li><strong>Dual-theme (light + dark) support.</strong> v1 ships light only; dark-mode tokens and <code>dark:</code> variants are out of scope. When dual theme returns, token definitions should move into <code>:root</code> / <code>[data-theme="dark"]</code> CSS variable blocks rather than Tailwind <code>dark:</code> class variants.</li>
+<li><strong>Per-tenant theme overrides.</strong> Customer-level theme customization (colors, fonts, radii) is not part of v1.</li>
+</ul>
+<hr>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/style-guide/download.md"><code>/user-manual/style-guide/download.md</code></a>.</p>
+</article>

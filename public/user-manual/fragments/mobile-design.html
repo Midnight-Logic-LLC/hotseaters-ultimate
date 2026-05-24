@@ -1,0 +1,74 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="mobile-design">
+<h2 id="overview"><a href="#overview">Overview</a></h2>
+<p>A dedicated mobile-native client is <strong>deferred</strong> beyond v1 of HotSeaters. This document is a roadmap stub for the intended mobile strategy.</p>
+<p>In v1, the web application is fully responsive across 320–1920px viewports and is expected to work on phone and tablet browsers. Key high-frequency flows (time clock, expense capture, approvals) are designed to be usable on touch devices in the responsive web build.</p>
+<h2 id="v1-responsive-web-coverage"><a href="#v1-responsive-web-coverage">v1 Responsive Web Coverage</a></h2>
+<table>
+<thead>
+<tr>
+<th>Flow</th>
+<th>Mobile-Optimized in v1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Time clock (clock-in / clock-out / switch trial)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Manual time entry</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Expense capture with receipt photo</td>
+<td>Yes (uses device camera via <code>&#x3C;input type="file" accept="image/*" capture></code>)</td>
+</tr>
+<tr>
+<td>Approvals (time + expense)</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Schedule / Gantt drag-drop</td>
+<td>Partial (read-only on phone; drag-drop works on tablet)</td>
+</tr>
+<tr>
+<td>Deals Kanban</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Document signing (via DocuSeal)</td>
+<td>Yes (DocuSeal hosts the mobile-optimized signing UI)</td>
+</tr>
+<tr>
+<td>Invoice preview / send</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<h2 id="deferred-native-mobile-app"><a href="#deferred-native-mobile-app">Deferred: Native Mobile App</a></h2>
+<p>A future native client will be evaluated against:</p>
+<ul>
+<li>Expo (React Native) — shares TypeScript models, hooks, and state with the web app</li>
+<li>Swift (iOS) + Kotlin (Android) — separate native codebases, best-in-class platform integration</li>
+<li>Progressive Web App (PWA) with offline-first service worker — lowest overhead</li>
+</ul>
+<p>Core native features under consideration:</p>
+<ul>
+<li>Offline time entry queue with background sync when connectivity returns</li>
+<li>Native push notifications (replacing email-only today)</li>
+<li>Native camera integration for receipts (beyond HTML <code>capture</code>)</li>
+<li>Bluetooth beacon auto-clock-in at recognized trial locations (exploratory)</li>
+<li>Geofenced travel-time start/stop</li>
+</ul>
+<p>All of the above is <strong>deferred in v1</strong>. The responsive web build satisfies current mobile requirements.</p>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul>
+<li><a href="/user-manual/style-guide">Style Guide</a></li>
+<li><a href="/user-manual/time-clock-workflows">Time Clock Workflows</a></li>
+<li><a href="/user-manual/expense-workflows">Expense Workflows</a></li>
+<li><a href="/user-manual/travel-time">Travel Time Feature</a></li>
+<li><a href="/user-manual/notification-system">Notification System</a></li>
+</ul>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/mobile-design/download.md"><code>/user-manual/mobile-design/download.md</code></a>.</p>
+</article>

@@ -16,6 +16,11 @@ in CLAUDE.md applies to every agent.
    panel, tab, dialog, animation, word, AND business rule must match.
    Wrong copy / colors / sections / fonts / calculations are blocking
    defects.
+   - **0.1.** Screenshot-overlap at 1440×900 AND 375×667 before "done".
+   - **0.2.** Always read the bible's `index.css` AND every `components/ui/*`
+     primitive that the page uses. A Login-button bug is usually a primitive bug.
+   - **0.3.** Fix systemic visual bugs in the primitive / `index.css`, never
+     patch the symptom on each consuming page.
 1. **Self-hosted Supabase only.** `localhost:8000` or `hotbase.prometheusags.ai`.
    Never `*.supabase.co`.
 2. **HotSeatersMVP is the bible.** `midnight/hotseaters` is prior art only.

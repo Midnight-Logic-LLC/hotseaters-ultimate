@@ -1,0 +1,116 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="sales-hub">
+<h1 id="sales-hub"><a href="#sales-hub">Sales Hub</a></h1>
+<p>The Sales Hub is the primary sales management page. It provides a high-level view of active deals, pipeline value, client count, and revenue projections. It includes three tabbed views: Leads Radar, Deal Tracker, and Projections. Content adapts based on the "My Deals" filter.</p>
+<h2 id="overall-function"><a href="#overall-function">Overall Function</a></h2>
+<p>Displays sales-focused metrics and tools for managing the deal pipeline. Fetches trials, client firms, deal stages, documents, document signers, contacts, invoices, service types, trial services, HSH contracts (both as hiring tenant and subcontractor tenant), and HSH trials from Supabase. Excludes deals that are lost or settled from all views. All queries filter by <code>tenant_id</code>.</p>
+<h2 id="header-controls"><a href="#header-controls">Header Controls</a></h2>
+<ul>
+<li><strong>My Deals / All Deals toggle button</strong> — Filters all data on the page to show only deals where the current user is the assigned consultant (<code>consultant_id</code> matches the authenticated <code>user_profiles.id</code>). Persisted to user preferences as <code>salesHubShowMyDeals</code>. When active, the Projections tab also filters projected revenue to only show tasks from the user's deals.</li>
+<li><strong>Add Client button</strong> — Navigates to <a href="/app/clients">/app/clients</a>.</li>
+<li><strong>Add Deal button</strong> — Navigates to <a href="/app/deals">/app/deals</a>.</li>
+</ul>
+<h2 id="metrics-cards"><a href="#metrics-cards">Metrics Cards</a></h2>
+<p>A 3-column grid of summary metrics:</p>
+<ul>
+<li><strong>Active Deals</strong> — Count of deals in sales pipeline stages (excluding lost/settled). Affected by My Deals filter.</li>
+<li><strong>Pipeline Value</strong> — Sum of <code>estimated_value</code> across active deals. Affected by My Deals filter.</li>
+<li><strong>Active Clients</strong> — Count of client firms with <code>is_active = true</code>. Not affected by My Deals filter.</li>
+</ul>
+<h2 id="tabs"><a href="#tabs">Tabs</a></h2>
+<p>Three tabs. The active tab is persisted to user preferences as <code>salesHubTab</code>. Defaults to <code>radar</code> on first visit.</p>
+<h3 id="tab-1-leads-radar"><a href="#tab-1-leads-radar">Tab 1: Leads Radar</a></h3>
+<p>A placeholder/coming-soon view. Displays centered text: "Coming soon — follow potential trials and opportunities from Law 360 and other sources." No interactive controls.</p>
+<h3 id="tab-2-deal-tracker"><a href="#tab-2-deal-tracker">Tab 2: Deal Tracker</a></h3>
+<p>Displays deals that do NOT have a fully signed LOE (Letter of Engagement), organized into 4 urgency columns based on days until trial start date:</p>
+<ul>
+<li><strong>&#x3C;10 Days (Red)</strong> — "Action Required" column. Cards have red borders and progress bars. Shows deal value sum in header.</li>
+<li><strong>10–30 Days (Amber)</strong> — "At Risk" column. Cards have amber borders.</li>
+<li><strong>30–90 Days</strong> — "In Progress" column. Shows up to 6 deals with "+N more" overflow text.</li>
+<li><strong>>90 Days</strong> — "Planning Phase" column. Shows up to 6 deals with overflow.</li>
+</ul>
+<h4 id="deal-card-details"><a href="#deal-card-details">Deal Card Details</a></h4>
+<p>Each deal card shows:</p>
+<ul>
+<li>Case name (clickable — navigates to <a href="/app/deals">/app/deals</a> with <code>trialId</code> param)</li>
+<li>Client firm name</li>
+<li>Trial start date</li>
+<li>Estimated value</li>
+<li>Pipeline stage badge (color-coded)</li>
+<li>Days-until badge (color-coded by urgency)</li>
+<li>Progress bar (for deals within 90 days — percentage = <code>(90 - daysUntil) / 90</code>)</li>
+</ul>
+<h4 id="deal-card-action-buttons"><a href="#deal-card-action-buttons">Deal Card Action Buttons</a></h4>
+<ul>
+<li><strong>Phone</strong> — Opens <code>tel:</code> link for primary contact's phone number (only visible if primary contact has a phone).</li>
+<li><strong>Email</strong> — Opens <code>mailto:</code> link for primary contact's email (only visible if primary contact has email).</li>
+<li><strong>External link</strong> — Navigates to <a href="/app/deals">/app/deals</a> with the deal's <code>trialId</code>.</li>
+</ul>
+<h4 id="deal-card-conditional-badges"><a href="#deal-card-conditional-badges">Deal Card Conditional Badges</a></h4>
+<ul>
+<li><strong>If deal stage is "LOE Sent"</strong> — Shows signature progress badge (e.g., "1/2 signed") and a Send Reminder button that opens the Document Send Dialog to re-send signing links to unsigned recipients via DocuSeal.</li>
+<li><strong>If deal has no sent LOE and is within 90 days</strong> — Shows a "Create LOE" badge as a prompt.</li>
+</ul>
+<h4 id="send-reminder-dialog"><a href="#send-reminder-dialog">Send Reminder Dialog</a></h4>
+<p>Opened when clicking the Send icon on a deal card. Uses the existing DocuSeal submitter records to find signing tokens and re-sends reminder emails with signing/viewing links via Resend. Supports selecting which signers to remind.</p>
+<h3 id="tab-3-projections"><a href="#tab-3-projections">Tab 3: Projections</a></h3>
+<p>Displays a revenue trend chart and optional debug panel for revenue forecasting.</p>
+<h4 id="revenue-trend-chart"><a href="#revenue-trend-chart">Revenue Trend Chart</a></h4>
+<p>A composed chart (bars and optional trend line) rendered inside a card with "Revenue Trend — Fiscal Year" header.</p>
+<ul>
+<li><strong>Fiscal Year Selector</strong> — Left/right chevron buttons to navigate between fiscal years. The selected year determines the 12-month or 52-week window displayed.</li>
+<li><strong>Month / Week toggle</strong> — Animated pill toggle that switches between monthly (12 bars) and weekly (52 bars) time periods. Persisted to user preferences as <code>salesHubForecastingTimePeriod</code>.</li>
+<li><strong>Cumulative toggle</strong> — Switch that changes bars from period-by-period to running cumulative totals. When enabled, also shows a purple trend line (least-squares regression). Persisted to <code>salesHubForecastingShowCumulative</code>.</li>
+</ul>
+<h4 id="chart-bar-types"><a href="#chart-bar-types">Chart Bar Types</a></h4>
+<ul>
+<li><strong>Full Potential (light green, behind)</strong> — Total revenue if all deals close at 100% probability, before HSH payout deductions. Rendered as a background bar.</li>
+<li><strong>Revenue (indigo, stacked)</strong> — Actual revenue from paid invoices in the period.</li>
+<li><strong>Unpaid (amber, stacked)</strong> — Revenue from invoices that exist but are NOT paid (draft, sent, overdue).</li>
+<li><strong>Projected (green, stacked on top)</strong> — Revenue projected from trial service PDR (<code>projected_daily_revenue</code>) fields, multiplied by pipeline stage probability, minus HSH payout amounts. Only includes non-completed trials.</li>
+</ul>
+<h4 id="reference-lines"><a href="#reference-lines">Reference Lines</a></h4>
+<ul>
+<li><strong>Breakeven line (red dashed)</strong> — Shown if <code>tenant_firms.monthly_breakeven > 0</code>. In cumulative mode shows annual breakeven; in period mode shows per-period breakeven.</li>
+<li><strong>Revenue Goal line (green dashed)</strong> — Shown if <code>tenant_firms.annual_revenue_target > 0</code>. In cumulative mode shows the annual target; in period mode shows the target divided by number of periods.</li>
+</ul>
+<h4 id="revenue-trend-debug-card"><a href="#revenue-trend-debug-card">Revenue Trend Debug Card</a></h4>
+<p>Always rendered below the chart (collapsible). Groups detailed records by time period, then by deal/trial, then by task name. For each period shows:</p>
+<ul>
+<li>Period header with projected total, full potential total, and HSH payout total</li>
+<li>Paid invoices for that period (from actual <code>invoices</code> records with status <code>paid</code>)</li>
+<li>Unpaid invoices for that period (<code>invoices</code> records with status != <code>paid</code>)</li>
+<li>Expandable trial groups showing individual tasks with daily value, days assigned, probability, projected value, full value, and HSH payout</li>
+</ul>
+<h4 id="revenue-projection-debug"><a href="#revenue-projection-debug">Revenue Projection Debug</a></h4>
+<p>Only visible when <code>tenant_firms.show_debug_info</code> is true. Shows raw task-level projection data including PDR values, billing methods, split billing details, and HSH assignment information for each <code>trial_services</code> row.</p>
+<h2 id="revenue-projection-calculation-logic"><a href="#revenue-projection-calculation-logic">Revenue Projection Calculation Logic</a></h2>
+<p>The projection engine iterates over all <code>trial_services</code> records and calculates daily projected revenue:</p>
+<ol>
+<li><strong>Filter eligible tasks</strong> — Must have <code>start_date</code>, <code>end_date</code>, and either <code>projected_daily_revenue</code> or <code>final_billing_method = 'split'</code>. Excludes completed trials. Respects My Deals filter.</li>
+<li><strong>Calculate PDR per task</strong> — For single billing method: uses <code>trial_services.projected_daily_revenue</code>. For split billing: uses <code>pre_trial_projected_daily_revenue</code> and <code>in_trial_projected_daily_revenue</code> based on whether each day falls before or after trial start date.</li>
+<li><strong>Apply stage probability</strong> — Multiplies PDR by the <code>deal_stages.revenue_probability</code> (e.g., 0.25 for 25% likely).</li>
+<li><strong>Subtract HSH payout</strong> — If the trial service has a linked <code>hsh_contracts</code> row (hiring tenant side), calculates daily payout as <code>estimated_total / calendar days</code>. Subtracts this from the projected revenue.</li>
+<li><strong>Add HSH income</strong> — If the tenant is a subcontractor, adds <code>hsh_contracts.estimated_total</code> spread evenly across calendar days as additional revenue.</li>
+<li><strong>Assign to billing periods</strong> — Based on <code>tenant_firms.invoice_period</code> (weekly/monthly/per_trial), maps each day's revenue to the correct billing date. For monthly: revenue accrues to the 1st of the following month. For weekly: revenue accrues to the next occurrence of the weekly billing day.</li>
+</ol>
+<h2 id="user-preferences-saved"><a href="#user-preferences-saved">User Preferences Saved</a></h2>
+<ul>
+<li><code>salesHubTab</code> — Active tab (<code>radar</code>, <code>deals</code>, <code>projections</code>)</li>
+<li><code>salesHubForecastingTimePeriod</code> — <code>month</code> or <code>week</code></li>
+<li><code>salesHubForecastingShowCumulative</code> — boolean</li>
+<li><code>salesHubShowMyDeals</code> — boolean</li>
+</ul>
+<h2 id="data-refresh"><a href="#data-refresh">Data Refresh</a></h2>
+<p>Trials and documents refetch every 30 seconds to keep deal tracker and document status current without manual refresh. Supabase Realtime channels can supplement this for instant updates on signature events.</p>
+<h2 id="role-based-visibility"><a href="#role-based-visibility">Role-Based Visibility</a></h2>
+<p>The Sales Hub page is accessible to <code>owner</code>, <code>admin</code>, and <code>sales</code> roles (hidden from <code>trial_consultant</code>). All content is visible to any user who can access it — the My Deals filter provides personal scoping.</p>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul>
+<li><a href="/user-manual/deals">Deals</a></li>
+<li><a href="/user-manual/clients">Clients</a></li>
+<li><a href="/user-manual/dashboard">Dashboard</a></li>
+<li><a href="/user-manual/database-schema">Database Schema</a></li>
+</ul>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/sales-hub/download.md"><code>/user-manual/sales-hub/download.md</code></a>.</p>
+</article>

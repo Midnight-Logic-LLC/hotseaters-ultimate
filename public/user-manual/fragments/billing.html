@@ -1,0 +1,162 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="billing">
+<h1 id="billing"><a href="#billing">Billing</a></h1>
+<p>The <strong>Billing</strong> page is the single-view invoice creation workflow for HotSeaters. It presents a <strong>4-column Kanban</strong> — Approve Time → Approve Expenses → Create Invoices → Send Invoices — so owners and admins can move an approved pile of work through to a sent invoice without leaving the page. The post-send lifecycle (Open / Overdue / Paid) lives on the separate <a href="/user-manual/collections">Collections</a> page.</p>
+<p>All data is scoped by <code>tenant_id</code>. The page reads from <code>invoices</code>, <code>time_entries</code>, <code>expense_entries</code>, <code>trials</code>, <code>client_firms</code>, <code>contacts</code>, <code>service_types</code>, and <code>hsh_contracts</code>. PDFs are produced by a Puppeteer Supabase Edge Function; email delivery is handled by a Resend-backed Edge Function. Related: <a href="/user-manual/approvals">Approvals</a>, <a href="/user-manual/time-tracking">Time Tracking</a>, <a href="/user-manual/expense-workflows">Expense Workflows</a>, <a href="/user-manual/settings">Settings</a>.</p>
+<h2 id="header-and-data-loading"><a href="#header-and-data-loading">Header and Data Loading</a></h2>
+<p>Title "Billing" with a <strong>Create Invoice</strong> button. A single consolidated query (<code>billingData</code>) fetches invoices, clients, trials, time entries, services, expenses, consultants, and HSH contracts in parallel. A loading spinner displays until data is ready.</p>
+<p>The <code>billingData</code> query uses a dynamic <code>refetchInterval</code>: if any invoice has <code>status='generating'</code>, it polls every 3 seconds to detect when the Puppeteer Edge Function completes PDF generation. Polling is otherwise disabled.</p>
+<h2 id="billing-period-summary-panel"><a href="#billing-period-summary-panel">Billing Period Summary Panel</a></h2>
+<p>An informational panel above the Kanban columns. <strong>Advisory only</strong> — it does not gate or block invoice creation.</p>
+<h3 id="billing-period-date-range"><a href="#billing-period-date-range">Billing Period Date Range</a></h3>
+<p>Automatically displays the <em>upcoming</em> billing period based on the tenant's <code>invoice_period</code>:</p>
+<ul>
+<li><strong>Weekly</strong> — current week ending on <code>weekly_billing_day</code> (e.g., "Week of March 23–29, 2026").</li>
+<li><strong>Monthly</strong> — current month's range using <code>monthly_billing_date</code> as the cycle boundary (e.g., "March 1–31, 2026").</li>
+</ul>
+<h3 id="unapproved-entries-alert"><a href="#unapproved-entries-alert">Unapproved Entries Alert</a></h3>
+<p>Shows the count and total dollar amount of <em>all</em> unapproved (pending or rejected) time entries and expenses across the tenant, regardless of date — a reminder that approval work remains.</p>
+<h3 id="straggler-highlighting"><a href="#straggler-highlighting">Straggler Highlighting</a></h3>
+<p>Within the unapproved summary, entries whose dates fall <em>before</em> the current billing period are flagged as stragglers with a warning treatment. Helps admins address older items first.</p>
+<h3 id="link-to-approvals"><a href="#link-to-approvals">Link to Approvals</a></h3>
+<p>A direct <strong>Go to Approvals →</strong> link for quick navigation to the <a href="/user-manual/approvals">Approvals</a> page.</p>
+<h2 id="4-column-kanban-layout"><a href="#4-column-kanban-layout">4-Column Kanban Layout</a></h2>
+<p>Four columns. Each column header shows a title, count badge, and total amount. The Kanban is hidden while the invoice form is open.</p>
+<h3 id="column-1-approve-time"><a href="#column-1-approve-time">Column 1: Approve Time</a></h3>
+<p>Pending and rejected time entries grouped by trial. Cards surface the same approve / reject / reset actions available on the <a href="/user-manual/approvals">Approvals</a> page so admins can resolve outstanding items without leaving Billing. Bulk selection is supported. HSH subcontractor entries are shown as separate cards and sync to the linked mirror on approval.</p>
+<h3 id="column-2-approve-expenses"><a href="#column-2-approve-expenses">Column 2: Approve Expenses</a></h3>
+<p>Pending and rejected expenses grouped by trial. Receipt thumbnails open the in-app viewer. Same approve / reject / reset / bulk actions as above, scoped to <code>expense_entries</code>.</p>
+<h3 id="column-3-create-invoices"><a href="#column-3-create-invoices">Column 3: Create Invoices</a></h3>
+<p>Aggregates <strong>approved, unbilled</strong> time entries and expenses by trial into cards. Each card shows case name, client (or hiring company for HSH), total hours, entry count, and total dollar amount. Clicking a card opens the invoice form pre-populated with that trial's data.</p>
+<ul>
+<li><strong>Regular entries</strong> — grouped by <code>trial_id</code> where <code>entry_type != 'subcontractor'</code>, <code>status='approved'</code>, <code>is_billable=true</code>, and <code>invoice_id IS NULL</code>.</li>
+<li><strong>HSH entries</strong> — separate cards for <code>entry_type='subcontractor'</code> grouped by <code>trial_id</code>, labeled with the hiring company name.</li>
+<li>Approved unbilled expenses are folded into the matching trial group and increase the total.</li>
+</ul>
+<h3 id="column-4-send-invoices"><a href="#column-4-send-invoices">Column 4: Send Invoices</a></h3>
+<p>Shows invoices with <code>status='draft'</code> or <code>status='generating'</code>. Each card displays the invoice number, client name, trial name, and total.</p>
+<ul>
+<li><strong>Generating</strong> invoices show a pulsing dot and "Generating…" text at reduced opacity.</li>
+<li><strong>Draft</strong> invoices (PDF ready) expose <strong>Preview</strong> and <strong>Send</strong> actions — <strong>Send</strong> invokes the <code>send-invoice-email</code> Edge Function.</li>
+<li>HSH invoices resolve their client from the hiring-company list rather than <code>client_firms</code>.</li>
+</ul>
+<h2 id="invoice-creation-flow"><a href="#invoice-creation-flow">Invoice Creation Flow</a></h2>
+<h3 id="invoice-form--layout"><a href="#invoice-form--layout">Invoice Form — Layout</a></h3>
+<p>The invoice form is a stacked card view with two modes: <strong>Create</strong> (new invoice) and <strong>View</strong> (existing invoice passed in).</p>
+<h4 id="top-card-invoice-details-4-column-grid"><a href="#top-card-invoice-details-4-column-grid">Top Card: Invoice Details (4-column grid)</a></h4>
+<ul>
+<li><strong>Invoice For</strong> — trial case name with job number prefix (e.g., "(JOB-001) Smith v. Jones"). Appears after a trial is selected.</li>
+<li><strong>Bill To</strong> — billing client firm name, attention contact, and address. Uses the FRP (Financially Responsible Party) client/contact when <code>frp_client_id</code> or <code>frp_contact_id</code> is set; otherwise falls back to the primary. HSH invoices resolve to the hiring company.</li>
+<li><strong>Email Recipients</strong> — Create Mode only, once a trial is selected. Lists available contacts with checkboxes:
+<ul>
+<li><strong>FRP contact</strong> — listed first with a purple "(FRP)" label. Default type <strong>To</strong>.</li>
+<li><strong>Primary contact</strong> — listed with an indigo "(Primary)" label. Default type <strong>To</strong>.</li>
+<li><strong>Secondary contacts</strong> — from trial contacts. Default type <strong>CC</strong>.</li>
+<li>Each selected contact has a <strong>To / CC / BCC</strong> dropdown.</li>
+<li><strong>Saved preferences</strong> — on load, <code>trials.invoice_recipient_preferences</code> is checked; prior selections (attorney IDs, types, additional emails) are restored. Without saved prefs, FRP + primary auto-select.</li>
+<li><strong>Additional recipients</strong> — expandable section with an email input, type selector, and Add button. Added emails appear as removable badges.</li>
+</ul>
+</li>
+<li><strong>Dates</strong> (right-aligned) — Invoice Date (defaults to today), Due Date (defaults to today + <code>tenant_firms.invoice_due_days</code>), and Tax Rate % (shown only if the tenant default tax rate or the form tax rate is greater than zero).</li>
+</ul>
+<h4 id="clienttrial-selection-create-mode-no-preselected-trial"><a href="#clienttrial-selection-create-mode-no-preselected-trial">Client/Trial Selection (Create Mode, no preselected trial)</a></h4>
+<p>When no trial is preselected, Client and Trial dropdowns appear. Regular invoices filter trials by <code>client_id</code>. HSH invoices (<code>isHSH=true</code>) filter trials to those with approved subcontractor time entries. Selecting a trial expands the full layout above.</p>
+<h4 id="unbilled-time-entries-card-create-mode"><a href="#unbilled-time-entries-card-create-mode">Unbilled Time Entries Card (Create Mode)</a></h4>
+<p>Shown when a trial has approved, billable, unbilled time entries. Header: Clock icon, "Unbilled Time Entries", and <strong>Select All / Deselect All</strong>.</p>
+<ul>
+<li><strong>Desktop</strong> — 8-column grid: checkbox, date, time range, consultant, service, description, duration + rate, amount. Selected rows highlight green.</li>
+<li><strong>Mobile</strong> — stacked cards per entry.</li>
+<li><strong>Filter</strong> — entries where <code>trial_id</code> matches, <code>status='approved'</code>, <code>is_billable=true</code>, and <code>entry_type</code> matches the mode (regular excludes <code>subcontractor</code>; HSH shows only <code>subcontractor</code>).</li>
+<li><strong>Auto-select</strong> — when a trial is preselected, all matching entries auto-select on first render.</li>
+<li><strong>Subcontractor names</strong> — for <code>hiring_company</code> mirror entries, consultant names are resolved from the HSH contract snapshot (first/last name) rather than the internal consultant roster.</li>
+<li><strong>Add additional items to invoice</strong> — toggle at the bottom reveals the Additional Line Items card.</li>
+</ul>
+<h4 id="unbilled-expenses-card-create-mode"><a href="#unbilled-expenses-card-create-mode">Unbilled Expenses Card (Create Mode)</a></h4>
+<p>Shown when approved, billable, unbilled expenses exist. Header: Receipt icon, "Unbilled Expenses", and <strong>Select All / Deselect All</strong>.</p>
+<ul>
+<li><strong>Desktop</strong> — 6-column grid: checkbox, date, consultant, category, description, amount. Selected rows highlight indigo.</li>
+<li><strong>Mobile</strong> — stacked cards per expense.</li>
+<li><strong>Include expense receipts in PDF</strong> — toggle shown at the bottom when any expense is selected. Defaults on. When on, receipt images and PDFs are merged into the final invoice PDF.</li>
+</ul>
+<h4 id="additional-line-items-card-create-mode"><a href="#additional-line-items-card-create-mode">Additional Line Items Card (Create Mode)</a></h4>
+<p>Appears when "Add additional items" is checked. Header: List icon, "Additional Line Items", and <strong>Add Item</strong>. Each row: description, quantity, rate, calculated amount (read-only), and a delete button.</p>
+<h4 id="billed-entries--expenses-view-mode"><a href="#billed-entries--expenses-view-mode">Billed Entries / Expenses (View Mode)</a></h4>
+<p>In View Mode, checkboxes are replaced by read-only lists of the billed time entries and expenses attached to the invoice (filtered by <code>invoice_id</code>). Each row shows service/description/date/rate/amount.</p>
+<h4 id="bottom-row-email-message-and-totals"><a href="#bottom-row-email-message-and-totals">Bottom Row: Email Message and Totals</a></h4>
+<ul>
+<li><strong>Email Message</strong> — textarea for the email body, placeholder from <code>tenant_firms.default_invoice_email_message</code>, stored as <code>invoices.notes</code>.</li>
+<li><strong>Totals</strong> — right-aligned breakdown: Time Entries Subtotal, Expenses Subtotal, Additional Items (if present). When <code>tax_rate > 0</code>: Subtotal, Tax, divider, Total. Otherwise: Total only. Total is emphasized.</li>
+</ul>
+<h4 id="action-buttons"><a href="#action-buttons">Action Buttons</a></h4>
+<ul>
+<li><strong>Create Mode</strong> — <strong>Cancel</strong> and <strong>Create Invoice</strong>. Submit is disabled with a spinner while saving.</li>
+<li><strong>View Mode</strong> — <strong>Close</strong>, <strong>View PDF</strong> (opens <code>pdf_url</code>), and <strong>Mark as Paid</strong> (shown for sent / overdue invoices, sets <code>status='paid'</code> and <code>paid_date=today</code>).</li>
+</ul>
+<h3 id="invoice-submit-flow"><a href="#invoice-submit-flow">Invoice Submit Flow</a></h3>
+<h4 id="form-submission"><a href="#form-submission">Form Submission</a></h4>
+<p>On submit, the form closes immediately and work continues in the background:</p>
+<ol>
+<li>Generate the invoice number via the <code>generate-invoice-number</code> Edge Function. Number format is per-tenant and supports <code>YY</code>, <code>YYYY</code>, <code>MM</code>, and an auto-incrementing counter, with optional yearly reset.</li>
+<li>Build a <code>recipientEmails</code> object from selected contacts and additional emails, grouped by <code>to</code>, <code>cc</code>, <code>bcc</code>.</li>
+<li>Save the selection to <code>trials.invoice_recipient_preferences</code> so it is restored next time.</li>
+<li>Call <code>onSubmit</code> with the full payload: <code>invoice_number</code>, <code>client_id</code>, <code>trial_id</code>, dates, subtotal/tax/total, selected time entry IDs, expense IDs, line items, <code>is_hsh_invoice</code>, <code>include_receipts</code>, and <code>recipient_emails</code>.</li>
+</ol>
+<h4 id="invoice-creation-mutation"><a href="#invoice-creation-mutation">Invoice Creation Mutation</a></h4>
+<p>The Billing page handles persistence:</p>
+<ol>
+<li>Insert a row into <code>invoices</code> with <code>status='generating'</code> (the Send column shows a pulsing dot).</li>
+<li>Update selected time entries in parallel: set <code>invoice_id</code> and <code>status='billed'</code>.</li>
+<li>Update selected expenses in parallel: set <code>invoice_id</code> and <code>status='billed'</code>.</li>
+<li>Fire-and-forget the <code>generate-invoice-pdf</code> Puppeteer Edge Function.</li>
+<li>Optimistically patch the query cache so the UI updates instantly; the real row replaces the temp row on success.</li>
+<li>While any invoice has <code>status='generating'</code>, the 3-second <code>billingData</code> poll detects the transition to <code>draft</code>.</li>
+</ol>
+<h2 id="pdf-generation-generate-invoice-pdf"><a href="#pdf-generation-generate-invoice-pdf">PDF Generation (generate-invoice-pdf)</a></h2>
+<p>Supabase Edge Function running Puppeteer. Executes asynchronously after invoice creation.</p>
+<ol>
+<li><strong>Data loading</strong> — fetches the invoice, tenant, clients, trials, time entries (by <code>invoice_id</code>), expenses (by <code>invoice_id</code>), services, and consultants in parallel using the service role.</li>
+<li><strong>Template loading</strong> — loads the tenant's <code>default_invoice_template_id</code> (<code>document_templates</code>) and its sections (sorted by <code>order</code>).</li>
+<li><strong>Bill-to resolution</strong> — if the trial has <code>frp_client_id</code>, it overrides the primary client; same for <code>frp_contact_id</code> and the primary contact.</li>
+<li><strong>Date range</strong> — derives <code>{{start_time}}</code> and <code>{{end_time}}</code> from the earliest and latest time entries.</li>
+<li><strong>Placeholder resolution</strong> — builds a map of ~25 placeholders (<code>{{invoice_number}}</code>, <code>{{invoice_date}}</code>, <code>{{due_date}}</code>, <code>{{start_time}}</code>, <code>{{end_time}}</code>, <code>{{client_name}}</code>, <code>{{client_address/city/state/zip}}</code>, <code>{{primary_contact}}</code>, <code>{{bill_to_*}}</code>, <code>{{subtotal}}</code>, <code>{{tax}}</code>, <code>{{total}}</code>, <code>{{company_name}}</code>, <code>{{case_name}}</code>, <code>{{payment_terms}}</code>) and substitutes them in each section's HTML.</li>
+<li><strong>Section rendering</strong> — iterates sorted sections:
+<ul>
+<li><strong>invoice_line_items</strong> — builds rows from time entries (sorted by <code>start_time</code>) and expenses (sorted by <code>date</code>). Row types: <em>header</em> (column headers), <em>repeating</em> (one row per line item with per-cell placeholders: <code>{{date}}</code>, <code>{{time_entry_time_range}}</code>, <code>{{consultant_name}}</code>, <code>{{service_name}}</code>, <code>{{description}}</code>, <code>{{quantity}}</code>, <code>{{rate}}</code>, <code>{{amount}}</code>, <code>{{category}}</code>), <em>subtotal/static</em> (totals), <em>separator</em> (full-colspan dividers). Supports alternating row colors.</li>
+<li><strong>table</strong> / <strong>statement_line_items</strong> — rendered with full per-cell style support (bg color, text color, weight, style, decoration, size, family, padding, align, vertical align).</li>
+<li><strong>Other sections</strong> — raw HTML with placeholder substitution.</li>
+</ul>
+</li>
+<li><strong>HTML → PDF</strong> — Puppeteer renders the assembled HTML using the template's page settings (margins, size).</li>
+<li><strong>Receipt attachment</strong> — if <code>include_receipts</code> is true and any expense has a <code>receipt_url</code>, the merger function appends receipts (see below).</li>
+<li><strong>Finalization</strong> — updates the invoice row with the final <code>pdf_url</code> (private Supabase Storage URI) and <code>status='draft'</code>.</li>
+<li><strong>Error handling</strong> — on failure, <code>status</code> is set to <code>draft</code> and "[PDF generation failed — please retry]" is appended to <code>notes</code>.</li>
+</ol>
+<h2 id="receipt-attachment"><a href="#receipt-attachment">Receipt Attachment</a></h2>
+<p>A helper Edge Function appends expense receipts to the invoice PDF using <code>pdf-lib</code> for PDF manipulation and Puppeteer for HTML → PDF conversion of image receipts.</p>
+<ol>
+<li><strong>Input</strong> — receives the invoice PDF URI from the primary generator and the list of expenses (each with <code>receipt_url</code>, description, date, amount).</li>
+<li><strong>Load base PDF</strong> — creates a signed URL for the private invoice PDF, downloads it, and loads it into a <code>PDFDocument</code>.</li>
+<li><strong>Header page</strong> — renders an "Expense Receipts" cover page with subtitle "Supporting documentation for invoice expenses" via Puppeteer and appends it after the main invoice.</li>
+<li><strong>Receipt separation</strong> — splits receipts into PDF receipts (<code>.pdf</code>) and image receipts (everything else).</li>
+<li><strong>PDF receipts</strong> — each is downloaded, loaded as a <code>PDFDocument</code>, and all of its pages are copied into the merged document so multi-page PDF receipts are fully included.</li>
+<li><strong>Image receipts — 4-up layout</strong> — image receipts are batched into groups of four and rendered in a 2×2 CSS grid. Each cell shows the description, date + amount, and the image (max-height 280px, bordered). The grid is rendered to an 8.5×11in page with 0.3in margins via Puppeteer and copied into the merged document. Five receipts produce two pages (4 + 1).</li>
+<li><strong>Save and upload</strong> — the merged <code>PDFDocument</code> is saved to bytes, uploaded to the private Supabase Storage bucket, and the returned URI replaces the original <code>pdf_url</code>.</li>
+</ol>
+<h2 id="invoice-preview-dialog"><a href="#invoice-preview-dialog">Invoice Preview Dialog</a></h2>
+<p>A memoized preview renders only when the invoice has a <code>pdf_url</code>. It shows the invoice number heading, the status badge, an embedded PDF iframe (600px tall), a <strong>Download</strong> button (creates a signed URL for private files), and a <strong>Close</strong> button. It never regenerates the PDF.</p>
+<h2 id="email-preview-and-send"><a href="#email-preview-and-send">Email Preview and Send</a></h2>
+<p><strong>Preview</strong> calls the <code>preview-invoice-email</code> Edge Function to render the email HTML (Resend template), displayed in an iframe. <strong>Send</strong> calls <code>send-invoice-email</code> which delivers the PDF as an attachment to every selected <strong>To / CC / BCC</strong> recipient through Resend, then updates <code>invoices.status</code> to <code>sent</code>.</p>
+<h2 id="delete-invoice"><a href="#delete-invoice">Delete Invoice</a></h2>
+<p>Confirmation dialog showing the invoice number and a warning that the action is permanent. On confirm:</p>
+<ol>
+<li>Reset all linked time entries: <code>invoice_id=null</code>, <code>status='approved'</code>.</li>
+<li>Reset all linked expenses: <code>invoice_id=null</code>, <code>status='approved'</code>.</li>
+<li>Call <code>delete-invoice</code> (deletes the <code>invoices</code> row and cleans up the PDF in Storage).</li>
+<li>Invalidate the <code>billingData</code> cache.</li>
+</ol>
+<h2 id="quickbooks-export"><a href="#quickbooks-export">QuickBooks Export</a></h2>
+<p>QuickBooks export is deferred in v1. The Billing page displays a graceful-degradation banner explaining that export is coming soon; no export controls are rendered. See <a href="/user-manual/quickbooks-integration">QuickBooks Integration</a> for the planned workflow.</p>
+<h2 id="role-visibility"><a href="#role-visibility">Role Visibility</a></h2>
+<p>Accessible to <strong>Owner</strong> and <strong>Admin</strong> only. The sidebar item is hidden from Sales and Trial Consultant roles, and the underlying queries are gated by the same role check.</p>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/billing/download.md"><code>/user-manual/billing/download.md</code></a>.</p>
+</article>

@@ -1,0 +1,420 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="user-workflows">
+<h1 id="user-workflows--business-processes"><a href="#user-workflows--business-processes">User Workflows &#x26; Business Processes</a></h1>
+<p>Step-by-step guides for common user tasks. For the platform's data model, see the <a href="/user-manual/database-schema">database schema</a>; for technical details, see the <a href="/user-manual/technical-reference">technical reference</a>.</p>
+<h2 id="initial-setup--onboarding"><a href="#initial-setup--onboarding">Initial Setup &#x26; Onboarding</a></h2>
+<h3 id="first-time-user-flow"><a href="#first-time-user-flow">First Time User Flow</a></h3>
+<ol>
+<li>User creates a Supabase account (email/password or Google OAuth) — redirected to the Landing page.</li>
+<li>Click <strong>Get Started</strong> — Supabase authentication flow runs.</li>
+<li>After auth — the <a href="/user-manual/app-overview">Onboarding</a> page loads.</li>
+<li>Enter company details (name, website, contact info).</li>
+<li>Optional: connect Google Calendar for schedule sync.</li>
+<li>System creates a <code>tenant_firms</code> record and a <code>user_profiles</code> row with role <code>owner</code>.</li>
+<li><code>initializeCompanyDefaults</code> runs and seeds:
+<ul>
+<li>Default sales pipeline stages (Lead → Proposal → Negotiation → Won/Lost)</li>
+<li>Operations stages (Pre-Trial → Trial → Verdict/Settlement)</li>
+<li>Service categories (Trial Consulting, Graphics, etc.)</li>
+<li>Consultant tiers (Junior, Standard, Senior, etc.)</li>
+<li>Document template categories</li>
+<li>Travel Time service with configurable multiplier</li>
+</ul>
+</li>
+<li>Redirect to the <a href="/user-manual/dashboard">dashboard</a>.</li>
+</ol>
+<p>Both the legacy email signup and the Google OAuth sub-user signup paths coexist. Unaccepted invitations expire after 14 days via a <code>pg_cron</code> cleanup job.</p>
+<h3 id="accepting-a-team-invitation"><a href="#accepting-a-team-invitation">Accepting a Team Invitation</a></h3>
+<ol>
+<li>User receives an email (sent via Resend) with a unique token link.</li>
+<li>Click link — AcceptInvite page loads.</li>
+<li>If not authenticated, login flow runs and returns to AcceptInvite.</li>
+<li><code>acceptInvitation</code> Edge Function:
+<ul>
+<li>Validates token and invitation status</li>
+<li>Creates <code>user_profiles</code> + <code>user_roles</code> rows with the invited role</li>
+<li>Creates <code>service_qualifications</code> rows for qualified services</li>
+<li>Marks the invitation as accepted</li>
+</ul>
+</li>
+<li>Redirect to the <a href="/user-manual/dashboard">dashboard</a> as a team member.</li>
+</ol>
+<h3 id="referral-invitation-inviting-another-company"><a href="#referral-invitation-inviting-another-company">Referral Invitation (Inviting Another Company)</a></h3>
+<ol>
+<li>Owner/Admin navigates to <a href="/user-manual/consultants">Consultants</a> and clicks <strong>Refer a Company</strong>.</li>
+<li>Enter email, first name, and last name of the contact at the other company.</li>
+<li><code>sendReferralInvitation</code> Edge Function:
+<ul>
+<li>Validates that the email is not already registered on the platform</li>
+<li>Validates that the domain does not match an existing tenant</li>
+<li>Creates an <code>invitations</code> row with <code>type: "referral"</code></li>
+<li>Sends a branded email via Resend pointing to the ReferralLanding page</li>
+</ul>
+</li>
+<li>Recipient clicks the link — ReferralLanding page shows HotSeaters / HotSeatHub marketing.</li>
+<li>Recipient clicks <strong>Get Started</strong> and enters standard onboarding.</li>
+</ol>
+<h2 id="sales-pipeline-deals"><a href="#sales-pipeline-deals">Sales Pipeline (Deals)</a></h2>
+<h3 id="creating-a-deal"><a href="#creating-a-deal">Creating a Deal</a></h3>
+<ol>
+<li>Navigate to <a href="/user-manual/deals">Deals</a> (or <a href="/user-manual/sales-hub">Sales Hub</a>).</li>
+<li>Click <strong>New Deal</strong> — opens the 4-step DealWizard.</li>
+<li><strong>Step 1 — Client Selection:</strong> pick an existing client or create one.</li>
+<li><strong>Step 2 — Case Details:</strong> case name, court info, dates, primary contact.</li>
+<li><strong>Step 3 — Services:</strong> select from catalog.
+<ul>
+<li>Pre-trial services: set start date and duration</li>
+<li>In-trial services: automatically match trial dates</li>
+<li>Rates derived from client tier, consultant tier, and any service overrides</li>
+</ul>
+</li>
+<li><strong>Step 4 — Review:</strong> verify estimated value and details.</li>
+<li>Save — <code>deals</code> row created in the first sales pipeline stage.</li>
+<li>All services saved as <code>trial_services</code> rows with start/end dates.</li>
+</ol>
+<h3 id="rate-calculation-logic"><a href="#rate-calculation-logic">Rate Calculation Logic</a></h3>
+<pre><code class="hljs language-text">For each service on a deal:
+1. Start with service_types.base_rate
+2. Apply client_service_rates override if one exists for this (client, service) pair
+3. Apply consultant_tiers.multiplier (if sales lead has a tier)
+4. Apply client tier multiplier (if client has a tier)
+5. Result = trial_services.rate (snapshotted at time of creation)
+</code></pre>
+<h3 id="managing-the-deal-pipeline"><a href="#managing-the-deal-pipeline">Managing the Deal Pipeline</a></h3>
+<ul>
+<li><strong>Kanban view</strong> — drag cards between stage columns.</li>
+<li><strong>List view</strong> — click the stage badge to change.</li>
+<li><strong>Cards view</strong> — visual cards grouped by stage with collapse/expand.</li>
+<li>View preferences save automatically to the user profile.</li>
+</ul>
+<h3 id="marking-a-deal-as-won"><a href="#marking-a-deal-as-won">Marking a Deal as Won</a></h3>
+<ol>
+<li>Open the trial detail modal (click deal card or row).</li>
+<li>Navigate to the <strong>Deal Info</strong> tab.</li>
+<li>Click <strong>Deal Won</strong> and confirm. The system then:
+<ul>
+<li>Sets <code>won_date</code> to the current date</li>
+<li>Generates a job number via <code>generateJobNumber</code></li>
+<li>Moves the deal to the first operations pipeline stage</li>
+<li>Updates estimated-value tracking</li>
+</ul>
+</li>
+</ol>
+<h3 id="marking-a-deal-as-lost-or-settled"><a href="#marking-a-deal-as-lost-or-settled">Marking a Deal as Lost or Settled</a></h3>
+<ol>
+<li>Open the trial detail modal.</li>
+<li>Click <strong>Deal Lost</strong> or <strong>Deal Settled</strong>.</li>
+<li>Sets <code>completion_type</code> and <code>completion_date</code>.</li>
+<li>Deal moves to <strong>Completed</strong> and no longer appears in the active pipeline.</li>
+</ol>
+<h2 id="operations-trials"><a href="#operations-trials">Operations (Trials)</a></h2>
+<h3 id="assigning-services--internal-team"><a href="#assigning-services--internal-team">Assigning Services — Internal Team</a></h3>
+<ol>
+<li>Navigate to <a href="/user-manual/schedule">Schedule</a>.</li>
+<li>Find the trial and service bar (unassigned bars are gray).</li>
+<li>Click the service bar — ServiceAssignmentModal opens.</li>
+<li>Select a consultant from the team whose <code>service_qualifications</code> match.</li>
+<li><code>assignments</code> row created with <code>is_subcontractor: false</code>.</li>
+<li>Service bar recolors to the consultant's designated color.</li>
+<li>Consultant receives an assignment notification.</li>
+<li>If the consultant has Google Calendar connected, the event is synced automatically.</li>
+</ol>
+<h3 id="posting-to-the-hotseathub-marketplace"><a href="#posting-to-the-hotseathub-marketplace">Posting to the HotSeatHub Marketplace</a></h3>
+<ol>
+<li>From Schedule: click <strong>Post to HSH</strong> on an unassigned service. Or from <a href="/user-manual/help-wanted">Help Wanted</a>: click <strong>New Request</strong>.</li>
+<li>PostToHotSeatHubForm opens a 3-step modal:
+<ul>
+<li><strong>Step 1:</strong> service details (dates, description, location)</li>
+<li><strong>Step 2:</strong> estimated/offered rate</li>
+<li><strong>Step 3:</strong> audience — public or invite specific companies/users from favorites</li>
+</ul>
+</li>
+<li>Submit — <code>hsh_postings</code> row created with status <code>open</code>.</li>
+<li><code>notifyMarketplace</code> Edge Function fans out notifications to potential fillers.</li>
+<li>The posting appears on <a href="/user-manual/help-wanted">Help Wanted</a> and in <a href="/user-manual/potential-gigs">Potential Gigs</a> for other tenants.</li>
+</ol>
+<h3 id="responding-to-an-hsh-request-job-filler"><a href="#responding-to-an-hsh-request-job-filler">Responding to an HSH Request (Job Filler)</a></h3>
+<ol>
+<li>Navigate to <a href="/user-manual/potential-gigs">Potential Gigs</a>.</li>
+<li>Browse public requests or private invitations.</li>
+<li>Click <strong>Respond</strong>.</li>
+<li>Select a consultant from your qualified team.</li>
+<li>Map your tenant's service to the requested service.</li>
+<li>Set the billing rate you will charge the hiring company.</li>
+<li>System auto-calculates a proposed rate based on profit-margin settings.</li>
+<li>Add an optional message.</li>
+<li>Submit — <code>hsh_applications</code> row created with status:
+<ul>
+<li><code>pending_agreed</code> if proposed rate matches estimated rate</li>
+<li><code>pending_counter</code> if proposed rate differs</li>
+</ul>
+</li>
+<li>Hiring company receives a notification.</li>
+</ol>
+<h3 id="hsh-rate-negotiation"><a href="#hsh-rate-negotiation">HSH Rate Negotiation</a></h3>
+<ol>
+<li>Either party counter-offers via <code>negotiateHSHRate</code>.</li>
+<li>Counter updates <code>proposed_rate</code> and appends to <code>negotiation_history</code>.</li>
+<li>Application status becomes <code>negotiating</code>.</li>
+<li>The other party receives a notification.</li>
+<li>Process repeats until one side accepts or declines.</li>
+<li>Full thread is visible via the NegotiationThread component.</li>
+</ol>
+<h3 id="accepting-an-hsh-response-job-poster"><a href="#accepting-an-hsh-response-job-poster">Accepting an HSH Response (Job Poster)</a></h3>
+<ol>
+<li>Review the response card showing consultant, rate, and profit calculation.</li>
+<li>Choose an action:
+<ul>
+<li><strong>Accept &#x26; Close</strong> — accept, cancel the request, decline others</li>
+<li><strong>Accept &#x26; Keep Open</strong> — accept but leave the request open</li>
+<li><strong>Counter</strong> — propose a different rate (enters negotiation)</li>
+<li><strong>Decline</strong> — reject with optional message</li>
+</ul>
+</li>
+<li>On accept, <code>acceptHSHResponse</code>:
+<ul>
+<li>Creates an <code>hsh_contracts</code> row with agreed rate, dates, estimated total</li>
+<li>Generates a subcontractor job number for their internal tracking</li>
+<li>Creates an <code>assignments</code> row with <code>is_subcontractor: true</code></li>
+<li>Auto-generates the HSH Agreement PDF via DocuSeal</li>
+<li>Records <code>hiring_accepted_at</code> timestamp</li>
+<li>Grants the subcontractor cross-tenant access to log time and expenses</li>
+<li>Syncs the Google Calendar event for the assigned consultant</li>
+</ul>
+</li>
+</ol>
+<h3 id="cancelling-an-hsh-agreement"><a href="#cancelling-an-hsh-agreement">Cancelling an HSH Agreement</a></h3>
+<ol>
+<li>Either party opens the HSH assignment details.</li>
+<li>Click <strong>Cancel Agreement</strong> and provide a reason.</li>
+<li><code>cancelHSHSubcontractAgreement</code>:
+<ul>
+<li>Sets <code>hsh_contracts.status</code> to <code>cancelled</code></li>
+<li>Sets the linked <code>hsh_postings.status</code> to <code>cancelled</code> (if applicable)</li>
+<li>Deactivates the <code>assignments</code> row</li>
+<li>Deletes the Google Calendar event for the assigned consultant</li>
+<li>Merges a cancellation addendum page into the existing HSH Agreement PDF via DocuSeal</li>
+<li>Notifies both parties via <code>createHSHNotifications</code></li>
+</ul>
+</li>
+</ol>
+<h3 id="rescheduling-via-drag--drop"><a href="#rescheduling-via-drag--drop">Rescheduling via Drag &#x26; Drop</a></h3>
+<ol>
+<li>Navigate to <a href="/user-manual/schedule">Schedule</a>.</li>
+<li>Grab a trial bar (moves the entire trial) or a service bar (moves one service).</li>
+<li>Drag to a new date range on the timeline.</li>
+<li>Confirmation dialog lists affected services, consultants, and notification recipients.</li>
+<li>Confirm — <code>updateTrialDates</code> updates all dates, PDR, and HSH assignments.</li>
+<li>Notifications sent to all involved parties (separately to HSH subs).</li>
+<li>Google Calendar events updated for all connected consultants.</li>
+</ol>
+<h3 id="trial-continuation-workflow"><a href="#trial-continuation-workflow">Trial Continuation Workflow</a></h3>
+<ol>
+<li>Open the trial and click <strong>Continued</strong>.</li>
+<li>ContinuedDialog offers three precision options:
+<ul>
+<li><strong>Definite</strong> — enter an exact new trial start date (all services shift)</li>
+<li><strong>Month Only</strong> — select a target month (sets to first business day, Monday)</li>
+<li><strong>None</strong> — mark as continued without new dates yet</li>
+</ul>
+</li>
+<li>Confirm — sets <code>completion_type: "case_continued"</code>, shifts dates, creates notifications for internal team and HSH subcontractors.</li>
+</ol>
+<h2 id="time-tracking"><a href="#time-tracking">Time Tracking</a></h2>
+<p>See also the <a href="/user-manual/time-clock-workflows">time clock workflows</a> and the <a href="/user-manual/travel-time">travel time feature</a>.</p>
+<h3 id="time-clock--starting-a-timer"><a href="#time-clock--starting-a-timer">Time Clock — Starting a Timer</a></h3>
+<ol>
+<li>Navigate to <a href="/user-manual/time-tracking">Time Tracking</a> — <strong>Time Clock</strong> tab.</li>
+<li>Select a trial from the dropdown (shows only assigned trials).</li>
+<li>Select a service (filtered to your assigned services for that trial).</li>
+<li>Add optional notes for the session.</li>
+<li>Click <strong>Clock In</strong> — <code>time_entries</code> row created with <code>status: "in_progress"</code>.</li>
+<li>Timer displays elapsed time and persists across page navigation.</li>
+</ol>
+<h3 id="time-clock--stopping-a-timer"><a href="#time-clock--stopping-a-timer">Time Clock — Stopping a Timer</a></h3>
+<ol>
+<li>Click <strong>Clock Out</strong>.</li>
+<li>System sets <code>end_time</code>, calculates duration, applies rounding per tenant settings, and calculates amount.</li>
+<li>Status becomes <code>pending</code> (awaits approval).</li>
+<li>Entry appears in the Table view and on <a href="/user-manual/approvals">Approvals</a>.</li>
+</ol>
+<h3 id="manual-time-entry"><a href="#manual-time-entry">Manual Time Entry</a></h3>
+<ol>
+<li>Time Tracking — <strong>Table</strong> tab — click <strong>+ Add Time Entry</strong>.</li>
+<li>Fill in trial, service, start, end, description.</li>
+<li>Duration and rate are computed automatically.</li>
+<li>Save — <code>time_entries</code> row created with <code>status: "pending"</code>.</li>
+</ol>
+<h3 id="time-entry-approval-ownersadmins"><a href="#time-entry-approval-ownersadmins">Time Entry Approval (Owners/Admins)</a></h3>
+<ol>
+<li>Navigate to <a href="/user-manual/approvals">Approvals</a> — <strong>Approve Time</strong> tab (or Time Tracking — <strong>Approve</strong> tab).</li>
+<li>Filter by status (All/Pending/Approved/Rejected/Billed), date range.</li>
+<li>Group by Team, Person, or Trial using composable toggles.</li>
+<li>Bulk-select entries with checkboxes.</li>
+<li><strong>Approve</strong> — sets <code>status: "approved"</code>, records <code>approved_by</code> and <code>approved_at</code>.</li>
+<li><strong>Reject</strong> — prompts for <code>rejection_reason</code>, sets <code>status: "rejected"</code>.</li>
+<li><strong>Unapprove</strong> — resets approved entries back to <code>pending</code>.</li>
+<li>All actions sync to linked HSH entries automatically.</li>
+</ol>
+<h3 id="hsh-subcontractor-time-logging"><a href="#hsh-subcontractor-time-logging">HSH Subcontractor Time Logging</a></h3>
+<ol>
+<li>Subcontractor logs time in their own tenant's time tracking.</li>
+<li>System creates two linked entries:
+<ul>
+<li>Subcontractor entry: <code>entry_type: "subcontractor"</code>, <code>rate = agreed_rate</code></li>
+<li>Hiring company entry: <code>entry_type: "hiring_company"</code>, <code>rate = billing_rate</code></li>
+<li>Both linked via <code>linked_time_entry_id</code></li>
+</ul>
+</li>
+<li><code>linkHSHTimeEntries</code> automation ensures bidirectional linking.</li>
+<li>Approval from the hiring company syncs to the subcontractor entry.</li>
+</ol>
+<h3 id="travel-time-logging"><a href="#travel-time-logging">Travel Time Logging</a></h3>
+<ol>
+<li>Select a trial and the <strong>Travel Time</strong> service in the time clock.</li>
+<li>Select the associated service this travel is for.</li>
+<li>Travel rate = associated service rate × travel multiplier (e.g., 0.5 for 50%).</li>
+<li><code>original_trial_service_id</code> links the travel entry to its associated service.</li>
+<li>Visual travel indicators (±1 day) render on the timeline.</li>
+</ol>
+<h2 id="expense-tracking"><a href="#expense-tracking">Expense Tracking</a></h2>
+<p>See also the <a href="/user-manual/expense-workflows">expense workflows</a> and <a href="/user-manual/auto-expense-reporting">auto expense reporting</a>.</p>
+<h3 id="creating-a-receipt-expense-2-step-wizard"><a href="#creating-a-receipt-expense-2-step-wizard">Creating a Receipt Expense (2-Step Wizard)</a></h3>
+<ol>
+<li>Click <strong>Add Expense</strong> on a trial card (Time Clock) or the Expenses tab.</li>
+<li><strong>Step 1:</strong> toggle set to Receipt (default). Upload a receipt photo or PDF.</li>
+<li>An AI vision API extracts data: amount, date, vendor (paid_to), description, category.</li>
+<li><strong>Step 2:</strong> review/edit extracted fields alongside the receipt image.</li>
+<li>Submit — <code>expense_entries</code> row created with <code>expense_type: "receipt"</code>, <code>status: "pending"</code>.</li>
+</ol>
+<h3 id="creating-a-mileage-expense-2-step-wizard"><a href="#creating-a-mileage-expense-2-step-wizard">Creating a Mileage Expense (2-Step Wizard)</a></h3>
+<ol>
+<li>Click <strong>Add Expense</strong> — toggle to Mileage.</li>
+<li><strong>Step 1:</strong> enter start and end addresses (Google Places Autocomplete).</li>
+<li>Click <strong>Calculate Route</strong> — calls the Google Directions API.</li>
+<li><strong>Step 2:</strong> view the route map, confirm or edit miles. Amount auto-calculates as <code>miles × IRS rate</code> (e.g., $0.70/mile).</li>
+<li>Category auto-set to <code>travel</code>. Edit date or description as needed.</li>
+<li>Submit — <code>expense_entries</code> row created with <code>expense_type: "mileage"</code>, <code>miles</code>, <code>start_address</code>, <code>end_address</code>, <code>mileage_rate</code>.</li>
+</ol>
+<h3 id="hsh-dual-entry-expenses"><a href="#hsh-dual-entry-expenses">HSH Dual-Entry Expenses</a></h3>
+<ol>
+<li>When creating an expense for an HSH trial, two linked expenses are created:
+<ul>
+<li>Subcontractor expense: <code>entry_type: "subcontractor"</code></li>
+<li>Hiring company expense: <code>entry_type: "hiring_company"</code>, includes <code>subcontractor_amount</code></li>
+</ul>
+</li>
+<li>Linked via <code>linked_expense_id</code> (bidirectional).</li>
+<li>Approval/rejection syncs across both entries.</li>
+<li>Deletion removes both linked entries.</li>
+</ol>
+<h3 id="expense-approval-ownersadmins"><a href="#expense-approval-ownersadmins">Expense Approval (Owners/Admins)</a></h3>
+<ol>
+<li>Navigate to <a href="/user-manual/approvals">Approvals</a> — <strong>Approve Expenses</strong> tab.</li>
+<li>Filter by status (All/Pending/Approved/Rejected/Billed/Reimbursed), date range.</li>
+<li>Group by Team, Trial, or Person with composable toggles.</li>
+<li>Click the receipt icon to preview in BaseDocumentViewer (in-app, not a new tab).</li>
+<li>Bulk-select expenses with checkboxes.</li>
+<li><strong>Approve / Reject</strong> — updates status and records <code>approved_by</code> / <code>approved_at</code>.</li>
+<li><strong>Unapprove</strong> — resets approved expenses back to <code>pending</code>.</li>
+<li><strong>Bulk Delete</strong> — permanently removes selected expenses (with confirmation).</li>
+<li>Actions on HSH expenses sync to their linked entry automatically.</li>
+</ol>
+<h2 id="invoicing--billing"><a href="#invoicing--billing">Invoicing &#x26; Billing</a></h2>
+<h3 id="creating-a-client-invoice"><a href="#creating-a-client-invoice">Creating a Client Invoice</a></h3>
+<ol>
+<li>Navigate to <a href="/user-manual/billing">Billing</a> (single-view 4-column Kanban).</li>
+<li>The <strong>Create Invoices</strong> column shows trials with approved, unbilled time and expenses.</li>
+<li>Click <strong>Create Invoice</strong> for a trial.</li>
+<li>System auto-populates client info (or FRP), invoice number, all approved time entries and expenses, totals, and due date.</li>
+<li>Select an invoice template (or use the tenant default).</li>
+<li>Review/edit line items — save — <code>invoices</code> row with <code>status: "draft"</code>.</li>
+<li>PDF generated via <code>generateInvoicePdf</code> (Edge Function).</li>
+<li>Optional: merge receipts into the invoice PDF.</li>
+</ol>
+<blockquote>
+<p>QuickBooks export is configured but disabled in v1 — a graceful-degradation banner appears where the export action would normally sit. See <a href="/user-manual/quickbooks-integration">QuickBooks integration</a>.</p>
+</blockquote>
+<h3 id="sending-an-invoice"><a href="#sending-an-invoice">Sending an Invoice</a></h3>
+<ol>
+<li>Open the invoice and click <strong>Send Invoice</strong>.</li>
+<li>Email composer auto-populates recipients (from saved trial preferences), To/CC/BCC, and an email template.</li>
+<li>Send — <code>sendInvoiceEmail</code> sends via Resend with the PDF attached, sets <code>status: "sent"</code>, and marks linked time/expenses as <code>billed</code>.</li>
+<li>Recipient preferences are saved to the trial for the next invoice.</li>
+</ol>
+<h3 id="marking-an-invoice-as-paid-collections"><a href="#marking-an-invoice-as-paid-collections">Marking an Invoice as Paid (Collections)</a></h3>
+<ol>
+<li>Navigate to <a href="/user-manual/collections">Collections</a> (separate from Billing).</li>
+<li>3-column Kanban: Open Invoices, Overdue Invoices, Paid Invoices.</li>
+<li>Click an invoice card to preview (PDF iframe with download).</li>
+<li>Click <strong>Mark as Paid</strong> — enter payment method, reference number, payment amount.</li>
+<li>Invoice <code>status: "paid"</code>, linked <code>time_entries.status</code> becomes <code>paid</code>.</li>
+</ol>
+<h2 id="document-management--e-signatures"><a href="#document-management--e-signatures">Document Management &#x26; E-Signatures</a></h2>
+<h3 id="creating-document-templates"><a href="#creating-document-templates">Creating Document Templates</a></h3>
+<ol>
+<li><a href="/user-manual/settings">Settings</a> — <strong>Documents</strong> tab — choose type (Document, Billing, Email).</li>
+<li>Build with section types: Rich Text, Services Table, Full Page, Line Items.</li>
+<li>Insert placeholders: <code>{{CASE_NAME}}</code>, <code>{{CLIENT_NAME}}</code>, etc.</li>
+<li>Insert signature fields: Client, FRP, or Sales e-signatures.</li>
+<li>Configure page settings, conditions, and display order.</li>
+</ol>
+<h3 id="e-signature-workflow"><a href="#e-signature-workflow">E-Signature Workflow</a></h3>
+<ol>
+<li>Generate a document from a template and save as draft.</li>
+<li>Click <strong>Send for Signature</strong> and select signers (Client, FRP, Sales).</li>
+<li>DocuSeal emails each signer a unique signing link.</li>
+<li>Signer opens the DocuSeal-hosted signing page and draws on a 600×180 canvas.</li>
+<li>Submit — signature embedded in the PDF; signer IP and timestamp recorded.</li>
+<li>When all signers complete, the final PDF is generated and the document status becomes <code>signed</code>.</li>
+<li>If configured, the pipeline stage auto-advances.</li>
+</ol>
+<h2 id="client-management"><a href="#client-management">Client Management</a></h2>
+<h3 id="adding-a-client"><a href="#adding-a-client">Adding a Client</a></h3>
+<ol>
+<li><a href="/user-manual/clients">Clients</a> — <strong>Add Client</strong> — NewClientLayout modal with tabs.</li>
+<li><strong>Client Info:</strong> firm name, type, sales lead, phone, website.</li>
+<li><strong>Addresses:</strong> multiple office locations with labels.</li>
+<li><strong>Attorneys:</strong> contacts with email, phone, mobile, address association.</li>
+<li><strong>Service Overrides:</strong> custom rates for specific services.</li>
+</ol>
+<h3 id="transferring-a-contact-between-firms"><a href="#transferring-a-contact-between-firms">Transferring a Contact Between Firms</a></h3>
+<ol>
+<li>Edit the contact and click <strong>Transfer</strong>.</li>
+<li>Search for or create the destination firm and select an office address.</li>
+<li>Confirm title, enter new email/phone (mobile carries over).</li>
+<li>Transfer — a new record is created at the destination; the original is marked <code>transferred</code> with notes.</li>
+</ol>
+<h2 id="settings--configuration"><a href="#settings--configuration">Settings &#x26; Configuration</a></h2>
+<p>For theming details see the <a href="/user-manual/style-guide">style guide</a>. The platform ships with a single theme in v1; dual-theme support is architecturally possible and deferred.</p>
+<h3 id="services--categories-setup"><a href="#services--categories-setup">Services &#x26; Categories Setup</a></h3>
+<ol>
+<li><a href="/user-manual/settings">Settings</a> — <strong>Services</strong> tab.</li>
+<li>Create categories; add services with base rates, rate types, and a daily-minimum flag.</li>
+<li>Configure availability (<code>pre_trial_only</code> / <code>in_trial_only</code> / <code>both</code>).</li>
+<li>For Travel Time, set <code>travel_multiplier</code> (e.g., 0.5 for 50% of the associated service rate).</li>
+</ol>
+<h3 id="pipeline-stage-configuration"><a href="#pipeline-stage-configuration">Pipeline Stage Configuration</a></h3>
+<ol>
+<li>Settings — <strong>Pipeline</strong> tab.</li>
+<li>Configure Sales stages: name, color, order, <code>revenue_probability</code>.</li>
+<li>Configure Operations stages with auto-move triggers.</li>
+<li><code>checkAutoMoveDates</code> runs daily via <code>pg_cron</code> to auto-advance stages.</li>
+</ol>
+<h3 id="team-member-invitation"><a href="#team-member-invitation">Team Member Invitation</a></h3>
+<ol>
+<li><a href="/user-manual/consultants">Consultants</a> — <strong>Invite Team Member</strong>.</li>
+<li>Fill in email, name, role, tier, and qualified services.</li>
+<li><code>inviteTeamMember</code> creates an invitation and sends email via Resend.</li>
+<li>Invitee accepts — <code>user_profiles</code>, <code>user_roles</code>, and <code>service_qualifications</code> rows are created.</li>
+</ol>
+<h3 id="theme-customization"><a href="#theme-customization">Theme Customization</a></h3>
+<ol>
+<li>Settings — <strong>Theme</strong> tab.</li>
+<li>Customize brand colors, typography, spacing, and component styles.</li>
+<li>Real-time preview — save — CSS variables apply app-wide.</li>
+<li>Google Fonts integration for custom font loading.</li>
+</ol>
+<h2 id="download"><a href="#download">Download</a></h2>
+<p>A plain-Markdown copy of this document is available at
+<a href="/user-manual/user-workflows/download.md"><code>/user-manual/user-workflows/download.md</code></a>.</p>
+</article>

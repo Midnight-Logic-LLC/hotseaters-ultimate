@@ -1,0 +1,93 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="potential-gigs">
+<h1 id="potential-gigs"><a href="#potential-gigs">Potential Gigs</a></h1>
+<p>The subcontractor's view of HotSeatHub. Browse open postings from other firms, submit proposals with your consultants, and track response statuses through acceptance or decline. This is the "fill" side of the HSH marketplace.</p>
+<h2 id="visibility-and-access"><a href="#visibility-and-access">Visibility and access</a></h2>
+<ul>
+<li>Renders only when <code>tenant_firms.marketplace_fill_jobs = true</code>. Otherwise the route is hidden.</li>
+<li>Visible to all tenant roles when enabled.</li>
+<li>Sidebar navigation is controlled by the <code>marketplace_fill_jobs</code> flag on the current tenant.</li>
+<li>HSH-themed background with the orbit header treatment.</li>
+</ul>
+<h2 id="header-and-controls"><a href="#header-and-controls">Header and controls</a></h2>
+<ul>
+<li><strong>Title:</strong> "Potential Gigs" with HSH primary accent.</li>
+<li><strong>Search:</strong> filters postings by service name, description, or location.</li>
+<li><strong>View toggle:</strong> Kanban, Card, List — persisted to <code>user_profiles.preferences.potential_gigs_view_type</code>.</li>
+</ul>
+<h2 id="data-loading"><a href="#data-loading">Data loading</a></h2>
+<ul>
+<li><strong>allPostings</strong> — all <code>hsh_postings</code> in <code>open</code> or <code>filled</code> status, enriched with <code>service_types</code>, trial snapshot (<code>case_name</code>, <code>pipeline_stage_id</code>), hiring tenant name, and daily-minimum hours. Live via Supabase Realtime on <code>hsh_postings</code>.</li>
+<li><strong>myConsultants</strong> — consultants for the current tenant fetched through the internal hooks layer (hooks call stores; components never hit the client directly).</li>
+<li><strong>myServices</strong> — active <code>service_types</code> for the tenant, sorted by category then service order.</li>
+<li><strong>myApplications</strong> — all <code>hsh_applications</code> where <code>subcontractor_tenant_id = currentTenant.id</code>. Live via Realtime.</li>
+<li><strong>Filtering:</strong> excludes postings from the current tenant. For private postings (<code>is_public = false</code>), only surfaced when the tenant or user appears in <code>invited_tenant_ids</code> / <code>invited_user_ids</code>.</li>
+</ul>
+<h2 id="four-kanban-columns"><a href="#four-kanban-columns">Four kanban columns</a></h2>
+<p>Each column uses the shared gigs kanban/card/list components, keyed off the current tenant's <code>hsh_applications</code> status.</p>
+<h3 id="column-1-new-opportunities"><a href="#column-1-new-opportunities">Column 1: New Opportunities</a></h3>
+<p>Postings the current tenant has not responded to yet.</p>
+<ul>
+<li><strong>Filter:</strong> <code>allPostings.filter(p => !myApplications.some(a => a.posting_id === p.id))</code>.</li>
+<li><strong>Card contents:</strong>
+<ul>
+<li>Case name with a deal or trial icon based on <code>pipeline_stage_id</code> type, plus the pipeline-stage badge.</li>
+<li>Service name (HSH accent) and a daily-minimum badge when applicable.</li>
+<li>Description text.</li>
+<li>Metadata row: date range, location, estimated rate with rate type, daily-minimum calculation, and hiring tenant name.</li>
+<li><strong>Respond</strong> button opens the response form modal.</li>
+<li><strong>Decline</strong> button opens the decline dialog.</li>
+<li>Private postings show a lock/invite indicator.</li>
+</ul>
+</li>
+</ul>
+<h3 id="column-2-pending-responses"><a href="#column-2-pending-responses">Column 2: Pending Responses</a></h3>
+<p>Postings where the current tenant submitted an application that has not been accepted or declined.</p>
+<ul>
+<li><strong>Filter:</strong> applications with <code>status</code> in (<code>pending_agreed</code>, <code>pending_counter</code>).</li>
+<li><strong>Status badge:</strong> "Pending (Agreed)" when proposed rate matched estimate, "Pending (Counter)" otherwise.</li>
+<li>Shows the submitted proposed rate, consultant name, and message as a nested sub-card.</li>
+<li>No action buttons — the hiring tenant owns the next step.</li>
+</ul>
+<h3 id="column-3-accepted-gigs"><a href="#column-3-accepted-gigs">Column 3: Accepted Gigs</a></h3>
+<p>Applications accepted by the hiring tenant.</p>
+<ul>
+<li><strong>Filter:</strong> applications with <code>status = 'accepted'</code>.</li>
+<li>Green "Accepted" badge, agreed rate, and proposed consultant name.</li>
+<li>An <code>hsh_contracts</code> row has been created linking the subcontractor's consultant to the hiring tenant's trial and service.</li>
+</ul>
+<h3 id="column-4-declined"><a href="#column-4-declined">Column 4: Declined</a></h3>
+<p>Applications declined by the hiring tenant, or postings the current tenant declined up front.</p>
+<ul>
+<li><strong>Filter:</strong> applications with <code>status = 'declined'</code>.</li>
+<li>Red "Declined" badge; proposed rate and message shown for reference.</li>
+<li>Cards rendered at reduced opacity.</li>
+</ul>
+<h2 id="response-form-modal"><a href="#response-form-modal">Response form modal</a></h2>
+<p>Opens from <strong>Respond</strong> on a New Opportunity.</p>
+<ul>
+<li>Header: orbit icon plus "Respond to HotSeatHub Posting".</li>
+<li>Read-only posting details: case name, service, daily minimum badge, description, dates, location, estimated rate, and hiring tenant name.</li>
+<li><strong>Consultant selector:</strong> dropdown of eligible consultants (<code>first_name</code> and <code>last_name</code> present). Auto-selected and hidden when only one consultant qualifies.</li>
+<li><strong>Map to your service</strong> (required): dropdown of the subcontractor tenant's active services. Sets <code>mapped_service_id</code> on the application so later time entries link to the correct service in the subcontractor's tenant.</li>
+<li><strong>Proposed rate</strong> (required): number input pre-populated with the posting's <code>estimated_rate</code>. Daily-minimum calculation displayed when applicable. Matching rate yields <code>pending_agreed</code>; a different rate yields <code>pending_counter</code>.</li>
+<li><strong>Message</strong> (optional): free-text notes or availability.</li>
+<li><strong>Submit:</strong> creates an <code>hsh_applications</code> row (<code>subcontractor_tenant_id</code>, <code>consultant_id</code>, <code>proposed_rate</code>, <code>message</code>, <code>mapped_service_id</code>). Fires the <code>notifyMarketplace</code> (Resend email) and <code>createHSHNotifications</code> (bell menu) Edge Functions.</li>
+</ul>
+<h2 id="decline-dialog"><a href="#decline-dialog">Decline dialog</a></h2>
+<p>Opens from <strong>Decline</strong> on a New Opportunity.</p>
+<ul>
+<li>Shows the posting summary (case, service, dates, location).</li>
+<li>Optional decline-reason textarea.</li>
+<li>Creates an <code>hsh_applications</code> row with <code>status = 'declined'</code>, <code>proposed_rate = 0</code>, and the consultant auto-selected.</li>
+<li>The hiring tenant is notified based on its decline-notification preference (<code>with_message_only</code>, <code>all</code>, or <code>none</code>).</li>
+</ul>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul>
+<li><a href="/user-manual/help-wanted">Help Wanted</a></li>
+<li><a href="/user-manual/favorites">Favorites</a></li>
+<li><a href="/user-manual/backend-functions">Backend Functions</a></li>
+<li><a href="/user-manual/notification-system">Notification System</a></li>
+</ul>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/potential-gigs/download.md"><code>/user-manual/potential-gigs/download.md</code></a>.</p>
+</article>

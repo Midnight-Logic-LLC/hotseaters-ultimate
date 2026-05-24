@@ -1,0 +1,292 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="expense-workflows">
+<p>Expense tracking in HotSeaters covers two input modes — <strong>Receipt</strong> (photo + OCR) and <strong>Mileage</strong> (start/end address + route) — and two ownership models — <strong>regular</strong> (own tenant only) and <strong>HSH</strong> (subcontractor tenant + hiring tenant, mirrored). This page documents every scenario, the Supabase tables involved, and the Edge Functions that back each step.</p>
+<p>For entity definitions see <a href="/user-manual/database-schema">Database Schema</a>. For the approval queue UI see <a href="/user-manual/approvals">Approvals</a>. For invoice rollup see <a href="/user-manual/billing">Billing</a>. For the sibling time-entry flow see <a href="/user-manual/time-tracking">Time Tracking</a> and <a href="/user-manual/time-clock-workflows">Time Clock Workflows</a>.</p>
+<h2 id="overview"><a href="#overview">Overview</a></h2>
+<p>The <code>expense_entries</code> table stores three <code>entry_type</code> variants:</p>
+<ul>
+<li><strong><code>regular</code></strong> — owned entirely by one tenant; no cross-tenant mirror.</li>
+<li><strong><code>subcontractor</code></strong> — written into the subcontractor's tenant when they log an HSH expense.</li>
+<li><strong><code>hiring_company</code></strong> — written into the hiring tenant's records at the same moment, linked back to the subcontractor row via <code>linked_expense_id</code>.</li>
+</ul>
+<p>For HSH work, the <strong>two rows are created atomically</strong> by the <code>hshSyncExpense</code> Supabase Edge Function and hold each other's id in <code>linked_expense_id</code> (bidirectional). Approvals, rejections, and deletes must update or remove both sides in the same transaction.</p>
+<p>Expense creation is a <strong>two-step wizard</strong>:</p>
+<ol>
+<li><strong>Step 1 — Input.</strong> Toggle between Receipt (default) and Mileage. Receipt shows the upload control; Mileage shows start/end address inputs plus a "Calculate Route" action.</li>
+<li><strong>Step 2 — Review.</strong> Receipt mode shows the cropped image alongside editable OCR-extracted fields. Mileage mode shows a route map and an editable miles field; the amount is auto-calculated as <code>miles × IRS_MILEAGE_RATE</code>.</li>
+</ol>
+<h2 id="entity-shape"><a href="#entity-shape">Entity Shape</a></h2>
+<p>The <code>expense_entries</code> table (see <a href="/user-manual/database-schema">Database Schema</a>) carries:</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code>, <code>tenant_id</code>, <code>user_id</code></td>
+<td>Standard multi-tenant fields; RLS enforces <code>tenant_id</code> isolation</td>
+</tr>
+<tr>
+<td><code>trial_id</code></td>
+<td>Trial the expense was incurred against</td>
+</tr>
+<tr>
+<td><code>assignment_id</code></td>
+<td>Optional link to the consultant's assignment on that trial</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>Numeric, USD</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td>Tenant-configurable; default set: <code>meals</code>, <code>mileage</code>, <code>parking</code>, <code>lodging</code>, <code>transportation</code>, <code>supplies</code>, <code>misc</code></td>
+</tr>
+<tr>
+<td><code>vendor</code></td>
+<td>Merchant name (receipts) or blank for mileage</td>
+</tr>
+<tr>
+<td><code>expense_date</code></td>
+<td>Date of the purchase</td>
+</tr>
+<tr>
+<td><code>receipt_url</code></td>
+<td>Signed URL into the private <code>receipts/</code> Supabase Storage bucket</td>
+</tr>
+<tr>
+<td><code>expense_type</code></td>
+<td><code>receipt</code> or <code>mileage</code></td>
+</tr>
+<tr>
+<td><code>entry_type</code></td>
+<td><code>regular</code>, <code>subcontractor</code>, or <code>hiring_company</code></td>
+</tr>
+<tr>
+<td><code>linked_expense_id</code></td>
+<td>Cross-tenant sibling id for HSH entries</td>
+</tr>
+<tr>
+<td><code>subcontractor_amount</code></td>
+<td>Payout the hiring company owes the subcontractor (HSH only)</td>
+</tr>
+<tr>
+<td><code>miles</code>, <code>start_address</code>, <code>end_address</code></td>
+<td>Mileage-mode only</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>pending</code>, <code>approved</code>, <code>rejected</code></td>
+</tr>
+<tr>
+<td><code>approved_by</code>, <code>approved_at</code></td>
+<td>Audit on approval</td>
+</tr>
+</tbody>
+</table>
+<p>A <code>time_entries.id</code> may be referenced by an expense when the expense was logged against a specific time-clock session; the <code>/approvals</code> queue rolls time and expenses together per submitter and per trial.</p>
+<h2 id="receipt-capture-and-ocr"><a href="#receipt-capture-and-ocr">Receipt Capture and OCR</a></h2>
+<ol>
+<li>User opens the expense dialog from the Time Clock trial card (or from Time &#x26; Expenses).</li>
+<li>They select or photograph a receipt. The browser performs <strong>client-side crop and deskew</strong> on a canvas before upload, so only the trimmed receipt leaves the device.</li>
+<li>The cropped image uploads to the <strong>private <code>receipts/</code> bucket</strong> in Supabase Storage via a server-issued signed upload URL. The bucket is not public; reads go through signed URLs scoped to the tenant.</li>
+<li>The <code>extract-receipt</code> Supabase Edge Function is invoked with the storage path. It calls a vision model (OpenAI GPT vision or Anthropic Claude vision — chosen per-tenant via settings) to extract <code>vendor</code>, <code>amount</code>, <code>expense_date</code>, and a best-guess <code>category</code>.</li>
+<li>The dialog prefills Step 2 with the extracted fields. The user edits any field before saving — OCR output is a suggestion, never authoritative.</li>
+</ol>
+<p>The <code>extract-receipt</code> function is the direct replacement for the legacy Base44 <code>InvokeLLM</code> pattern. The vendor model and prompt live server-side; no API keys ever reach the client.</p>
+<h2 id="mileage-capture"><a href="#mileage-capture">Mileage Capture</a></h2>
+<ol>
+<li>User toggles to Mileage mode.</li>
+<li>They enter a start address and an end address. Both fields accept free-form addresses; no Google Places autocomplete is required.</li>
+<li>"Calculate Route" calls the <code>mileage-route</code> Edge Function, which queries the Google Maps Directions API and returns distance (miles), duration, and a rendered static map URL.</li>
+<li>Step 2 shows the map, a pre-filled editable <code>miles</code> value, and the auto-computed <code>amount = miles × IRS_MILEAGE_RATE</code>. The <code>category</code> is forced to <code>mileage</code> and cannot be changed here.</li>
+<li><code>start_address</code> and <code>end_address</code> are persisted on the row for audit.</li>
+</ol>
+<p>For the adjacent "hours-on-the-road" billing concept, see <a href="/user-manual/travel-time">Travel Time</a>.</p>
+<h2 id="create-expense--four-scenarios"><a href="#create-expense--four-scenarios">Create Expense — Four Scenarios</a></h2>
+<p>The following table tracks the same 11 logical steps across the four combinations of input mode and ownership. Steps 9 and 10 only execute for HSH expenses; they are skipped for regular expenses.</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Regular Receipt</th>
+<th>Regular Mileage</th>
+<th>HSH Receipt</th>
+<th>HSH Mileage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Click <strong>Add Expense</strong> on a trial card</td>
+<td>Click <strong>Add Expense</strong> on a trial card</td>
+<td>Click <strong>Add Expense</strong> on an HSH trial card</td>
+<td>Click <strong>Add Expense</strong> on an HSH trial card</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Dialog opens with <code>trialId</code>, <code>lockTrial=true</code></td>
+<td>Dialog opens with <code>trialId</code>, <code>lockTrial=true</code></td>
+<td>Dialog opens with HSH props: <code>subcontractAssignment</code>, <code>hiringTenantId</code>, <code>isSubcontract=true</code></td>
+<td>Dialog opens with HSH props: <code>subcontractAssignment</code>, <code>hiringTenantId</code>, <code>isSubcontract=true</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Wizard Step 1:</strong> toggle Receipt (default) / Mileage</td>
+<td>Same toggle</td>
+<td>Same toggle</td>
+<td>Same toggle</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Upload receipt → <code>extract-receipt</code> Edge Function returns OCR suggestions</td>
+<td>Enter start and end addresses → <code>mileage-route</code> Edge Function returns distance and map</td>
+<td>Upload receipt → <code>extract-receipt</code> Edge Function</td>
+<td>Enter start and end addresses → <code>mileage-route</code> Edge Function</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>Wizard Step 2:</strong> form appears</td>
+<td>Form appears</td>
+<td>Form appears</td>
+<td>Form appears</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Receipt image + fields: <code>amount</code>, <code>expense_date</code>, <code>category</code>, <code>description</code>, <code>vendor</code></td>
+<td>Route map + fields: <code>miles</code> (editable), <code>expense_date</code>, <code>description</code>. Amount is derived</td>
+<td>Same as Regular Receipt</td>
+<td>Same as Regular Mileage</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Click <strong>Add Expense</strong> → insert with <code>expense_type='receipt'</code></td>
+<td>Click <strong>Add Expense</strong> → insert with <code>expense_type='mileage'</code>, <code>category='mileage'</code></td>
+<td>Click <strong>Add Expense</strong> → <code>hshSyncExpense</code> fires with <code>expense_type='receipt'</code></td>
+<td>Click <strong>Add Expense</strong> → <code>hshSyncExpense</code> fires with <code>expense_type='mileage'</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td>Insert one row: <code>entry_type='regular'</code></td>
+<td>Insert one row: <code>entry_type='regular'</code> + mileage fields</td>
+<td>Insert subcontractor-tenant row: <code>entry_type='subcontractor'</code></td>
+<td>Insert subcontractor-tenant row: <code>entry_type='subcontractor'</code> + mileage fields</td>
+</tr>
+<tr>
+<td>9</td>
+<td>—</td>
+<td>—</td>
+<td>Insert hiring-tenant row: <code>entry_type='hiring_company'</code>, <code>linked_expense_id</code>, <code>subcontractor_amount</code></td>
+<td>Same, plus mileage fields</td>
+</tr>
+<tr>
+<td>10</td>
+<td>—</td>
+<td>—</td>
+<td>Update subcontractor row with the hiring row's id (bidirectional link)</td>
+<td>Same</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Invalidate queries, close dialog, toast</td>
+<td>Invalidate queries, close dialog, toast</td>
+<td>Invalidate queries on both tenants, close dialog, toast</td>
+<td>Same</td>
+</tr>
+</tbody>
+</table>
+<p>Both HSH inserts and the back-link update happen inside one Postgres transaction driven by <code>hshSyncExpense</code> so partial state is impossible.</p>
+<h2 id="approve-or-reject"><a href="#approve-or-reject">Approve or Reject</a></h2>
+<p>Approvals run from <a href="/user-manual/approvals">/approvals</a> with bulk-select support. The hiring-company admin is the authority for HSH expenses; the sync direction flows from hiring row to subcontractor row.</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Regular</th>
+<th>HSH</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Admin clicks Approve or Reject on the row (or on a bulk selection)</td>
+<td>Same, on the hiring-company row</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Update <code>status</code>, <code>approved_by</code>, <code>approved_at</code></td>
+<td>Same</td>
+</tr>
+<tr>
+<td>3</td>
+<td>—</td>
+<td>Check <code>linked_expense_id</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>—</td>
+<td><code>hshSyncExpense</code> updates the subcontractor row with the same <code>status</code>, <code>approved_by</code>, and <code>approved_at</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Insert notification for the submitter</td>
+<td>Insert notifications for the submitter on both tenants</td>
+</tr>
+</tbody>
+</table>
+<p>Rejected expenses remain in the system with <code>status='rejected'</code> and a rejection note; they are excluded from invoice rollup. Approved expenses flow into the <strong>Create Invoices</strong> column on <a href="/user-manual/billing">/billing</a> and their receipt images are embedded into generated invoice PDFs by the Puppeteer-based <code>render-invoice-pdf</code> Edge Function.</p>
+<h2 id="delete"><a href="#delete">Delete</a></h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Regular</th>
+<th>HSH</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Delete from the spreadsheet view</td>
+<td>Same, on either side</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Load the row to check <code>linked_expense_id</code></td>
+<td>Same</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Delete from <code>expense_entries</code></td>
+<td>Delete both rows in a single transaction via <code>hshSyncExpense</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Remove the receipt object from <code>receipts/</code> Storage</td>
+<td>Same — each tenant owns its own receipt copy and both are removed</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Invalidate queries</td>
+<td>Invalidate queries on both tenants</td>
+</tr>
+</tbody>
+</table>
+<p>Expenses that have already been attached to an issued invoice cannot be deleted; they must be voided via the invoice instead.</p>
+<h2 id="invoice-integration"><a href="#invoice-integration">Invoice Integration</a></h2>
+<p>Approved expenses are grouped per trial and per billing period (weekly, monthly, or per-trial, configured on <code>tenant_firms</code>). When an invoice is generated from <a href="/user-manual/billing">/billing</a>:</p>
+<ul>
+<li>Expense line items appear alongside time line items under the trial.</li>
+<li>For receipts, the private Storage image is fetched via a short-lived signed URL and embedded inline in the invoice PDF by the Puppeteer renderer.</li>
+<li>Mileage entries render as <code>Mileage — {start_address} → {end_address} ({miles} mi × {rate})</code>.</li>
+<li>HSH expenses appear on the hiring tenant's client invoice at the full <code>amount</code>; the <code>subcontractor_amount</code> is the payout tracked on the HSH contract, not the client charge.</li>
+</ul>
+<h2 id="hsh-cross-tenant-semantics"><a href="#hsh-cross-tenant-semantics">HSH Cross-Tenant Semantics</a></h2>
+<p>Every HSH expense operation (create, approve, reject, delete) is mediated by <code>hshSyncExpense</code>, which is the expense counterpart to <code>hshSyncTime</code>. The function runs with the service role, verifies the caller's authority on both tenants via the <code>hsh_contracts</code> table, and mutates the two rows in one transaction. Row-level security denies direct client writes to <code>entry_type='hiring_company'</code> rows — only the Edge Function can produce them.</p>
+<p>See <a href="/user-manual/external-integrations">External Integrations</a> for the vision-provider configuration and the Google Maps Directions key, and <a href="/user-manual/settings">Settings</a> for the tenant-level expense category catalog and the active IRS mileage rate.</p>
+<p>For the closely related automated expense-report generation — monthly PDF summaries emailed to each consultant — see <a href="/user-manual/auto-expense-reporting">Auto Expense Reporting</a>.</p>
+<h2 id="download"><a href="#download">Download</a></h2>
+<p><a href="/user-manual/expense-workflows/download.md"><code>/user-manual/expense-workflows/download.md</code></a></p>
+</article>

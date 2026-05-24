@@ -1,0 +1,221 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="time-clock-workflows">
+<h1 id="time-clock-workflows"><a href="#time-clock-workflows">Time Clock Workflows</a></h1>
+<p>Complete documentation of the HotSeaters time tracking system, covering the clock UI, tenant-configurable auto-rounding, manual entry, the spreadsheet view, HotSeatHub (HSH) bidirectional entries, approvals, and how time entries feed invoices under split billing.</p>
+<p>All persistence is in the Supabase <code>time_entries</code> table, scoped by <code>tenant_id</code>. Cross-tenant HSH links are created via the <code>hshSyncTimeEntry</code> Edge Function. See <a href="/user-manual/database-schema">Database Schema</a>, <a href="/user-manual/time-tracking">Time Tracking</a>, <a href="/user-manual/approvals">Approvals</a>, <a href="/user-manual/billing">Billing</a>, <a href="/user-manual/travel-time">Travel Time</a>, and <a href="/user-manual/expense-workflows">Expense Workflows</a> for related surfaces.</p>
+<h2 id="overview"><a href="#overview">Overview</a></h2>
+<p>The time clock supports three kinds of <code>time_entries.entry_type</code>:</p>
+<ul>
+<li><strong><code>regular</code></strong> — standard entries for the signed-in user's own tenant.</li>
+<li><strong><code>subcontractor</code></strong> — entries a subcontractor logs in their own tenant for HSH work.</li>
+<li><strong><code>hiring_company</code></strong> — mirror entries written into the hiring tenant's books for the same HSH work.</li>
+</ul>
+<p>For any HSH session, two linked rows are created: one <code>subcontractor</code> row in the subcontractor's tenant and one <code>hiring_company</code> mirror row in the hiring tenant. They are linked bidirectionally via <code>linked_time_entry_id</code> and share an <code>hsh_contract_id</code>. An optional <code>entry_group_id</code> groups a parent entry with its travel-time child.</p>
+<h2 id="time-clock-ui"><a href="#time-clock-ui">Time Clock UI</a></h2>
+<p>Four primary surfaces under <code>/time-tracking</code>:</p>
+<ol>
+<li><strong>Clock In / Clock Out</strong> — a single-click timer. The start timestamp is rounded per tenant config at clock-in, the end timestamp is rounded at clock-out, and <code>duration_hours</code> is derived from the rounded span.</li>
+<li><strong>Manual Entry</strong> — user picks a trial, service, date, start, and end. Rounding is applied identically so manual entries are indistinguishable from clocked entries downstream.</li>
+<li><strong>Spreadsheet View</strong> — editable grid of the user's own entries (and, for managers, direct reports). Inline edits round on save.</li>
+<li><strong>Active Timer Panel</strong> — while running, description edits are debounced (1s) and patched to the entry; HSH sessions fan out the description patch to the linked mirror via <code>hshSyncTimeEntry</code>.</li>
+</ol>
+<h2 id="auto-rounding-configuration"><a href="#auto-rounding-configuration">Auto-Rounding Configuration</a></h2>
+<p>Rounding is per-tenant and configured under <a href="/user-manual/settings">Settings</a>. Clock-in and clock-out are rounded <strong>independently</strong> — each has its own direction and granularity.</p>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">type</span> <span class="hljs-title class_">RoundingDirection</span> = <span class="hljs-string">'up'</span> | <span class="hljs-string">'down'</span> | <span class="hljs-string">'nearest'</span>;
+<span class="hljs-keyword">type</span> <span class="hljs-title class_">RoundingGranularityMinutes</span> = <span class="hljs-number">1</span> | <span class="hljs-number">5</span> | <span class="hljs-number">15</span>;
+
+<span class="hljs-keyword">interface</span> <span class="hljs-title class_">TenantTimeRoundingConfig</span> {
+  <span class="hljs-attr">clock_in</span>: {
+    <span class="hljs-attr">direction</span>: <span class="hljs-title class_">RoundingDirection</span>;
+    <span class="hljs-attr">granularity</span>: <span class="hljs-title class_">RoundingGranularityMinutes</span>;
+  };
+  <span class="hljs-attr">clock_out</span>: {
+    <span class="hljs-attr">direction</span>: <span class="hljs-title class_">RoundingDirection</span>;
+    <span class="hljs-attr">granularity</span>: <span class="hljs-title class_">RoundingGranularityMinutes</span>;
+  };
+}
+</code></pre>
+<p>Rounding semantics:</p>
+<table>
+<thead>
+<tr>
+<th>Direction</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>up</code></td>
+<td>Round to the next boundary of <code>granularity</code> minutes.</td>
+</tr>
+<tr>
+<td><code>down</code></td>
+<td>Truncate to the previous boundary of <code>granularity</code> minutes.</td>
+</tr>
+<tr>
+<td><code>nearest</code></td>
+<td>Round to the closest boundary; ties round up.</td>
+</tr>
+</tbody>
+</table>
+<p>A common configuration is <code>clock_in: down / 15</code> and <code>clock_out: up / 15</code>, which favors the consultant. Firms that prefer strict capture use <code>nearest / 1</code> on both ends.</p>
+<p>Rounding is applied client-side for immediate UI feedback, then re-applied server-side in the Route Handler that persists the entry — the server value wins.</p>
+<h2 id="starting-a-timer"><a href="#starting-a-timer">Starting a Timer</a></h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Regular</th>
+<th>HSH (subcontractor tenant)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Round <code>start_time</code> using tenant <code>clock_in</code> rule.</td>
+<td>Round <code>start_time</code> using <strong>subcontractor tenant's</strong> <code>clock_in</code> rule.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Compute <code>rate</code> from the matching <code>trial_services.rate</code>.</td>
+<td>Compute <code>rate</code> from the HSH-agreed subcontractor rate.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>—</td>
+<td>Also resolve <code>hiring_rate</code> from the hiring tenant's <code>trial_services</code> row.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Insert <code>time_entries</code> row with <code>entry_type = 'regular'</code>, <code>tenant_id</code>, <code>trial_id</code>, <code>trial_service_id</code>, snapshot names.</td>
+<td>Insert <code>time_entries</code> row with <code>entry_type = 'subcontractor'</code>, <code>subcontract_assignment_id</code>, <code>hsh_contract_id</code>.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Set <code>active_entry</code> in client store.</td>
+<td>Invoke <code>hshSyncTimeEntry</code> Edge Function → inserts mirror row in hiring tenant with <code>entry_type = 'hiring_company'</code>, <code>linked_time_entry_id</code>, <code>hiring_rate</code>, <code>subcontractor_rate</code>.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>—</td>
+<td>Patch subcontractor row's <code>linked_time_entry_id</code> → mirror id (bidirectional).</td>
+</tr>
+</tbody>
+</table>
+<p>Travel-time variants follow the same flow but resolve a dedicated <code>travel_time_service_id</code>, apply the service's <code>travel_multiplier</code> to the computed rate, and set <code>original_trial_service_id</code> on the entry. See <a href="/user-manual/travel-time">Travel Time</a>.</p>
+<h2 id="realtime-description-sync"><a href="#realtime-description-sync">Realtime Description Sync</a></h2>
+<pre><code>user types → debounce 1s → PATCH /api/time-entries/:id { description }
+                                     │
+                                     └── if entry_type = 'subcontractor'
+                                         → hshSyncTimeEntry(linked_time_entry_id, { description })
+</code></pre>
+<p>The Edge Function enforces that only <code>description</code>, <code>start_time</code>, <code>end_time</code>, and <code>duration_hours</code> fan out cross-tenant; rate fields never mirror (each tenant owns its own billing side).</p>
+<h2 id="stopping-a-timer"><a href="#stopping-a-timer">Stopping a Timer</a></h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Regular</th>
+<th>HSH</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Round <code>end_time</code> using tenant <code>clock_out</code> rule.</td>
+<td>Round <code>end_time</code> using subcontractor tenant's <code>clock_out</code> rule.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Recompute <code>duration_hours</code> from rounded span.</td>
+<td>Same.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>PATCH entry with <code>end_time</code>, <code>duration_hours</code>, final <code>description</code>.</td>
+<td>PATCH subcontractor entry, then <code>hshSyncTimeEntry</code> fans out end fields to the hiring mirror.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Clear <code>active_entry</code>.</td>
+<td>Clear <code>active_entry</code> and <code>active_hiring_company_entry</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="manual-entry"><a href="#manual-entry">Manual Entry</a></h2>
+<p>Manual entries bypass the live-timer store but pass through the same rounding and the same Route Handler. For HSH assignments, a manual entry in the subcontractor's tenant triggers <code>hshSyncTimeEntry</code> on insert to create the hiring-side mirror synchronously.</p>
+<h2 id="spreadsheet-view"><a href="#spreadsheet-view">Spreadsheet View</a></h2>
+<p>The spreadsheet is read/write for the user's own entries and read-only for entries created by others (except for managers viewing direct reports). Inline edits:</p>
+<ul>
+<li>Re-run rounding on any changed <code>start_time</code> / <code>end_time</code>.</li>
+<li>Recompute <code>duration_hours</code>.</li>
+<li>Fan out to the HSH mirror if <code>entry_type = 'subcontractor'</code>.</li>
+<li>Are blocked once an entry is included in a submitted <code>approval_workflows</code> row unless the manager unlocks it.</li>
+</ul>
+<h2 id="approval-flow"><a href="#approval-flow">Approval Flow</a></h2>
+<p>Entries move through <code>approval_workflows</code> with states <code>pending → submitted → approved → rejected</code>. The user submits a batch (by date range or by trial), which:</p>
+<ol>
+<li>Creates one <code>approval_workflows</code> row with the grouped <code>time_entry_ids</code> and <code>expense_entry_ids</code>.</li>
+<li>Flips the included <code>time_entries.status</code> to <code>submitted</code> and locks fields from edit.</li>
+<li>Notifies the manager; manager acts from <a href="/user-manual/approvals">Approvals</a> with bulk approve / reject.</li>
+<li>On approve, entries flip to <code>approved</code> and become eligible for <a href="/user-manual/billing">Billing</a>.</li>
+<li>HSH subcontractor entries carry an independent approval from the hiring tenant's manager — the mirror row has its own <code>approval_workflows</code> membership in the hiring tenant. Neither side blocks the other; each tenant approves what it owes.</li>
+</ol>
+<h2 id="split-billing-pre-trial-vs-in-trial"><a href="#split-billing-pre-trial-vs-in-trial">Split Billing: Pre-Trial vs. In-Trial</a></h2>
+<p>A <code>trial_services</code> row has a <code>service_phase</code> of <code>pre_trial</code>, <code>in_trial</code>, or <code>split</code>. Time entries inherit the phase via their <code>trial_service_id</code> (or <code>original_trial_service_id</code> for travel-time children), which determines how they feed invoices.</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Billing model</th>
+<th>How entries feed invoices</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pre_trial</code></td>
+<td><strong>Hourly.</strong></td>
+<td>Each entry contributes <code>duration_hours × rate</code> as a discrete line item on the invoice.</td>
+</tr>
+<tr>
+<td><code>in_trial</code></td>
+<td><strong>Daily minimum.</strong></td>
+<td>Entries are grouped by work-date; each date becomes one line item at the service's daily rate, regardless of logged hours. Entries still persist for audit and consultant payout, but do not sum independently on the client invoice.</td>
+</tr>
+<tr>
+<td><code>split</code></td>
+<td><strong>Both.</strong></td>
+<td>Entries dated before <code>trials.start_date</code> bill hourly; entries dated on or after bill daily. Invoicing inspects the entry's <code>work_date</code> against the trial to bucket it.</td>
+</tr>
+</tbody>
+</table>
+<p>Because the phase decision lives on the service row and uses the entry's <code>work_date</code>, reclassifying a trial's start date (see trial continuation in <a href="/user-manual/schedule">Schedule</a>) automatically reshuffles which side of the split each entry lands on — no entry rewrites required.</p>
+<h2 id="key-supabase-objects"><a href="#key-supabase-objects">Key Supabase Objects</a></h2>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>time_entries</code></td>
+<td>Primary store. Columns include <code>entry_type</code>, <code>tenant_id</code>, <code>trial_id</code>, <code>trial_service_id</code>, <code>original_trial_service_id</code>, <code>rate</code>, <code>hiring_rate</code>, <code>subcontractor_rate</code>, <code>start_time</code>, <code>end_time</code>, <code>duration_hours</code>, <code>description</code>, <code>status</code>, <code>linked_time_entry_id</code>, <code>hsh_contract_id</code>, <code>entry_group_id</code>, <code>subcontract_assignment_id</code>.</td>
+</tr>
+<tr>
+<td><code>approval_workflows</code></td>
+<td>Groups submitted time + expense entries for a single approval decision.</td>
+</tr>
+<tr>
+<td><code>trial_services</code></td>
+<td>Source of truth for <code>service_phase</code> and per-service <code>rate</code> / <code>daily_rate</code> / <code>travel_multiplier</code>.</td>
+</tr>
+<tr>
+<td><code>hshSyncTimeEntry</code> (Edge Function)</td>
+<td>Writes and updates cross-tenant mirrors for HSH entries. See <a href="/user-manual/help-wanted">Help Wanted</a> and <a href="/user-manual/potential-gigs">Potential Gigs</a>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="download"><a href="#download">Download</a></h2>
+<p><a href="/user-manual/time-clock-workflows/download.md"><code>/user-manual/time-clock-workflows/download.md</code></a></p>
+</article>

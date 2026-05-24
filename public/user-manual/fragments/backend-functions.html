@@ -1,0 +1,148 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="backend-functions">
+<h1 id="backend-functions-reference"><a href="#backend-functions-reference">Backend Functions Reference</a></h1>
+<p>HotSeaters backend work is split between two runtimes:</p>
+<ul>
+<li><strong>Supabase Edge Functions</strong> (Deno) — AI vision, HSH bidirectional sync, pg_cron-triggered jobs, webhook handlers close to Postgres.</li>
+<li><strong>Next.js Route Handlers</strong> (Node) — user-facing API calls, PDF generation (Puppeteer / API2PDF fallback), DocuSeal submission creation, Stripe checkout, Resend email.</li>
+</ul>
+<p>All scheduled work runs via Supabase <code>pg_cron</code> — there is no Vercel Cron and no <code>vercel.json</code>. All tenant-scoped queries filter by <code>tenant_id</code>.</p>
+<h2 id="authentication--user-management"><a href="#authentication--user-management">Authentication &#x26; User Management</a></h2>
+<ul>
+<li><strong><code>inviteTeamMember</code></strong> — Route Handler <code>/api/team/invite</code>. Generates token, creates <code>invitations</code> row, sends Resend email.</li>
+<li><strong><code>acceptInvitation</code></strong> — Route Handler <code>/api/team/accept</code>. Validates token, upserts <code>user_profiles</code> + <code>service_qualifications</code>.</li>
+<li><strong><code>sendReferralInvitation</code></strong> — Route Handler <code>/api/team/refer</code>. Rejects already-registered emails and matching domains; sends branded Resend email with referral landing link.</li>
+<li><strong><code>cancelInvitation</code></strong> — <code>DELETE /api/team/invite/[id]</code>.</li>
+<li><strong><code>listConsultants</code></strong> — <code>GET /api/consultants</code> with enriched email/role/tier data for the current <code>tenant_id</code>.</li>
+<li><strong>Email OAuth sub-user</strong> — coexists with the legacy invitation signup; new users may onboard via OAuth sub-user provisioning without losing the invitation flow.</li>
+</ul>
+<h2 id="trial--service-management"><a href="#trial--service-management">Trial &#x26; Service Management</a></h2>
+<ul>
+<li><strong><code>updateTrialDates</code></strong> — Route Handler <code>/api/trials/[id]/dates</code>. Batch-updates trial + <code>trial_services</code> dates, PDR, <code>hsh_contracts</code> dates, notifications, Google Calendar sync, auto-move checks.</li>
+<li><strong><code>updateServiceDates</code></strong> — <code>PATCH /api/trial-services/[id]/dates</code>. Validates within trial bounds, auto-converts billing method, recomputes PDR.</li>
+<li><strong><code>batchProcessServiceAssignments</code></strong> — <code>POST /api/trial-services/[id]/assignments/batch</code> for add/remove with Calendar sync.</li>
+<li><strong><code>sendTrialStatusNotifications</code></strong> — internal helper invoked on continued / un-continued trials.</li>
+<li><strong><code>handleTrialCompletion</code></strong> — deletes Google Calendar events on completion.</li>
+<li><strong><code>checkAutoMoveDates</code></strong> — <strong>pg_cron job</strong> (planned phase 26+) that evaluates date-based pipeline auto-move rules.</li>
+<li><strong><code>generateJobNumber</code></strong> — sequential job numbers in formats <code>JOB-0000</code>, <code>YY-MM-000</code>, <code>YYYY-0000</code>.</li>
+<li><strong><code>initializeCompanyDefaults</code></strong> — seeds service categories, pipeline stages, tiers, template categories, Travel Time service for a new <code>tenant_firms</code> row.</li>
+<li><strong><code>createOnboardingSampleData</code></strong> — seeds a sample client + deal + trial.</li>
+<li><strong><code>getTrialsById</code></strong> — cross-tenant read via service-role Edge Function (used by HSH).</li>
+</ul>
+<h2 id="time-tracking"><a href="#time-tracking">Time Tracking</a></h2>
+<ul>
+<li><strong><code>createTimeEntry</code></strong> / <strong><code>updateTimeEntry</code></strong> — <code>POST</code> / <code>PATCH /api/time-entries</code>. Updates with verification and linked-entry sync.</li>
+<li><strong><code>linkHSHTimeEntries</code></strong> — Edge Function <code>hsh-sync-time-entry</code>, triggered by <code>time_entries</code> INSERT. For <code>hiring_company</code> entries carrying a <code>hsh_contract_id</code>, locates the matching subcontractor entry and links via <code>linked_time_entry_id</code>.</li>
+<li><strong><code>getTimeTrackingMetadata</code></strong> — <code>GET /api/time-tracking/metadata</code> returning trials, clients, tenant, pipeline stages, HSH contracts, consultants, and mapping objects in a single payload.</li>
+</ul>
+<h2 id="expense--mileage"><a href="#expense--mileage">Expense &#x26; Mileage</a></h2>
+<ul>
+<li><strong><code>extractReceiptData</code></strong> (replaces <code>processReceiptVeryfi</code> / <code>processReceiptImage</code>) — Edge Function <code>extract-receipt</code>. Sends receipt to OpenAI/Anthropic vision API. Extracts vendor, amount, date, category.</li>
+<li><strong><code>deskewReceiptImage</code></strong> — Route Handler <code>/api/expenses/deskew</code>. Straightens/crops via Cloudinary.</li>
+<li><strong><code>calculateRoute</code></strong> — <code>/api/mileage/route</code>. Google Directions API proxy returning distance, duration, polyline.</li>
+<li><strong><code>generateRouteMap</code></strong> — <code>/api/mileage/map</code>. Static map PNG for receipts.</li>
+<li><strong><code>placesAutocomplete</code> / <code>placesDetails</code></strong> — Google Places API proxies.</li>
+</ul>
+<h2 id="notifications"><a href="#notifications">Notifications</a></h2>
+<ul>
+<li><strong><code>processNotification</code></strong> — internal helper. Validates recipient exists and is active; blocks self-notify; handles aggregated HSH decline notifications.</li>
+<li><strong><code>handleDocumentAutoMove</code></strong> — invoked by the DocuSeal webhook and the document-send route to advance deal stages on <code>sent</code> / <code>signed</code> triggers.</li>
+</ul>
+<h2 id="document-management"><a href="#document-management">Document Management</a></h2>
+<ul>
+<li><strong><code>generateDocumentPDF</code></strong> — Route Handler <code>/api/documents/[id]/pdf</code>. Primary path uses <strong>Puppeteer</strong>; falls back to API2PDF. Unicode cleanup, custom Google Fonts, 3x retry, 60s timeout, private Storage upload.</li>
+<li><strong><code>sendDocumentForSignature</code></strong> — Route Handler <code>/api/documents/[id]/send</code>. Creates a <strong>DocuSeal submission</strong> and delivers email through DocuSeal / Resend. Fires auto-move check when <code>document_id</code> is supplied.</li>
+<li><strong><code>sendDocumentEmail</code> / <code>sendDocumentEmailBatch</code></strong> — Resend delivery for non-signature documents.</li>
+<li><strong><code>docusealWebhook</code></strong> — Route Handler <code>/api/docuseal/webhook</code>, <strong>shared-secret verified</strong>. Updates <code>signature_requests</code>, regenerates PDF on completion, triggers pipeline auto-move.</li>
+<li><strong><code>getDocumentForSigning</code></strong> — public token-based endpoint used by legacy <code>/sign-document</code> page (DocuSeal hosted page is preferred going forward).</li>
+<li><strong><code>uploadSignatureImage</code></strong>, <strong><code>downloadDocument</code></strong>, <strong><code>deleteDocument</code></strong> — standard CRUD Route Handlers.</li>
+<li><strong><code>regenerateDocumentPdf</code></strong> — <code>POST /api/documents/[id]/regenerate</code>.</li>
+<li><strong><code>cleanTemplateContent</code></strong> — sanitizer invoked at template save: strips invisible Unicode, blockquotes, normalizes table cells.</li>
+</ul>
+<h2 id="hotseathub-marketplace"><a href="#hotseathub-marketplace">HotSeatHub Marketplace</a></h2>
+<ul>
+<li><strong><code>acceptHSHResponse</code></strong> — <code>/api/hsh/applications/[id]/accept</code>. Updates application, computes <code>estimated_total</code> (split / daily-min / hourly), generates subcontractor job number, creates <code>hsh_contracts</code> + assignment rows, generates Agreement PDF, syncs Calendar.</li>
+<li><strong><code>negotiateHSHRate</code></strong> — <code>/api/hsh/applications/[id]/negotiate</code>. Counter-offer or decline; updates negotiation history; notifies the other party.</li>
+<li><strong><code>generateHSHAgreementPdf</code></strong> — PDF route similar to documents; supports cancellation addendum merge.</li>
+<li><strong><code>cancelHSHSubcontractAgreement</code></strong> — cancels contract + posting, deactivates assignments, removes Calendar events, generates cancellation addendum, notifies both tenants.</li>
+<li><strong><code>notifyMarketplace</code></strong> — Resend email for <code>new_request</code>, <code>new_response</code>, <code>response_accepted</code>, <code>response_declined</code>.</li>
+<li><strong><code>createHSHNotifications</code></strong> — in-app notifications; honors user preferences; aggregates decline alerts.</li>
+<li><strong><code>hshSyncExpense</code></strong> — Edge Function <code>hsh-sync-expense</code>, mirrors expense entries across hiring and subcontracting tenants.</li>
+<li><strong><code>deleteHSHRequest</code></strong> — permanent delete, allowed only when status is <code>cancelled</code> and no time entries exist.</li>
+</ul>
+<h2 id="invoicing"><a href="#invoicing">Invoicing</a></h2>
+<ul>
+<li><strong><code>generateInvoiceNumber</code></strong> — <code>/api/invoices/next-number</code>. Formats <code>INV-0000</code>, <code>YY-MM-000</code>, <code>YYYY-0000</code> with auto-increment and yearly reset.</li>
+<li><strong><code>generateInvoicePDF</code></strong> — Route Handler <code>/api/invoices/[id]/pdf</code>. Fetches invoice + line items + template, generates HTML, renders via Puppeteer (API2PDF fallback), optionally merges receipts.</li>
+<li><strong><code>sendInvoiceEmail</code></strong> — Route Handler <code>/api/invoices/[id]/send</code>. Loads email template, creates signed URL for PDF, base64-encodes attachment, sends via Resend to/cc/bcc, transitions <code>status</code> to <code>sent</code>.</li>
+<li><strong><code>previewInvoiceEmail</code></strong> — <code>/api/invoices/[id]/preview</code> returns rendered HTML without sending.</li>
+<li><strong><code>deleteInvoice</code></strong> — <code>DELETE /api/invoices/[id]</code> (service-role elevated).</li>
+<li><strong><code>mergeReceiptsIntoPdf</code></strong> — helper: header page + PDF receipts (full page) + image receipts (4-up grid).</li>
+</ul>
+<h2 id="subscription--stripe"><a href="#subscription--stripe">Subscription &#x26; Stripe</a></h2>
+<ul>
+<li><strong><code>checkoutSession</code></strong> — Route Handler <code>/api/stripe/checkout</code>. Pricing: Single $85/mo, Multi $115/mo, HSH +$15/mo.</li>
+<li><strong><code>createUpgradeSession</code></strong> — <code>/api/stripe/upgrade</code>.</li>
+<li><strong><code>createPortalSession</code></strong> — <code>/api/stripe/portal</code>.</li>
+<li><strong><code>getSubscriptionDetails</code></strong> — <code>/api/stripe/subscription</code>.</li>
+<li><strong><code>updateSubscriptionQuantity</code></strong> — invoked on seat count changes.</li>
+<li><strong><code>stripeWebhook</code></strong> — Route Handler <code>/api/stripe/webhook</code>, <strong>HMAC verified</strong>. Handles <code>checkout.session.completed</code>, <code>customer.subscription.updated</code>, <code>customer.subscription.deleted</code>.</li>
+</ul>
+<h2 id="google-calendar"><a href="#google-calendar">Google Calendar</a></h2>
+<ul>
+<li><strong><code>syncGoogleCalendar</code></strong> (initiate) — <code>/api/calendar/oauth/start</code>.</li>
+<li><strong>OAuth callback</strong> — <code>/api/calendar/oauth/callback</code>. Exchanges code for tokens, stores on <code>user_profiles</code>, runs initial sync.</li>
+<li><strong><code>syncTaskToGoogleCalendar</code></strong> — <code>/api/calendar/sync/[assignment_id]</code>. Auto-refreshes tokens, creates all-day events, gracefully handles <code>CALENDAR_DISCONNECTED</code>.</li>
+<li><strong><code>testCalendarConnection</code></strong> — <code>/api/calendar/test</code>.</li>
+<li><strong><code>disconnectGoogleCalendar</code></strong> — <code>/api/calendar/disconnect</code>. Deletes events, clears event IDs, revokes tokens.</li>
+</ul>
+<h2 id="deletion--cleanup"><a href="#deletion--cleanup">Deletion &#x26; Cleanup</a></h2>
+<ul>
+<li><strong><code>deleteTrial</code></strong> — admin-only; cascades through <code>time_entries</code>, <code>expense_entries</code>, <code>invoices</code>, <code>trial_services</code>, <code>hsh_contracts</code>, trial contacts, assignments, generated documents, then the trial.</li>
+<li><strong><code>deleteUserComplete</code></strong> — super-admin-only user purge.</li>
+<li><strong><code>deleteCompanyWithProgress</code></strong> — super-admin-only <code>tenant_firms</code> purge.</li>
+</ul>
+<h2 id="scheduled-jobs-pg_cron"><a href="#scheduled-jobs-pg_cron">Scheduled Jobs (pg_cron)</a></h2>
+<ul>
+<li><strong><code>sub_user_request_expiry</code></strong> — runs daily; cleans up email-OAuth sub-user requests older than 14 days.</li>
+<li><strong><code>check_auto_move_dates</code></strong> — planned phase 26+; evaluates date-based pipeline auto-move rules.</li>
+</ul>
+<p>No job uses Vercel Cron. All schedules live in <code>pg_cron</code> and are managed through Supabase migrations.</p>
+<h2 id="utility--helpers"><a href="#utility--helpers">Utility &#x26; Helpers</a></h2>
+<ul>
+<li><code>getAppUrl</code>, <code>getContactAddress</code>, <code>getEmails</code>, <code>debugTrials</code>, <code>listRemovedAssignments</code> — small Route Handlers used across the app.</li>
+</ul>
+<h2 id="data-cleanup--migrations"><a href="#data-cleanup--migrations">Data Cleanup &#x26; Migrations</a></h2>
+<p>Active maintenance tasks (run as one-off scripts or service-role Route Handlers):</p>
+<ul>
+<li><code>fixTrialServiceEstimates</code>, <code>populateTrialServiceFields</code>, <code>cleanPhoneNumbers</code>, <code>cleanClientWebsites</code></li>
+<li><code>cleanupOrphanedAssignments</code>, <code>cleanupOrphanedCompanies</code></li>
+<li><code>deleteAllNotifications</code>, <code>addInvoiceEmailsCategory</code></li>
+</ul>
+<p>Historical migrations (completed): <code>migrateClientAddresses</code>, <code>migrateClientTypes</code>, <code>migrateTemplateSections</code>, <code>migrateTrialServiceAssignments</code>, <code>migrateUserServiceIds</code>, <code>migrateDocumentSends</code>, <code>migrateDocumentViews</code>, <code>migrateSignaturesToUrls</code>, <code>migrateDocumentSignerViewOnly</code>, <code>migrateDocumentTables</code>.</p>
+<h2 id="invocation-patterns"><a href="#invocation-patterns">Invocation Patterns</a></h2>
+<h3 id="client--route-handler"><a href="#client--route-handler">Client → Route Handler</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// Components go through hooks; hooks call the API.</span>
+<span class="hljs-keyword">const</span> res = <span class="hljs-keyword">await</span> <span class="hljs-title function_">fetch</span>(<span class="hljs-string">`/api/invoices/<span class="hljs-subst">${id}</span>/send`</span>, { <span class="hljs-attr">method</span>: <span class="hljs-string">'POST'</span> });
+<span class="hljs-keyword">const</span> { success, email_id } = <span class="hljs-keyword">await</span> res.<span class="hljs-title function_">json</span>();
+</code></pre>
+<h3 id="route-handler--edge-function"><a href="#route-handler--edge-function">Route Handler → Edge Function</a></h3>
+<pre><code class="hljs language-ts">
+<span class="hljs-keyword">const</span> supabase = <span class="hljs-keyword">await</span> <span class="hljs-title function_">createServerClient</span>();
+<span class="hljs-keyword">const</span> { data, error } = <span class="hljs-keyword">await</span> supabase.<span class="hljs-property">functions</span>.<span class="hljs-title function_">invoke</span>(<span class="hljs-string">'extract-receipt'</span>, {
+  <span class="hljs-attr">body</span>: { file_url },
+});
+</code></pre>
+<h3 id="service-role-access"><a href="#service-role-access">Service-Role Access</a></h3>
+<p>Use the service-role client only inside Route Handlers or Edge Functions — never from the browser. Keep <code>tenant_id</code> enforcement in SQL via RLS; the service role bypasses RLS and must re-apply tenant filters explicitly.</p>
+<h2 id="related-documents"><a href="#related-documents">Related Documents</a></h2>
+<ul>
+<li><a href="/user-manual/technical-reference">Technical Reference</a></li>
+<li><a href="/user-manual/external-integrations">External Integrations</a></li>
+<li><a href="/user-manual/database-schema">Database Schema</a></li>
+<li><a href="/user-manual/notification-system">Notification System</a></li>
+<li><a href="/user-manual/environment-setup">Environment Setup</a></li>
+</ul>
+<h2 id="download"><a href="#download">Download</a></h2>
+<p>A plain-Markdown copy of this document is available at
+<a href="/user-manual/backend-functions/download.md"><code>/user-manual/backend-functions/download.md</code></a>.</p>
+</article>

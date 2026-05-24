@@ -40,6 +40,31 @@ architecture — that is the entire job.
 Wrong copy, wrong colors, missing sections, wrong fonts, or missing
 business logic are **blocking defects**, not polish.
 
+#### RULE 0.1 — Screenshot-overlap before "done"
+
+Before declaring a page done, screenshot the bible AND the port at
+**1440×900** with the same browser zoom. The two screenshots must
+pixel-overlap. If body font weight, color, cursor, border tint, or any
+visible glyph differs — that's a blocker, not a polish item. Repeat
+at **375×667** for mobile parity.
+
+#### RULE 0.2 — Always cross-check the bible's primitives + global CSS
+
+When porting any page, also open the bible's
+`HotSeatersMVP/src/index.css` AND every
+`HotSeatersMVP/src/components/ui/<primitive>.jsx` that the page
+consumes. Divergence in CVA classes, base layer rules, or CSS
+variables shows up everywhere downstream. A Login button that looks
+wrong on Landing is almost never a Landing bug — it's a primitive bug.
+
+#### RULE 0.3 — Fix systemic visual bugs in the primitive, not the page
+
+If a primitive (Button, Tab, Dialog, Input, etc.) renders consistently
+wrong across multiple consuming pages — wrong cursor, wrong font,
+wrong border tint, wrong focus ring — fix it in
+`src/components/ui/<primitive>.tsx` and/or `src/index.css`. Do not
+patch the symptom on each page. This is how "visual rot" creeps in.
+
 ### RULE 1 — Self-hosted Supabase only
 
 **Never** use Supabase Cloud (`*.supabase.co`, `app.supabase.com`).

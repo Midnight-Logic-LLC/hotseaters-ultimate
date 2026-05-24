@@ -1,0 +1,35 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="favorites">
+<h1 id="favorites"><a href="#favorites">Favorites</a></h1>
+<p>Dedicated page for managing favorite HotSeatHub subcontractor tenants and consultants. Only visible when the current tenant has <code>marketplace_post_jobs = true</code>.</p>
+<h2 id="page-header-and-visibility"><a href="#page-header-and-visibility">Page header and visibility</a></h2>
+<p>HSH-themed page with a star mark and the "Favorites" heading plus HotSeatHub subtitle. Renders null when <code>tenant_firms.marketplace_post_jobs</code> is disabled. The page reads the current user's tenant to check the flag.</p>
+<h2 id="favorites-manager"><a href="#favorites-manager">Favorites manager</a></h2>
+<p>The entire page body is rendered by the favorites-manager component, which receives the current <code>tenant_id</code>. It manages two categories of <code>favorite_subcontractors</code> rows:</p>
+<h3 id="favorited-tenants"><a href="#favorited-tenants">Favorited tenants</a></h3>
+<p><code>favorite_subcontractors</code> rows where <code>favorite_tenant_id</code> is set. Each <code>tenant_id</code> resolves to a <code>tenant_firms</code> row for display. Each entry renders the tenant name and a remove (unfavorite) action.</p>
+<h3 id="favorited-individual-consultants"><a href="#favorited-individual-consultants">Favorited individual consultants</a></h3>
+<p><code>favorite_subcontractors</code> rows where <code>favorite_user_id</code> is set. Each <code>user_id</code> resolves to a <code>user_profiles</code> row for <code>first_name</code> / <code>last_name</code> display. Each entry renders the consultant name and a remove action.</p>
+<h2 id="how-favorites-are-added"><a href="#how-favorites-are-added">How favorites are added</a></h2>
+<p>Favorites are not added from this page — they are added from <a href="/user-manual/help-wanted">Help Wanted</a> via the star icon on an application sub-card. Clicking the star opens the favorite-choice dialog with three options:</p>
+<ul>
+<li><strong>Tenant only</strong> — creates a <code>favorite_subcontractors</code> row with <code>favorite_tenant_id</code> set to the responding subcontractor tenant's ID.</li>
+<li><strong>Individual only</strong> — creates a <code>favorite_subcontractors</code> row with <code>favorite_user_id</code> set to the responding consultant's <code>user_profiles</code> ID.</li>
+<li><strong>Both</strong> — creates two separate <code>favorite_subcontractors</code> rows, one for the tenant and one for the individual.</li>
+</ul>
+<h2 id="how-favorites-are-used"><a href="#how-favorites-are-used">How favorites are used</a></h2>
+<ul>
+<li><strong>Help Wanted</strong> — favorites populate the banner card at the top of the page for quick reference.</li>
+<li><strong>Post to HotSeatHub</strong> — when creating a private <code>hsh_postings</code> row (<code>is_public = false</code>), the audience selector provides quick selection of favorited tenants and individuals to append to <code>invited_tenant_ids</code> and <code>invited_user_ids</code>.</li>
+<li><strong>Consultants</strong> — favorited individual consultants appear in a dedicated "HotSeatHub Favorites" section on the <a href="/user-manual/consultants">Consultants</a> page, showing name, email, phone, and profile photo (read-only).</li>
+</ul>
+<h2 id="role-visibility"><a href="#role-visibility">Role visibility</a></h2>
+<p>Visible to all tenant roles (owner, admin, sales, trial_consultant) as long as the tenant has <code>marketplace_post_jobs = true</code>. The sidebar item is shown or hidden based on this tenant flag, not on user role.</p>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul>
+<li><a href="/user-manual/help-wanted">Help Wanted</a></li>
+<li><a href="/user-manual/potential-gigs">Potential Gigs</a></li>
+<li><a href="/user-manual/consultants">Consultants</a></li>
+</ul>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/favorites/download.md"><code>/user-manual/favorites/download.md</code></a>.</p>
+</article>

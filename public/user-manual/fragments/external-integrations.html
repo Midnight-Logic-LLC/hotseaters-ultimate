@@ -1,0 +1,247 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="external-integrations">
+<p>Third-party services and API configurations used by HotSeaters. All integrations run through <strong>Next.js API Routes</strong> or <strong>Supabase Edge Functions</strong> — never directly from the browser. Secrets live in Supabase project secrets or environment variables, never in client code.</p>
+<h2 id="stripe-subscription-billing"><a href="#stripe-subscription-billing">Stripe (Subscription Billing)</a></h2>
+<p>Stripe handles HotSeaters subscription billing only. It is <strong>not</strong> used for client invoicing — client invoices are generated and emailed from within HotSeaters (see <a href="/user-manual/billing">Billing</a>).</p>
+<h3 id="environment-variables"><a href="#environment-variables">Environment variables</a></h3>
+<pre><code class="hljs language-bash">STRIPE_API_KEY=sk_test_... or sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+</code></pre>
+<h3 id="products-and-prices"><a href="#products-and-prices">Products and prices</a></h3>
+<table>
+<thead>
+<tr>
+<th>Plan</th>
+<th>Product</th>
+<th>Price ID</th>
+<th>Monthly</th>
+<th>Yearly</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Single User</td>
+<td><code>prod_TTzW1aIDWh1g0L</code></td>
+<td><code>price_1SX1X42M6xED7qUODyxn1wiS</code></td>
+<td>$85</td>
+<td>$816</td>
+</tr>
+<tr>
+<td>Multi User</td>
+<td><code>prod_TTzXmiWLEAkMy7</code></td>
+<td><code>price_1SX1YC2M6xED7qUOdSkZtqaX</code></td>
+<td>$115</td>
+<td>$1,104</td>
+</tr>
+<tr>
+<td>HotSeatHub Add-On</td>
+<td><code>prod_TTzYn0MXLp5U7O</code></td>
+<td><code>price_1SX1ZY2M6xED7qUONGIdRjpE</code></td>
+<td>$15</td>
+<td>$144</td>
+</tr>
+</tbody>
+</table>
+<h3 id="webhook-events"><a href="#webhook-events">Webhook events</a></h3>
+<p>Endpoint: <code>https://&#x3C;your-domain>/api/stripe/webhook</code> (Next.js API Route).</p>
+<ul>
+<li><code>checkout.session.completed</code> — activates subscription, sets tier and HSH feature flags on <code>tenant_firms</code></li>
+<li><code>customer.subscription.updated</code> — updates <code>is_active</code> based on status</li>
+<li><code>customer.subscription.deleted</code> — deactivates tenant, removes HSH access</li>
+<li><code>invoice.payment_succeeded</code> / <code>invoice.payment_failed</code></li>
+</ul>
+<p>Signature verification uses <strong>HMAC</strong> (<code>stripe.webhooks.constructEvent</code>) against the raw request body. Replay/clock-skew tolerance is enforced by the Stripe SDK's default <code>tolerance</code>.</p>
+<h3 id="server-functions"><a href="#server-functions">Server functions</a></h3>
+<ul>
+<li><code>createCheckoutSession</code> — new subscription checkout</li>
+<li><code>createUpgradeSession</code> — upgrade to multi-user or add HSH</li>
+<li><code>createPortalSession</code> — Stripe billing portal redirect</li>
+<li><code>getSubscriptionDetails</code> — current subscription status</li>
+<li><code>updateSubscriptionQuantity</code> — seat count for per-user billing</li>
+<li><code>stripeWebhook</code> — webhook handler (API Route, <code>runtime: 'nodejs'</code>, raw body)</li>
+</ul>
+<h2 id="resend-transactional-email"><a href="#resend-transactional-email">Resend (Transactional Email)</a></h2>
+<p>Resend delivers <strong>all</strong> transactional email: document signing requests, team invitations, referral invitations, invoice delivery, marketplace notifications, password resets.</p>
+<h3 id="environment-variables-1"><a href="#environment-variables-1">Environment variables</a></h3>
+<pre><code class="hljs language-bash">RESEND_API_KEY=re_...
+</code></pre>
+<p>Sender email is set on the <code>tenant_firms</code> record and must be a verified domain in Resend.</p>
+<h3 id="used-by"><a href="#used-by">Used by</a></h3>
+<ul>
+<li><code>sendDocumentEmail</code> / <code>sendDocumentEmailBatch</code> — document delivery with signing links</li>
+<li><code>sendInvoiceEmail</code> — invoice delivery with PDF attachment</li>
+<li><code>inviteTeamMember</code> — team invitation emails</li>
+<li><code>sendReferralInvitation</code> — referral invitation emails</li>
+<li><code>notifyMarketplace</code> — HSH marketplace notifications (email + in-app)</li>
+<li><code>sendTestEmail</code> — test delivery from Settings</li>
+</ul>
+<p>See also: <a href="/user-manual/notification-system">Notification System</a>.</p>
+<h2 id="pdf-generation-puppeteer-edge-function"><a href="#pdf-generation-puppeteer-edge-function">PDF Generation (Puppeteer Edge Function)</a></h2>
+<p>HTML-to-PDF conversion for documents, invoices, and HSH agreement confirmations runs in a Supabase Edge Function backed by headless Chromium (Puppeteer/Playwright). DocuSeal-hosted rendering is an alternative when signing flows embed DocuSeal.</p>
+<h3 id="environment-variables-2"><a href="#environment-variables-2">Environment variables</a></h3>
+<pre><code class="hljs language-bash">PDF_EDGE_FUNCTION_URL=https://&#x3C;project>.supabase.co/functions/v1/generate-pdf
+</code></pre>
+<h3 id="server-functions-1"><a href="#server-functions-1">Server functions</a></h3>
+<ul>
+<li><code>generatePdfFromHtml</code> — core PDF generation with retry logic, Google Fonts, private storage upload</li>
+<li><code>generateInvoicePdf</code> — invoice PDF from template sections</li>
+<li><code>generateHSHAgreementPdf</code> — HSH assignment confirmation PDF (and cancellation addendum)</li>
+<li><code>mergeReceiptsIntoPdf</code> — merge expense receipts into invoice PDF</li>
+<li><code>regenerateDocumentPdf</code> — regenerate document PDF with embedded signatures</li>
+</ul>
+<h3 id="features"><a href="#features">Features</a></h3>
+<ul>
+<li>Retry with exponential backoff (3 attempts)</li>
+<li>60s timeout</li>
+<li>Custom Google Fonts loaded per tenant theme</li>
+<li>Uploads to Supabase Storage private bucket, with time-limited signed URLs for recipients</li>
+</ul>
+<h2 id="e-signatures-docuseal"><a href="#e-signatures-docuseal">E-Signatures (DocuSeal)</a></h2>
+<p>E-signature flows use <strong>DocuSeal</strong> embedded widgets — replacing the legacy canvas SignaturePad. DocuSeal handles signature capture, signer audit trail, and PDF embedding.</p>
+<ul>
+<li>Multi-signer support: client / FRP / sales</li>
+<li>Public signing pages (no login required)</li>
+<li>Full audit trails: IP address, user agent, timestamp per signer</li>
+<li>Automatic pipeline stage advancement when all parties sign (see <a href="/user-manual/backend-functions">Backend Functions</a>)</li>
+</ul>
+<h2 id="receipt-ocr-veryfi--cloudinary"><a href="#receipt-ocr-veryfi--cloudinary">Receipt OCR (Veryfi + Cloudinary)</a></h2>
+<p>AI-powered receipt data extraction. Veryfi performs OCR to extract vendor, amount, date, and category. Cloudinary handles image deskewing and cropping for better OCR accuracy.</p>
+<h3 id="environment-variables-3"><a href="#environment-variables-3">Environment variables</a></h3>
+<pre><code class="hljs language-bash">VERYFI_API_KEY=...
+VERYFI_USERNAME=...
+VERYFI_CLIENT_ID=...
+VERYFI_CLIENT_SECRET=...
+
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+</code></pre>
+<h3 id="edge-functions"><a href="#edge-functions">Edge functions</a></h3>
+<ul>
+<li><code>processReceiptVeryfi</code> — sends receipt image to Veryfi, extracts vendor, total, date, category</li>
+<li><code>processReceiptAI</code> — alternative extraction via OpenAI/Anthropic vision (replaces legacy Base44 <code>InvokeLLM</code>)</li>
+<li><code>deskewReceiptImage</code> — uses Cloudinary to straighten/crop the image before OCR</li>
+</ul>
+<h3 id="workflow"><a href="#workflow">Workflow</a></h3>
+<ol>
+<li>User uploads receipt image in the Expense Wizard</li>
+<li>Image stored in Supabase Storage</li>
+<li>Optional: <code>deskewReceiptImage</code> straightens the image via Cloudinary</li>
+<li><code>processReceiptVeryfi</code> extracts structured data</li>
+<li>Extracted data pre-fills the expense form (amount, date, vendor, category)</li>
+<li>User can retry extraction or manually edit</li>
+</ol>
+<p>See <a href="/user-manual/expense-workflows">Expense Workflows</a> and <a href="/user-manual/auto-expense-reporting">Auto Expense Reporting</a>.</p>
+<h2 id="google-maps-platform-mileage-expenses"><a href="#google-maps-platform-mileage-expenses">Google Maps Platform (Mileage Expenses)</a></h2>
+<p>Powers mileage expense entry: address autocomplete, route calculation, and static map preview. See <a href="/user-manual/travel-time">Travel Time</a>.</p>
+<h3 id="environment-variables-4"><a href="#environment-variables-4">Environment variables</a></h3>
+<pre><code class="hljs language-bash">GOOGLE_MAPPING_API=your_google_maps_api_key
+</code></pre>
+<h3 id="apis-used"><a href="#apis-used">APIs used</a></h3>
+<ul>
+<li><strong>Places Autocomplete</strong> — address suggestions as the user types</li>
+<li><strong>Place Details</strong> — full address data from autocomplete selection</li>
+<li><strong>Directions API</strong> — calculate driving route and distance</li>
+<li><strong>Static Maps API</strong> — generate a route map image for display</li>
+</ul>
+<h3 id="edge-functions-1"><a href="#edge-functions-1">Edge functions</a></h3>
+<ul>
+<li><code>placesAutocomplete</code> — proxy for Google Places Autocomplete</li>
+<li><code>placesDetails</code> — proxy for Google Place Details</li>
+<li><code>calculateRoute</code> — returns distance and duration between two addresses</li>
+<li><code>generateRouteMap</code> — returns a static map image URL</li>
+</ul>
+<h2 id="google-calendar-optional-oauth"><a href="#google-calendar-optional-oauth">Google Calendar (Optional OAuth)</a></h2>
+<p>Optional OAuth integration to sync trial service assignments to Google Calendar. Users connect during onboarding or from profile settings.</p>
+<h3 id="environment-variables-5"><a href="#environment-variables-5">Environment variables</a></h3>
+<pre><code class="hljs language-bash">GOOGLE_CLIENT_ID=*.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_client_secret
+</code></pre>
+<h3 id="oauth-flow"><a href="#oauth-flow">OAuth flow</a></h3>
+<ol>
+<li><code>initiateGoogleCalendarOAuth</code> generates auth URL with state</li>
+<li>User redirects to Google consent screen</li>
+<li><code>handleGoogleCalendarCallback</code> exchanges code for tokens, stores them on <code>user_profiles</code></li>
+<li>Auto-syncs existing active assignments</li>
+</ol>
+<p>Google OAuth is <strong>also</strong> used for sub-user self-signup via Supabase Auth (coexists with legacy email/password signup).</p>
+<h3 id="sync-behavior"><a href="#sync-behavior">Sync behavior</a></h3>
+<ul>
+<li>Creates/updates all-day events: <code>"Case Name - Service Name (City, State)"</code></li>
+<li>Auto-refreshes expired tokens</li>
+<li>Respects the sync preference: in-trial-only vs. all assignments</li>
+<li>Deletes events when assignments are removed, trials are completed, or calendar is disconnected</li>
+<li>Calendar sync is fire-and-forget — it never blocks the main operation</li>
+</ul>
+<h3 id="edge-functions-2"><a href="#edge-functions-2">Edge functions</a></h3>
+<ul>
+<li><code>initiateGoogleCalendarOAuth</code></li>
+<li><code>handleGoogleCalendarCallback</code></li>
+<li><code>syncTaskToGoogleCalendar</code></li>
+<li><code>testCalendarConnection</code></li>
+<li><code>disconnectGoogleCalendar</code></li>
+</ul>
+<h2 id="quickbooks-deferred--v1-stub"><a href="#quickbooks-deferred--v1-stub">QuickBooks (Deferred — v1 Stub)</a></h2>
+<p>The QuickBooks integration ships as a <strong>graceful-degradation stub</strong> in v1. UI surfaces show a "Coming soon" state; server-side sync is not wired. The configured path is deferred to a later release. See <a href="/user-manual/quickbooks-integration">QuickBooks Integration</a> for the planned scope.</p>
+<h2 id="supabase-platform-integrations"><a href="#supabase-platform-integrations">Supabase Platform Integrations</a></h2>
+<p>HotSeaters replaces the legacy Base44 core integrations with Supabase-native primitives.</p>
+<h3 id="storage"><a href="#storage">Storage</a></h3>
+<p>Public bucket for receipts, logos, template backgrounds. Private bucket for generated PDFs (invoices, documents, HSH agreements). Signed URLs give time-limited access to private files.</p>
+<h3 id="ai-via-edge-functions"><a href="#ai-via-edge-functions">AI via Edge Functions</a></h3>
+<p>Receipt extraction, expense categorization, and other AI features call <strong>OpenAI</strong> or <strong>Anthropic</strong> APIs from Supabase Edge Functions — never from the client. This replaces the legacy Base44 <code>InvokeLLM</code> primitive.</p>
+<h3 id="image-processing"><a href="#image-processing">Image processing</a></h3>
+<p>Cloudinary handles deskewing/straightening; AI logo generation uses OpenAI/Anthropic image endpoints from an Edge Function.</p>
+<h3 id="scheduled-work"><a href="#scheduled-work">Scheduled work</a></h3>
+<p><strong>All scheduled jobs run via Supabase <code>pg_cron</code></strong> — no Vercel Cron, no <code>vercel.json</code>. Scheduled jobs include pipeline auto-advance checks, overdue invoice notifications, and trial-continuation reminders.</p>
+<h2 id="complete-environment-variables"><a href="#complete-environment-variables">Complete environment variables</a></h2>
+<pre><code class="hljs language-bash"><span class="hljs-comment"># Stripe (subscription billing)</span>
+STRIPE_API_KEY=sk_test_... or sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+<span class="hljs-comment"># Email (Resend)</span>
+RESEND_API_KEY=re_...
+
+<span class="hljs-comment"># PDF generation (Puppeteer Edge Function)</span>
+PDF_EDGE_FUNCTION_URL=https://&#x3C;project>.supabase.co/functions/v1/generate-pdf
+
+<span class="hljs-comment"># Receipt OCR (Veryfi)</span>
+VERYFI_API_KEY=...
+VERYFI_USERNAME=...
+VERYFI_CLIENT_ID=...
+VERYFI_CLIENT_SECRET=...
+
+<span class="hljs-comment"># Image processing (Cloudinary)</span>
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+
+<span class="hljs-comment"># Maps and routing (Google)</span>
+GOOGLE_MAPPING_API=...
+
+<span class="hljs-comment"># Google OAuth (Calendar + sub-user signup)</span>
+GOOGLE_CLIENT_ID=*.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=...
+
+<span class="hljs-comment"># AI providers (Edge Functions only)</span>
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+
+<span class="hljs-comment"># Supabase (platform)</span>
+NEXT_PUBLIC_SUPABASE_URL=https://&#x3C;project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...   <span class="hljs-comment"># server-only</span>
+</code></pre>
+<p>See <a href="/user-manual/environment-setup">Environment Setup</a> for local configuration.</p>
+<h2 id="troubleshooting"><a href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="stripe-webhook-signature-fails"><a href="#stripe-webhook-signature-fails">Stripe webhook signature fails</a></h3>
+<p>Ensure the API Route receives the <strong>raw request body</strong> (not parsed JSON) and that <code>STRIPE_WEBHOOK_SECRET</code> matches the endpoint secret shown in the Stripe dashboard.</p>
+<h3 id="pdf-generation-failing"><a href="#pdf-generation-failing">PDF generation failing</a></h3>
+<p>Check the Edge Function logs. Validate the input HTML. The retry logic handles transient failures (3 attempts with exponential backoff). Verify the Puppeteer Edge Function has enough memory allocated.</p>
+<h3 id="receipt-extraction-empty"><a href="#receipt-extraction-empty">Receipt extraction empty</a></h3>
+<p>Check Veryfi credentials. Try deskewing the image first via Cloudinary. Fallback: route to <code>processReceiptAI</code> which uses OpenAI/Anthropic vision.</p>
+<h3 id="mileage-route-calculation-fails"><a href="#mileage-route-calculation-fails">Mileage route calculation fails</a></h3>
+<p>Verify <code>GOOGLE_MAPPING_API</code> has <strong>Directions API</strong> and <strong>Places API</strong> enabled in Google Cloud Console, and that the key has no domain restriction blocking server-side calls.</p>
+<h3 id="google-calendar-invalid_grant"><a href="#google-calendar-invalid_grant">Google Calendar <code>invalid_grant</code></a></h3>
+<p><code>testCalendarConnection</code> clears stored tokens on <code>invalid_grant</code>. The user must reconnect from profile settings.</p>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/external-integrations/download.md"><code>/user-manual/external-integrations/download.md</code></a>.</p>
+</article>

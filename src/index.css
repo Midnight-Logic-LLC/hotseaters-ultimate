@@ -1,6 +1,5 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-@import '@fontsource-variable/geist';
 
 /* =============================================================================
  * hotseaters-ultimate — global styles
@@ -21,7 +20,25 @@
   --color-brand-accent-warm: #F97316;
   --color-brand-accent-urgent: #EF4444;
   --color-hsh-primary: #9333EA;
-  --font-sans: 'Geist Variable', system-ui, -apple-system, sans-serif;
+
+  /* Bible-verbatim font tokens. See HotSeatersMVP/src/index.css lines 8-11. */
+  --font-sans: 'Montserrat', system-ui, sans-serif;
+  --font-display: 'Zen Dots', sans-serif;
+  --font-mono: 'Michroma', sans-serif;
+  --font-accent: 'Syncopate', sans-serif;
+
+  /* Bible's `--border` and `--input` (index.css lines 30-31) = hsl(210 11% 92%)
+     ≈ #E8EAEB — a very light cool gray. Tailwind's `border-border` /
+     `border-input` resolve through `--color-border` / `--color-input`. */
+  --color-border: hsl(210 11% 92%);
+  --color-input: hsl(210 11% 92%);
+  --color-ring: #0891B2;
+  --color-background: #ffffff;
+  --color-foreground: #1C1917;
+  --color-muted: #F5F5F4;
+  --color-muted-foreground: #57534E;
+  --color-accent: #F5F5F4;
+  --color-accent-foreground: #1C1917;
 }
 
 :root {
@@ -65,11 +82,13 @@
   /* Sidebar */
   --theme-sidebar-bg: #FFFFFF;
 
-  /* Typography */
+  /* Typography — bible-verbatim. The body font is Montserrat across
+     marketing AND in-app surfaces (per HotSeatersMVP/src/index.css line 10
+     and components/theme/defaultTheme.jsx). */
   --theme-font-brand-title: 'Zen Dots', sans-serif;
   --theme-font-brand-subtitle: 'Michroma', sans-serif;
-  --theme-font-body: system-ui, -apple-system, sans-serif;
-  --theme-font-sidebar: system-ui, -apple-system, sans-serif;
+  --theme-font-body: 'Montserrat', system-ui, -apple-system, sans-serif;
+  --theme-font-sidebar: 'Syncopate', system-ui, -apple-system, sans-serif;
   --theme-text-page-title: 1.875rem;
   --theme-text-section-title: 1.25rem;
   --theme-text-card-title: 1.125rem;
@@ -211,18 +230,54 @@ body,
   overscroll-behavior-y: none;
 }
 
-/* Headings: legacy MVP used a display font on h1-h6 */
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--theme-font-body);
-  letter-spacing: -0.01em;
-  font-weight: 600;
+/* ─── Bible base layer (HotSeatersMVP/src/index.css lines 99-109) ────────
+   - Body inherits Montserrat via --font-sans.
+   - Headings use the display font (Zen Dots) per bible's
+     `@apply font-display tracking-tight font-semibold`.
+   - Pointer cursor on every clickable. The bible relies on browsers
+     defaulting <button>/<a> to pointer, but in our Base UI v1 build
+     the primitive renders a native <button> whose UA stylesheet sets
+     `cursor: default`. We make the intent explicit here so every
+     clickable surface — Button, Tab, Dialog trigger, footer link
+     button, label[for=…], summary, range/checkbox/radio — shows the
+     hand pointer. No `!important` needed because Tailwind utility
+     `cursor-*` lives in @layer utilities (later cascade). */
+@layer base {
+  body {
+    font-family: var(--font-sans);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+    font-weight: 600;
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled),
+  a[href],
+  [data-slot='button']:not(:disabled),
+  [data-slot='tab']:not(:disabled),
+  [data-slot='trigger']:not(:disabled),
+  summary,
+  label[for],
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled,
+  [role='button'][aria-disabled='true'] {
+    cursor: not-allowed;
+  }
 }
 
-/* Touch targets ≥ 44pt per RULE 4 (Tauri mobile primary) */
-button,
-[role='button'],
-a {
-  min-height: 44px;
+/* Touch-friendly opt-in for ≥ 44pt targets (was previously global which
+   forced 44px on the small footer policy links). Mirrors the bible's
+   `.touch-target` utility (HotSeatersMVP/src/index.css lines 243-248). */
+@media (pointer: coarse) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 /* Safe-area helpers (legacy MVP utility classes) */

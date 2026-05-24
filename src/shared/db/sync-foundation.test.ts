@@ -30,8 +30,16 @@ interface MockRow {
   [k: string]: unknown;
 }
 
+interface MockState {
+  client_synced: MockRow[];
+  client_local: MockRow[];
+  local_writes: MockRow[];
+  _sync_meta: MockRow[];
+  [k: string]: MockRow[];
+}
+
 function createMockPGlite(): PGliteShape & {
-  __state: Record<string, MockRow[]>;
+  __state: MockState;
   __pendingWrites: Array<{
     entity: string;
     operation: string;
@@ -40,7 +48,7 @@ function createMockPGlite(): PGliteShape & {
   }>;
   __notify: (channel: string) => void;
 } {
-  const state: Record<string, MockRow[]> = {
+  const state: MockState = {
     client_synced: [],
     client_local: [],
     local_writes: [],
@@ -97,7 +105,8 @@ function createMockPGlite(): PGliteShape & {
         return { rows: state._sync_meta as unknown as T[] };
       }
       if (/UPDATE _sync_meta/i.test(sql)) {
-        state._sync_meta[0] = { ...state._sync_meta[0], tenant_id: null, hydrated_at: null };
+        const prev = state._sync_meta[0] ?? { id: '1' };
+        state._sync_meta[0] = { ...prev, tenant_id: null, hydrated_at: null };
         return { rows: [] as T[] };
       }
       return { rows: [] as T[] };
@@ -113,7 +122,7 @@ function createMockPGlite(): PGliteShape & {
       listeners[channel] = listeners[channel] ?? [];
       listeners[channel].push(handler);
       return () => {
-        listeners[channel] = listeners[channel].filter((h) => h !== handler);
+        listeners[channel] = (listeners[channel] ?? []).filter((h) => h !== handler);
       };
     },
   };
@@ -131,7 +140,7 @@ describe('sync foundation — trio + write queue', () => {
     ]);
     const { rows } = await db.query<MockRow>('SELECT * FROM client_synced');
     expect(rows).toHaveLength(1);
-    expect(rows[0].id).toBe('c1');
+    expect(rows[0]?.id).toBe('c1');
   });
 
   it('view write enqueues local row + local_writes entry + pg_notify', async () => {
@@ -186,7 +195,7 @@ describe('sync foundation — trio + write queue', () => {
     expect(db.__state.client_synced).toHaveLength(0);
     expect(db.__state.client_local).toHaveLength(0);
     expect(db.__state.local_writes).toHaveLength(0);
-    expect(db.__state._sync_meta[0].tenant_id).toBeNull();
-    expect(db.__state._sync_meta[0].hydrated_at).toBeNull();
+    expect(db.__state._sync_meta[0]?.tenant_id).toBeNull();
+    expect(db.__state._sync_meta[0]?.hydrated_at).toBeNull();
   });
 });

@@ -1,0 +1,286 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="technical-reference">
+<h1 id="technical-reference"><a href="#technical-reference">Technical Reference</a></h1>
+<p>Components, pages, utilities, and code structure.</p>
+<h2 id="page-components"><a href="#page-components">Page Components</a></h2>
+<h3 id="public--unauthenticated-pages"><a href="#public--unauthenticated-pages">Public / Unauthenticated Pages</a></h3>
+<ul>
+<li><strong>Landing</strong> — Marketing landing page with features and CTA.</li>
+<li><strong>Onboarding</strong> — First-time setup: tenant creation, Google Calendar connection.</li>
+<li><strong>AcceptInvite</strong> — Team invitation acceptance with auth redirect handling.</li>
+<li><strong>ReferralLanding</strong> — Public referral landing page for companies invited to join HotSeaters / HotSeatHub.</li>
+<li><strong>SignDocument</strong> — Public e-signature interface via DocuSeal embed.</li>
+<li><strong>ViewDocument</strong> — Public document viewing without signature requirement.</li>
+<li><strong>HSHDirectory</strong> — Public browsable directory of marketplace tenants and consultants.</li>
+<li><strong>PrivacyPolicy / TermsOfService</strong> — Legal pages (public).</li>
+</ul>
+<h3 id="dashboard--core"><a href="#dashboard--core">Dashboard &#x26; Core</a></h3>
+<ul>
+<li><strong>Dashboard</strong> — Main dashboard with KPIs, revenue charts, quick actions. See <a href="/user-manual/dashboard">Dashboard</a>.</li>
+<li><strong>SalesHub</strong> — Sales-focused view with deals pipeline, revenue projections, client insights. See <a href="/user-manual/sales-hub">Sales Hub</a>.</li>
+</ul>
+<h3 id="sales--client-management"><a href="#sales--client-management">Sales &#x26; Client Management</a></h3>
+<ul>
+<li><strong>Deals</strong> — Sales pipeline (renders <code>PipelinePageContent</code> with <code>mode='deals'</code>). See <a href="/user-manual/deals">Deals</a>.</li>
+<li><strong>Clients</strong> — Client CRM with attorneys, addresses, service overrides, contact transfer. See <a href="/user-manual/clients">Clients</a>.</li>
+</ul>
+<h3 id="operations-management"><a href="#operations-management">Operations Management</a></h3>
+<ul>
+<li><strong>Trials</strong> — Active trials (renders <code>PipelinePageContent</code> with <code>mode='trials'</code>). See <a href="/user-manual/trials">Trials</a>.</li>
+<li><strong>Schedule</strong> — Timeline view with drag-drop, grouped by trial or consultant, revenue chart. See <a href="/user-manual/schedule">Schedule</a>.</li>
+</ul>
+<h3 id="time--financial-management"><a href="#time--financial-management">Time &#x26; Financial Management</a></h3>
+<ul>
+<li><strong>TimeTracking</strong> — Time clock, manual entry, travel time, spreadsheet, expense management with receipt/mileage wizard. See <a href="/user-manual/time-tracking">Time Tracking</a>.</li>
+<li><strong>Approvals</strong> — Dedicated approval hub for time entries and expenses with bulk actions, status filtering, composable group-by toggles. See <a href="/user-manual/approvals">Approvals</a>.</li>
+<li><strong>Billing</strong> — Single-view 4-column kanban (Approve Time, Approve Expenses, Create Invoices, Send Invoices). See <a href="/user-manual/billing">Billing</a>.</li>
+<li><strong>Collections</strong> — Standalone 3-column kanban (Open / Overdue / Paid) with invoice preview and payment tracking. See <a href="/user-manual/collections">Collections</a>.</li>
+</ul>
+<h3 id="hotseathub-marketplace"><a href="#hotseathub-marketplace">HotSeatHub Marketplace</a></h3>
+<ul>
+<li><strong>PotentialGigs</strong> — Browse marketplace requests with kanban/list/card views, submit responses. See <a href="/user-manual/potential-gigs">Potential Gigs</a>.</li>
+<li><strong>HelpWanted</strong> — Manage posted requests, review/accept/negotiate responses. See <a href="/user-manual/help-wanted">Help Wanted</a>.</li>
+<li><strong>HSHDirectory</strong> — Public directory of marketplace tenants and consultants with profiles, ratings, skills.</li>
+<li><strong>HotSeatHubMarketing</strong> — Marketing page shown to tenants without HSH subscription.</li>
+</ul>
+<h3 id="team--settings"><a href="#team--settings">Team &#x26; Settings</a></h3>
+<ul>
+<li><strong>Consultants</strong> — Team roster with card/list views, invitations, referral invitations, roles, tiers, qualifications. See <a href="/user-manual/consultants">Consultants</a>.</li>
+<li><strong>Settings</strong> — Multi-tab config: General, Services, Pipeline, Documents, Marketplace, Theme, Tiers, Subscription, Time Tracking, Admin. See <a href="/user-manual/settings">Settings</a>.</li>
+</ul>
+<h3 id="documentation"><a href="#documentation">Documentation</a></h3>
+<ul>
+<li><strong>UserManual</strong> — End-user help and feature guide.</li>
+<li><strong>Docs + Doc01–Doc18</strong> — Developer documentation (admin only).</li>
+</ul>
+<h2 id="component-architecture"><a href="#component-architecture">Component Architecture</a></h2>
+<h3 id="layout-system"><a href="#layout-system">Layout System</a></h3>
+<p><strong>Layout</strong> — Master layout wrapping all authenticated pages:</p>
+<ul>
+<li>Sidebar navigation (<code>SidebarProvider</code> from shadcn/ui)</li>
+<li>Role-based menu items (owner / admin / sales / consultant visibility)</li>
+<li>Tenant branding (logo, theme colors)</li>
+<li>User profile with logout and profile link</li>
+<li><code>NotificationsMenu</code> with Supabase Realtime subscription</li>
+<li><code>TrialBanner</code> for platform alerts</li>
+<li><code>TenantMigration</code> for data migration prompts</li>
+<li><code>NavigationTracker</code> for page preference saving</li>
+<li>Theme CSS generation via <code>generateThemeCSS</code> + Google Fonts loading (single-theme v1; dual-theme deferred)</li>
+</ul>
+<h3 id="pipeline-components"><a href="#pipeline-components">Pipeline Components</a></h3>
+<ul>
+<li><strong>PipelinePageContent</strong> — Reusable controller with 3 view modes + filters + search + completed items</li>
+<li><strong>PipelineKanban / PipelineList / PipelineCards</strong> — Three view implementations</li>
+<li><strong>TrialCard</strong> — Individual trial/deal card with metrics and quick actions</li>
+<li><strong>PipelineViewToggle</strong> — Switch between kanban/list/card views</li>
+</ul>
+<h3 id="trial-management"><a href="#trial-management">Trial Management</a></h3>
+<ul>
+<li><strong>DealWizard</strong> — 4-step deal creation (client → case → services → review)</li>
+<li><strong>TrialDetails</strong> — Comprehensive editor with tabs: Case Info, Services, Contacts, Documents, Notes</li>
+<li><strong>ServiceSelector</strong> — Add services with date pickers and rate calculation</li>
+<li><strong>AssignmentDisplay</strong> — Shows assigned consultants (internal vs HSH badges)</li>
+<li><strong>ContinuedDialog</strong> — Trial continuation with precision options</li>
+<li><strong>DealDocumentsSection</strong> — Document CRUD within trial</li>
+<li><strong>HSHAssignmentsSection</strong> — HSH subcontractor assignments within trial</li>
+<li><strong>BulkAssignModal / BulkAssignConfirmDialog</strong> — Assign multiple consultants at once</li>
+</ul>
+<h3 id="schedule--timeline-components"><a href="#schedule--timeline-components">Schedule / Timeline Components</a></h3>
+<ul>
+<li><strong>TimelineGrid</strong> — Main timeline with zoom, grouping, drag-drop</li>
+<li><strong>TrialBar</strong> — Draggable trial bar (owners/admins/sales)</li>
+<li><strong>ServiceBar / SplitServiceBar</strong> — Service bars (hourly, daily min, or split)</li>
+<li><strong>TravelBar</strong> — Travel time indicators (±1 day before/after service)</li>
+<li><strong>TimeOffBarRow / TimeOffSidebarRow</strong> — Time-off display on timeline</li>
+<li><strong>ServiceAssignmentModal</strong> — Assign consultants or post to HSH</li>
+<li><strong>SplitBillingDialog</strong> — Configure pre-trial / in-trial split</li>
+<li><strong>TimelineRevenueChart</strong> — Revenue chart overlay on schedule</li>
+<li><strong>TimeScaleSlider</strong> — Zoom control (day / week / month / quarter / year)</li>
+</ul>
+<h3 id="time-tracking-components"><a href="#time-tracking-components">Time Tracking Components</a></h3>
+<ul>
+<li><strong>TimeClockInterface</strong> — Active timer with start/stop per trial/service</li>
+<li><strong>InlineTimerDisplay / InlineTimerForm</strong> — Compact timer controls</li>
+<li><strong>CombinedSpreadsheet</strong> — Timesheet table with inline editing, bulk actions, mode support (internal / HSH)</li>
+<li><strong>TimeSpreadsheet</strong> — Individual timesheet with grouping (person / trial / day)</li>
+<li><strong>TimesheetApproval</strong> — Admin approval UI grouped by consultant</li>
+<li><strong>TimeEntryForm / NewTimeEntryRow</strong> — Manual time entry</li>
+<li><strong>TimeEntryEditDialog</strong> — Edit time entry from billing page</li>
+</ul>
+<h3 id="expense-components"><a href="#expense-components">Expense Components</a></h3>
+<ul>
+<li><strong>ExpenseApproval</strong> — Expense display/approval with 3 composable group-by toggles (Team / Trial / Person), bulk actions, <code>BaseDocumentViewer</code> for receipts. Used by T&#x26;E Expenses tab and Approvals Expenses tab.</li>
+<li><strong>ExpensesTab</strong> — Dashboard for expenses with KPIs, receipt upload, approval</li>
+<li><strong>ExpenseDialog</strong> — Dialog wrapper with creation mutation (handles HSH dual-entry)</li>
+<li><strong>ExpenseWizard</strong> — 2-step wizard: Receipt/Mileage toggle → form. Handles OCR and Google Maps routing.</li>
+<li><strong>ExpenseForm</strong> — Form UI for expense data entry</li>
+<li><strong>AddressAutocomplete</strong> — Google Places Autocomplete for mileage start/end addresses</li>
+<li><strong>ReceiptPreviewDialog / ReceiptCropper / ZoomableImage</strong> — Receipt viewing and processing</li>
+<li><strong>ProcessingSteps</strong> — Visual step indicator for receipt processing pipeline</li>
+</ul>
+<h3 id="document-components"><a href="#document-components">Document Components</a></h3>
+<ul>
+<li><strong>DocumentFormModal</strong> — Template selection and preview</li>
+<li><strong>DocumentPreviewModal / DocumentPagePreview</strong> — Live preview with variable substitution</li>
+<li><strong>BaseDocumentViewer</strong> — PDF/image viewer (iframe for PDF, zoom/rotate for images). Used for documents and receipt previews.</li>
+<li><strong>DocumentDisplay</strong> — Public document display with case info</li>
+<li><strong>DocuSealEmbed</strong> — Hosted signature workflow via DocuSeal (replaces legacy canvas pad)</li>
+<li><strong>DocumentSendDialog</strong> — Multi-recipient email composer (Resend delivery)</li>
+<li><strong>PdfPreviewDialog</strong> — PDF preview in modal</li>
+</ul>
+<h3 id="marketplace-components"><a href="#marketplace-components">Marketplace Components</a></h3>
+<ul>
+<li><strong>PostToHotSeatHubForm</strong> — 3-step HSH request creation wizard</li>
+<li><strong>RequestCard / RequestCardHeader / RequestCardInfo</strong> — HSH request display</li>
+<li><strong>HSHResponseCard</strong> — Response with profit calc, accept/decline/counter</li>
+<li><strong>NegotiationThread</strong> — Full counter-offer history display</li>
+<li><strong>AcceptConfirmationModal</strong> — Accept response confirmation with HSH agreement PDF generation</li>
+<li><strong>DeclineRequestDialog / DateChangeNotificationDialog</strong> — Decline and date-change modals</li>
+<li><strong>RemapServiceDialog</strong> — Map subcontractor service to requested service</li>
+<li><strong>AudienceSelector / SentToSection</strong> — Choose public/private and invited parties</li>
+<li><strong>RequestsKanban / RequestsList / RequestsCards</strong> — Help Wanted view modes</li>
+<li><strong>GigsKanban / GigsList / GigsCards</strong> — Potential Gigs view modes</li>
+<li><strong>HSHCompanyCard / HSHDirectoryListRow / HSHDirectoryListSection</strong> — HSH Directory components</li>
+<li><strong>HSHProfileModal</strong> — Tenant/consultant profile modal</li>
+<li><strong>HSHStarRating / HSHReviewsList</strong> — Rating display and reviews list</li>
+<li><strong>HSHFavoritesTab</strong> — Favorites management</li>
+</ul>
+<h3 id="billing--invoice-components"><a href="#billing--invoice-components">Billing / Invoice Components</a></h3>
+<ul>
+<li><strong>ApproveTimeColumn</strong> — Billing page time approval column</li>
+<li><strong>ApproveExpensesColumn</strong> — Billing page expense approval column</li>
+<li><strong>InvoiceForm</strong> — Invoice creation/editing with line items</li>
+<li><strong>KanbanColumn / KanbanColumnBase</strong> — Reusable kanban column</li>
+<li><strong>CollectionInvoiceCard / CollectionsCards / CollectionsList</strong> — Collections page components</li>
+</ul>
+<h3 id="notification-components"><a href="#notification-components">Notification Components</a></h3>
+<ul>
+<li><strong>NotificationsMenu</strong> — Bell icon dropdown with unread count</li>
+<li><strong>NotificationRouter</strong> — Routes notification types to specific modal dialogs</li>
+<li><strong>AssignmentNotificationDialog / UnassignmentNotificationDialog</strong> — Assignment notifications</li>
+<li><strong>TrialStageChangedNotificationDialog</strong> — Pipeline auto-move notification</li>
+<li><strong>HSHRequestNotificationDialog / HSHResponseNotificationDialog</strong> — Marketplace notifications</li>
+<li><strong>HSHRequestCancelledDialog / HSHDeclinesAggregatedDialog</strong> — HSH cancellation/decline notifications</li>
+<li><strong>ExpenseNotificationDialog</strong> — Expense approval/rejection notifications</li>
+</ul>
+<p>See <a href="/user-manual/notification-system">Notification System</a> for architecture details.</p>
+<h3 id="settings-components"><a href="#settings-components">Settings Components</a></h3>
+<ul>
+<li><strong>DocumentTemplateManagement / TemplateSectionEditor</strong> — Template builder</li>
+<li><strong>ThemeManagement / FontSelector</strong> — Visual theme editor (single-theme v1)</li>
+<li><strong>ServiceForm / CategoryManagement</strong> — Services configuration</li>
+<li><strong>PipelineStageManagement</strong> — Stage config with auto-move triggers</li>
+<li><strong>TeamManagement / TierManagement</strong> — Team and tier config</li>
+<li><strong>SubscriptionManagement</strong> — Stripe subscription handling</li>
+<li><strong>RichTextEditor</strong> — TipTap wrapper with placeholder/signature insertion</li>
+<li><strong>BaseTableEditor</strong> — Table builder for templates</li>
+<li><strong>DatabaseDebug / DatabaseExport</strong> — Admin database tools</li>
+<li><strong>QuickBooksSettings</strong> — Deferred; configured path is a graceful-degradation stub until enabled. See <a href="/user-manual/quickbooks-integration">QuickBooks Integration</a>.</li>
+</ul>
+<h3 id="shared-components"><a href="#shared-components">Shared Components</a></h3>
+<ul>
+<li><strong>ConsultantForm / ReferralInviteForm</strong> — Team member editing and referral invitations</li>
+<li><strong>TransferContactDialog</strong> — Attorney transfer between client firms</li>
+<li><strong>NavigateConfirmationDialog</strong> — Unsaved changes warning</li>
+<li><strong>PipelineStageBadge</strong> — Colored stage badge with click-to-change</li>
+<li><strong>MetadataRow</strong> — Reusable metadata display (icon, label, value)</li>
+<li><strong>HSHCardWrapper</strong> — Styled wrapper for HSH-related cards</li>
+<li><strong>YearSelector</strong> — Fiscal year picker</li>
+<li><strong>App styleguide components</strong> — <code>AppButton</code>, <code>AppCard</code>, <code>AppBadge</code>, <code>AppModal</code>, <code>AppSection</code>, <code>AppMetricCard</code>, <code>AppEmptyState</code></li>
+</ul>
+<h2 id="custom-hooks"><a href="#custom-hooks">Custom Hooks</a></h2>
+<ul>
+<li><strong>useCurrentUserAndInfo</strong> — Fetches Supabase user + <code>user_profiles</code> on mount via TanStack Query. Query key: <code>'currentUserAndInfo'</code>.</li>
+<li><strong>useNotifications</strong> — Subscribes to Supabase Realtime for unread notifications with count.</li>
+<li><strong>useAcceptHSHResponse</strong> — Reusable hook for accepting marketplace responses (creates assignment, generates PDF, syncs calendar).</li>
+<li><strong>useCreateHSHRequest</strong> — Reusable hook for creating marketplace requests.</li>
+<li><strong>useHSHNegotiation</strong> — Hook for counter-offer and decline actions on HSH responses.</li>
+<li><strong>useTrialDateUpdate</strong> — Handles trial/service date updates with notifications and calendar sync.</li>
+<li><strong>useContinuedMutation</strong> — Hook for trial continuation workflow.</li>
+<li><strong>useReceiptProcessor</strong> — Hook for receipt upload, OCR extraction, and image deskew pipeline (see <a href="/user-manual/external-integrations">External Integrations</a>).</li>
+<li><strong>useSubUserExpiry</strong> — Tracks 14-day <code>pg_cron</code> expiry window for email + Google OAuth sub-user signups.</li>
+</ul>
+<h2 id="utility-functions"><a href="#utility-functions">Utility Functions</a></h2>
+<ul>
+<li><strong><code>utils.ts</code></strong> — <code>createPageUrl(pageName)</code>, <code>formatCurrency(amount, showCents)</code>, <code>formatPhoneNumber(phone)</code></li>
+<li><strong><code>pdrCalculations.ts</code></strong> — <code>calculateProjectedDailyRevenue(trialService, trial, billWeekends)</code> — PDR for hourly, daily min, or split</li>
+<li><strong><code>clientAddressUtils.ts</code></strong> — <code>getContactAddress(attorney, clientAddresses)</code>, <code>formatFullAddress(address)</code></li>
+<li><strong><code>themeUtils.ts</code></strong> — <code>generateThemeCSS(theme)</code> → CSS variables string; <code>getThemeValue(theme, path)</code> → value with fallback</li>
+<li><strong><code>defaultTheme.ts</code></strong> — Default theme configuration object with all CSS variable defaults</li>
+<li><strong><code>timeOffColors.ts</code></strong> — Color mappings for time-off types (vacation, sick, personal, other)</li>
+<li><strong><code>pipelineUtils.ts</code></strong> — Pipeline stage utility functions</li>
+</ul>
+<h2 id="data-fetching-patterns"><a href="#data-fetching-patterns">Data Fetching Patterns</a></h2>
+<p>All data access goes through TanStack Query against Supabase (via the typed client) or Supabase Edge Functions / Next.js Route Handlers. Scheduled work runs via <code>pg_cron</code> — there is no Vercel Cron and no <code>vercel.json</code>.</p>
+<h3 id="standard-query-pattern"><a href="#standard-query-pattern">Standard Query Pattern</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: trials = [], isLoading } = <span class="hljs-title function_">useQuery</span>({
+  <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'trials'</span>, tenantId],
+  <span class="hljs-attr">queryFn</span>: <span class="hljs-title function_">async</span> () => {
+    <span class="hljs-keyword">const</span> { data, error } = <span class="hljs-keyword">await</span> supabase
+      .<span class="hljs-title function_">from</span>(<span class="hljs-string">'trials'</span>)
+      .<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>)
+      .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'tenant_id'</span>, tenantId);
+    <span class="hljs-keyword">if</span> (error) <span class="hljs-keyword">throw</span> error;
+    <span class="hljs-keyword">return</span> data;
+  },
+  <span class="hljs-attr">enabled</span>: !!tenantId,
+});
+</code></pre>
+<h3 id="mutation-with-optimistic-update"><a href="#mutation-with-optimistic-update">Mutation with Optimistic Update</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">const</span> mutation = <span class="hljs-title function_">useMutation</span>({
+  <span class="hljs-attr">mutationFn</span>: <span class="hljs-title function_">async</span> (<span class="hljs-attr">data</span>: <span class="hljs-title class_">Partial</span>&#x3C;<span class="hljs-title class_">Trial</span>>) => {
+    <span class="hljs-keyword">const</span> { error } = <span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'trials'</span>).<span class="hljs-title function_">update</span>(data).<span class="hljs-title function_">eq</span>(<span class="hljs-string">'id'</span>, id);
+    <span class="hljs-keyword">if</span> (error) <span class="hljs-keyword">throw</span> error;
+  },
+  <span class="hljs-attr">onMutate</span>: <span class="hljs-title function_">async</span> (data) => {
+    <span class="hljs-keyword">await</span> queryClient.<span class="hljs-title function_">cancelQueries</span>({ <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'trials'</span>] });
+    <span class="hljs-keyword">const</span> previous = queryClient.<span class="hljs-title function_">getQueryData</span>([<span class="hljs-string">'trials'</span>, tenantId]);
+    queryClient.<span class="hljs-title function_">setQueryData</span>([<span class="hljs-string">'trials'</span>, tenantId], <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">old</span>: <span class="hljs-title class_">Trial</span>[] = []</span>) =></span>
+      old.<span class="hljs-title function_">map</span>(<span class="hljs-function">(<span class="hljs-params">t</span>) =></span> (t.<span class="hljs-property">id</span> === id ? { ...t, ...data } : t)),
+    );
+    <span class="hljs-keyword">return</span> { previous };
+  },
+  <span class="hljs-attr">onError</span>: <span class="hljs-function">(<span class="hljs-params">_err, _data, context</span>) =></span> {
+    queryClient.<span class="hljs-title function_">setQueryData</span>([<span class="hljs-string">'trials'</span>, tenantId], context?.<span class="hljs-property">previous</span>);
+  },
+  <span class="hljs-attr">onSuccess</span>: <span class="hljs-function">() =></span> queryClient.<span class="hljs-title function_">invalidateQueries</span>({ <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'trials'</span>] }),
+});
+</code></pre>
+<h3 id="edge-function-invocation"><a href="#edge-function-invocation">Edge Function Invocation</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">const</span> { data, error } = <span class="hljs-keyword">await</span> supabase.<span class="hljs-property">functions</span>.<span class="hljs-title function_">invoke</span>(<span class="hljs-string">'functionName'</span>, {
+  <span class="hljs-attr">body</span>: { <span class="hljs-attr">param</span>: <span class="hljs-string">'value'</span> },
+});
+<span class="hljs-keyword">if</span> (error) <span class="hljs-keyword">throw</span> error;
+</code></pre>
+<p>Route Handlers under <code>app/api/*/route.ts</code> follow the same shape for work that belongs to the Next.js runtime rather than Supabase Edge.</p>
+<h2 id="styling-conventions--theme-system"><a href="#styling-conventions--theme-system">Styling Conventions &#x26; Theme System</a></h2>
+<p>HotSeaters v1 ships a single theme. Dual-theme (dark-mode) support is deferred — see the theme stance note in change-510.</p>
+<h3 id="css-variables"><a href="#css-variables">CSS Variables</a></h3>
+<p>All styling uses CSS variables from <code>generateThemeCSS</code>:</p>
+<pre><code class="hljs language-text">--theme-brand-primary, --theme-brand-secondary, --theme-accent-cool, --theme-accent-warm
+--theme-stone-50 through --theme-stone-900
+--theme-text-page-title, --theme-text-card-title, --theme-text-body, --theme-text-label, --theme-text-caption
+--theme-page-padding, --theme-card-padding, --theme-card-gap, --theme-element-gap
+--theme-card-radius, --theme-button-radius, --theme-input-radius
+--theme-card-shadow, --theme-button-shadow
+--theme-font-body, --theme-font-sidebar, --theme-font-brand-title, --theme-font-brand-subtitle
+--theme-success, --theme-warning, --theme-danger, --theme-info
+--theme-sidebar-bg, --theme-page-bg, --theme-card-bg, --theme-card-header-bg, --theme-input-bg
+--theme-hsh-background (purple tint for HSH items)
+</code></pre>
+<h3 id="usage-convention"><a href="#usage-convention">Usage Convention</a></h3>
+<p>Use inline <code>style={{ color: 'var(--theme-stone-600)' }}</code> for themed values. Tailwind is used for layout (flex, grid, spacing). Theme variables cover all colors, fonts, borders, and shadows.</p>
+<h2 id="related-documentation"><a href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="/user-manual/app-overview">App Overview</a></li>
+<li><a href="/user-manual/database-schema">Database Schema</a></li>
+<li><a href="/user-manual/user-workflows">User Workflows</a></li>
+<li><a href="/user-manual/design-patterns">Design Patterns</a></li>
+<li><a href="/user-manual/backend-functions">Backend Functions</a></li>
+<li><a href="/user-manual/external-integrations">External Integrations</a></li>
+<li><a href="/user-manual/environment-setup">Environment Setup</a></li>
+<li><a href="/user-manual/style-guide">Style Guide</a></li>
+</ul>
+<h2 id="download"><a href="#download">Download</a></h2>
+<p>A plain-Markdown copy of this document is available at
+<a href="/user-manual/technical-reference/download.md"><code>/user-manual/technical-reference/download.md</code></a>.</p>
+</article>

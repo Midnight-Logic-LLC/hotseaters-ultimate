@@ -1,0 +1,462 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="database-schema">
+<h1 id="database-schema-reference"><a href="#database-schema-reference">Database Schema Reference</a></h1>
+<p><em>Complete entity structure and relationships backing the HotSeaters
+application on Supabase Postgres.</em></p>
+<p>This reference replaces the legacy Base44 schema with the new Supabase
+model. The legacy <code>company_id</code> column is renamed <strong><code>tenant_id</code></strong> across
+every entity; multi-tenancy is enforced by Row Level Security (RLS)
+policies, not by application-layer filtering alone.</p>
+<h2 id="built-in-fields"><a href="#built-in-fields">Built-in Fields</a></h2>
+<p>Every entity automatically includes:</p>
+<ul>
+<li><code>id</code> — <code>uuid</code>, primary key (Postgres <code>gen_random_uuid()</code>)</li>
+<li><code>created_at</code> — <code>timestamptz</code> (replaces Base44 <code>created_date</code>)</li>
+<li><code>updated_at</code> — <code>timestamptz</code> (replaces Base44 <code>updated_date</code>)</li>
+<li><code>created_by</code> — <code>uuid</code> referencing <code>auth.users(id)</code> (replaces Base44
+email-based attribution)</li>
+</ul>
+<p>All tenant-scoped entities additionally carry <code>tenant_id uuid not null</code>
+with RLS policies enforcing isolation.</p>
+<h2 id="core-entities"><a href="#core-entities">Core Entities</a></h2>
+<h3 id="tenant_firms"><a href="#tenant_firms">tenant_firms</a></h3>
+<p>Multi-tenant isolation root. Each <code>tenant_firm</code> is a single trial
+consulting firm (this is the new name for the legacy <code>Company</code>
+entity).</p>
+<pre><code class="hljs language-text">name, owner_id, logo_url, website, phone, address, city, state, zip,
+subscription_tier (single_user | multi_user), stripe_customer_id,
+has_hsh_addon, marketplace_post_jobs, marketplace_fill_jobs,
+profit_margin_type (percentage | dollar), profit_margin_value,
+default_daily_minimum_hours, time_rounding_minutes,
+clock_in_rounding (up | down | nearest),
+clock_out_rounding (up | down | nearest),
+invoice_due_days, invoice_period (weekly | monthly | per_trial),
+weekly_billing_day, monthly_billing_date, per_trial_billing_days_after_end,
+invoice_number_format, invoice_number_start, invoice_number_reset_yearly,
+job_number_format, job_number_start, job_number_reset_yearly,
+custom_fonts[], sender_email, hide_deals_from_time_clock,
+fiscal_year_start_month, annual_revenue_target, monthly_breakeven,
+retainer_divisor, retainer_multiplier, retainer_minimum,
+default_invoice_template_id, default_statement_template_id,
+default_invoice_email_template_id, default_invoice_email_message,
+show_debug_info, theme (jsonb), is_active,
+hsh_rating, hsh_reviews_count
+</code></pre>
+<h3 id="authusers-supabase-built-in"><a href="#authusers-supabase-built-in">auth.users (Supabase built-in)</a></h3>
+<p>Supabase-managed authentication table. Not modified directly;
+users are created through:</p>
+<ol>
+<li>The <strong>email/password signup</strong> flow (legacy, still supported)</li>
+<li>The <strong>Google OAuth sub-user self-signup</strong> flow (new — lands in
+<code>pending_approval</code>, approved by the firm owner, 14-day <code>pg_cron</code>
+expiry)</li>
+</ol>
+<pre><code class="hljs language-text">id, email, encrypted_password, email_confirmed_at, raw_user_meta_data,
+last_sign_in_at
+</code></pre>
+<p>Never insert directly; use Supabase Auth admin APIs (for OAuth sub-user
+approval) or the public signup flow.</p>
+<h3 id="user_profiles"><a href="#user_profiles">user_profiles</a></h3>
+<p>Extends <code>auth.users</code> with firm membership and role mapping. One row per
+user.</p>
+<pre><code class="hljs language-text">user_id (pk, references auth.users.id),
+tenant_id,
+company_role (owner | admin | sales | trial_consultant),
+first_name, last_name, title, phone, profile_photo_url, signature_image_url,
+consultant_tier_id, is_sales, notes,
+account_status (active | pending_approval | rejected | inactive),
+google_calendar_access_token, google_calendar_refresh_token,
+google_calendar_token_expires_at, google_calendar_sync_in_trial_only,
+preferences (jsonb — extensive UI/notification preferences),
+hsh_rating, hsh_reviews_count, hsh_profile_description,
+hsh_skills[], hsh_location
+</code></pre>
+<p><code>account_status</code> gates pending sub-user sign-ups; <code>preferences</code>
+stores view types, group-by toggles, tab states, date filters,
+schedule settings, and other UI state.</p>
+<h2 id="client--trial-management"><a href="#client--trial-management">Client &#x26; Trial Management</a></h2>
+<h3 id="client_firms"><a href="#client_firms">client_firms</a></h3>
+<p>Law firms that hire trial consulting services. Renamed from legacy
+<code>Client</code>.</p>
+<pre><code class="hljs language-text">tenant_id, firm_name, client_type_id, sales_lead_user_id,
+phone, website, notes, status (active | inactive)
+</code></pre>
+<h3 id="client_addresses"><a href="#client_addresses">client_addresses</a></h3>
+<p>Multiple addresses per client firm with labels.</p>
+<pre><code class="hljs language-text">tenant_id, client_firm_id, label, address, city, state, zip, is_primary
+</code></pre>
+<h3 id="client_types"><a href="#client_types">client_types</a></h3>
+<p>Classifier for client firms.</p>
+<pre><code class="hljs language-text">tenant_id, name, sort_order, is_active
+</code></pre>
+<h3 id="client_tiers"><a href="#client_tiers">client_tiers</a></h3>
+<p>Pricing tiers for client firms with rate multipliers.</p>
+<pre><code class="hljs language-text">tenant_id, name, multiplier, description, sort_order, is_active
+</code></pre>
+<h3 id="contacts"><a href="#contacts">contacts</a></h3>
+<p>Individual people working at client firms (attorneys, paralegals, etc.).
+Replaces legacy <code>Attorney</code>. Supports transfer between firms.</p>
+<pre><code class="hljs language-text">tenant_id, client_firm_id, client_address_id,
+first_name, last_name, title, email, phone, mobile, notes,
+contact_status (active | transferred),
+is_primary_billing
+</code></pre>
+<p>Transferred contacts are hidden from active lists; transfer creates a
+new row at the destination firm while preserving history on the
+original.</p>
+<h3 id="trials"><a href="#trials">trials</a></h3>
+<p>The core entity for both sales deals and active trials.</p>
+<pre><code class="hljs language-text">tenant_id, client_firm_id, primary_contact_id,
+case_name, case_style, case_number, job_number,
+courthouse, city, state, court, judge, case_type,
+side (plaintiff | defense),
+retainer_value, start_date, end_date,
+pipeline_stage_id, consultant_user_id, estimated_value, notes,
+deal_document_id, daily_minimum_hours, bill_for_weekends,
+frp_client_firm_id, frp_contact_id, won_date, lost_date,
+completion_type (deal_won | deal_lost | deal_settled |
+  verdict_for | verdict_against | case_settled | case_continued),
+completion_date,
+continued_date_precision (definite | month_only | none),
+invoice_recipient_preferences (jsonb)
+</code></pre>
+<h3 id="trial_contacts"><a href="#trial_contacts">trial_contacts</a></h3>
+<p>Secondary contacts copied onto a trial for notifications.</p>
+<pre><code class="hljs language-text">tenant_id, trial_id, contact_id
+</code></pre>
+<h2 id="service-management"><a href="#service-management">Service Management</a></h2>
+<h3 id="service_categories"><a href="#service_categories">service_categories</a></h3>
+<p>Service groupings for organization.</p>
+<pre><code class="hljs language-text">tenant_id, name, sort_order, is_default, is_active
+</code></pre>
+<h3 id="service_types"><a href="#service_types">service_types</a></h3>
+<p>Service catalog (e.g. Jury Consulting, Graphics). Renamed from legacy
+<code>Service</code>.</p>
+<pre><code class="hljs language-text">tenant_id, name, description, service_category_id,
+base_rate, rate_type (hourly | daily | flat),
+has_daily_minimum,
+service_availability (pre_trial_only | in_trial_only | both),
+default_lead_days, default_duration_days,
+sort_order, is_default, is_active, travel_multiplier
+</code></pre>
+<p>The <strong>Travel Time</strong> service uses <code>travel_multiplier</code> to derive its
+billing rate from the associated parent service.</p>
+<h3 id="trial_services"><a href="#trial_services">trial_services</a></h3>
+<p>Services added to a specific trial, with calculated rates and daily
+revenue projections.</p>
+<pre><code class="hljs language-text">tenant_id, trial_id, service_type_id, service_name (snapshot),
+custom_description, rate, rate_type,
+estimated_quantity, estimated_total,
+start_date, end_date,
+days_before_trial, split_billing_at_threshold,
+pre_trial_estimated_hours,
+final_billing_method (hourly | daily_minimum | split),
+service_phase (pre_trial | in_trial | split),
+projected_daily_revenue,
+pre_trial_projected_daily_revenue,
+in_trial_projected_daily_revenue,
+display_order, travel_eligible, estimated_travel_hours
+</code></pre>
+<p>Supports split billing (pre-trial hourly + in-trial daily minimum) and
+travel-time billing.</p>
+<h3 id="assignments"><a href="#assignments">assignments</a></h3>
+<p>Links consultants to trial services. Renamed from legacy
+<code>TrialServiceAssignment</code>.</p>
+<pre><code class="hljs language-text">tenant_id, trial_id, trial_service_id, consultant_user_id,
+is_subcontractor, subcontract_assignment_id,
+google_calendar_event_id,
+status (active | inactive)
+</code></pre>
+<h3 id="user_services"><a href="#user_services">user_services</a></h3>
+<p>Services that each consultant is qualified to provide. Renamed from
+legacy <code>UserService</code>.</p>
+<pre><code class="hljs language-text">tenant_id, consultant_user_id, service_type_id
+</code></pre>
+<h3 id="client_service_rates"><a href="#client_service_rates">client_service_rates</a></h3>
+<p>Custom pricing for specific client-firm + service combinations.
+Renamed from legacy <code>ClientServiceOverride</code>.</p>
+<pre><code class="hljs language-text">tenant_id, client_firm_id, service_type_id, custom_rate, rate_type
+</code></pre>
+<h2 id="time-tracking--billing"><a href="#time-tracking--billing">Time Tracking &#x26; Billing</a></h2>
+<h3 id="time_entries"><a href="#time_entries">time_entries</a></h3>
+<p>Logged billable time. Supports internal, subcontractor, hiring-company,
+and travel-time entries.</p>
+<pre><code class="hljs language-text">tenant_id, trial_id, client_firm_id, service_type_id, consultant_user_id,
+start_time, end_time, duration_hours, description,
+rate, amount,
+trial_name, client_name, service_name (snapshots),
+subcontractor_rate, subcontractor_amount, is_billable,
+invoice_id,
+status (in_progress | pending | approved | rejected | billed | paid),
+approved_by_user_id, approved_at, rejection_reason,
+subcontract_assignment_id, linked_time_entry_id,
+entry_type (regular | subcontractor | hiring_company),
+original_trial_service_id
+</code></pre>
+<p>Supports time clock with auto-rounding; <code>original_trial_service_id</code>
+links travel time to the associated service for rate calculation.</p>
+<h3 id="expense_entries"><a href="#expense_entries">expense_entries</a></h3>
+<p>Reimbursable and billable expenses. Supports both receipt-based and
+mileage-based entries, including HSH dual-entry. Renamed from legacy
+<code>Expense</code>.</p>
+<pre><code class="hljs language-text">tenant_id, trial_id, client_firm_id, consultant_user_id,
+amount, expense_date,
+category (travel | meals | lodging | materials | equipment |
+  software | parking | other),
+expense_type (receipt | mileage),
+description, paid_to, receipt_url,
+miles, start_address, end_address, mileage_rate,
+is_billable, is_reimbursable, reimbursed, invoice_id,
+status (pending | approved | rejected | billed | reimbursed),
+rejection_reason, approved_by_user_id, approved_at, notes,
+entry_type (regular | subcontractor | hiring_company),
+linked_expense_id, subcontract_assignment_id, subcontractor_amount
+</code></pre>
+<p><code>expense_type: receipt</code> uploads route through the AI vision pipeline
+for vendor/amount/date extraction; <code>expense_type: mileage</code> uses
+Google Places + Directions API with the current IRS rate. HSH expenses
+use <code>linked_expense_id</code> for bidirectional sync.</p>
+<h3 id="time_off"><a href="#time_off">time_off</a></h3>
+<p>Time-off requests and approvals.</p>
+<pre><code class="hljs language-text">tenant_id, consultant_user_id, time_off_type,
+start_date, end_date, notes, status
+</code></pre>
+<h3 id="invoices"><a href="#invoices">invoices</a></h3>
+<p>Client invoices and HSH subcontractor invoices with payment tracking.</p>
+<pre><code class="hljs language-text">tenant_id, invoice_number, client_firm_id, trial_id,
+invoice_date, due_date,
+subtotal, tax_rate, tax_amount, total,
+status (generating | draft | sent | paid | overdue | cancelled),
+paid_date,
+payment_method (check | wire_transfer | ach | credit_card | cash | other),
+payment_reference, payment_amount,
+notes, is_hsh_invoice, pdf_url, include_receipts,
+recipient_emails (jsonb: { to[], cc[], bcc[] })
+</code></pre>
+<h2 id="hotseathub-marketplace"><a href="#hotseathub-marketplace">HotSeatHub Marketplace</a></h2>
+<p>HSH tables intentionally live outside strict <code>tenant_id</code> isolation;
+rows carry explicit <code>hiring_tenant_id</code> and <code>subcontractor_tenant_id</code>
+columns so RLS can grant bounded cross-tenant read access to exactly
+the counterparty.</p>
+<h3 id="hsh_postings"><a href="#hsh_postings">hsh_postings</a></h3>
+<p>Job postings for subcontractors. Renamed from legacy
+<code>SubcontractRequest</code>.</p>
+<pre><code class="hljs language-text">hiring_tenant_id, trial_id, service_type_id, service_name,
+start_date, end_date, description, estimated_rate, location,
+status (open | in_progress | filled | cancelled),
+posted_by_user_id,
+is_public, invited_tenant_ids[], invited_user_ids[],
+viewed_by_user_ids[], cancelled_date,
+preferred_consultants_map (jsonb: { tenant_id: user_id[] })
+</code></pre>
+<p>Public postings are visible to all marketplace participants; private
+postings only to invited tenants.</p>
+<h3 id="hsh_applications"><a href="#hsh_applications">hsh_applications</a></h3>
+<p>Proposals from potential subcontractors with multi-round negotiation
+support. Renamed from legacy <code>SubcontractResponse</code>.</p>
+<pre><code class="hljs language-text">posting_id, responding_tenant_id, consultant_user_id,
+proposed_rate, message,
+status (pending_agreed | pending_counter | negotiating |
+  accepted | declined | lost),
+responded_by_user_id, mapped_service_type_id, viewed,
+negotiation_history (jsonb:
+  [{ rate, message, proposed_by, proposed_by_name, ts, type }]),
+agreed_rate, last_proposed_by, assigned_consultant_user_id
+</code></pre>
+<h3 id="hsh_contracts"><a href="#hsh_contracts">hsh_contracts</a></h3>
+<p>Accepted subcontractor arrangements with agreement-PDF tracking.
+Renamed from legacy <code>SubcontractAssignment</code>.</p>
+<pre><code class="hljs language-text">hiring_tenant_id, subcontractor_tenant_id, trial_id,
+trial_service_id, consultant_user_id,
+consultant_first_name, consultant_last_name (snapshots),
+agreed_rate, estimated_total,
+start_date, end_date,
+posting_id, application_id, mapped_service_type_id,
+subcontractor_job_number,
+hiring_accepted_at, subcontractor_accepted_at,
+agreement_pdf_url,
+status (active | completed | cancelled)
+</code></pre>
+<p><code>estimated_total</code> includes daily-minimum calculations. Cancellations
+append a cancellation addendum to the existing PDF rather than
+overwriting it.</p>
+<h3 id="favorite_subcontractors"><a href="#favorite_subcontractors">favorite_subcontractors</a></h3>
+<p>Preferred subcontractors for quick invite.</p>
+<pre><code class="hljs language-text">tenant_id, favorite_tenant_id, favorite_user_id
+</code></pre>
+<h3 id="hsh_reviews"><a href="#hsh_reviews">hsh_reviews</a></h3>
+<p>Ratings and reviews for HSH participants.</p>
+<pre><code class="hljs language-text">reviewer_tenant_id, reviewed_tenant_id, reviewed_user_id,
+contract_id, rating (1-5), review_text, reviewer_name
+</code></pre>
+<h2 id="configuration-entities"><a href="#configuration-entities">Configuration Entities</a></h2>
+<h3 id="deal_stages"><a href="#deal_stages">deal_stages</a></h3>
+<p>Deal and trial pipeline stages with auto-move triggers.</p>
+<pre><code class="hljs language-text">tenant_id, name, stage_type (sales | operations), color, sort_order,
+revenue_probability,
+auto_move_on_document_sent_category_id,
+auto_move_on_document_signed_category_id,
+auto_move_on_earliest_service_start,
+auto_move_on_trial_start,
+is_active
+</code></pre>
+<h3 id="consultant_tiers"><a href="#consultant_tiers">consultant_tiers</a></h3>
+<p>Pricing tiers for consultants.</p>
+<pre><code class="hljs language-text">tenant_id, name, multiplier, description, is_active
+</code></pre>
+<h3 id="invitations"><a href="#invitations">invitations</a></h3>
+<p>Team-member and referral invitations.</p>
+<pre><code class="hljs language-text">tenant_id, email, first_name, last_name, role,
+invitation_type (internal | referral),
+consultant_tier_id, token,
+status (pending | accepted | expired),
+invited_by_user_id, sent_at, accepted_at
+</code></pre>
+<p><code>invitation_type = internal</code> adds a team member to this tenant;
+<code>invitation_type = referral</code> invites another firm to join HotSeaters.</p>
+<h3 id="sub_user_requests"><a href="#sub_user_requests">sub_user_requests</a></h3>
+<p>Pending Google-OAuth sub-user self-signups awaiting owner approval
+(new in phase 24).</p>
+<pre><code class="hljs language-text">tenant_id, user_id, email, first_name, last_name,
+requested_at, expires_at (14 days), resolved_at,
+resolution (approved | rejected), resolution_by_user_id, notes
+</code></pre>
+<p>Expiry is driven by the <code>sub_user_request_expiry</code> <code>pg_cron</code> job.</p>
+<h3 id="notifications"><a href="#notifications">notifications</a></h3>
+<p>User notifications for schedule changes, assignments, marketplace
+events, and HSH lifecycle transitions.</p>
+<pre><code class="hljs language-text">recipient_user_id, trial_id, notification_type, title, message, details,
+trial_service_id, assignment_id, service_name, trial_name,
+old_start_date, old_end_date, new_start_date, new_end_date,
+related_entity_type, related_entity_id,
+posting_id, application_id,
+responding_tenant_id, responding_tenant_name,
+consultant_user_id, consultant_name, proposed_rate, response_status,
+request_service_name, request_trial_name, requesting_tenant_name,
+request_start_date, request_end_date, request_location,
+estimated_rate, billing_rate, response_message,
+decline_count, declines_with_message,
+read_at
+</code></pre>
+<p><code>recipient_user_id</code> references <code>user_profiles.user_id</code> (i.e. the
+<code>auth.users.id</code>), <em>not</em> any other identifier. Realtime delivery uses
+Supabase Realtime channels — there is no 15-second polling loop.</p>
+<p>Notification types: <code>task_date_change</code>, <code>hsh_date_change</code>,
+<code>trial_continued</code>, <code>hsh_trial_continued</code>, <code>trial_uncontinued</code>,
+<code>hsh_trial_uncontinued</code>, <code>assignment</code>, <code>unassignment</code>, <code>general</code>,
+<code>trial_stage_auto_moved</code>, <code>hsh_response_received</code>, <code>hsh_new_request</code>,
+<code>hsh_request_cancelled</code>, <code>hsh_declines_aggregated</code>,
+<code>assignment_cancelled</code>, <code>expense_approved</code>, <code>expense_rejected</code>.</p>
+<h2 id="document-management"><a href="#document-management">Document Management</a></h2>
+<h3 id="document_template_categories"><a href="#document_template_categories">document_template_categories</a></h3>
+<p>Classifier for document templates.</p>
+<pre><code class="hljs language-text">tenant_id, name, description,
+category_type (document | billing | email),
+sort_order, is_default, is_active
+</code></pre>
+<h3 id="document_templates"><a href="#document_templates">document_templates</a></h3>
+<p>Reusable document templates (engagement letters, proposals, invoices,
+emails).</p>
+<pre><code class="hljs language-text">tenant_id, name, document_template_category_id, description,
+page_settings (jsonb),
+has_signature_fields, is_contract, is_active
+</code></pre>
+<h3 id="template_sections"><a href="#template_sections">template_sections</a></h3>
+<p>Sections within a document template with rich content and tables.</p>
+<pre><code class="hljs language-text">document_template_id, name, content (rich html), sort_order,
+is_required,
+condition_type (always | user_choice | has_services | no_services |
+  has_retainer | no_retainer | has_frp | no_frp),
+condition_label,
+section_type (rich_text | table | services_table |
+  full_page_start | full_page_end |
+  invoice_line_items | statement_line_items),
+page_break_after, keep_together, background_image_url, table_data (jsonb)
+</code></pre>
+<h3 id="generated_documents"><a href="#generated_documents">generated_documents</a></h3>
+<p>Concrete documents generated from a template for a specific trial.
+Renamed from legacy <code>DealDocument</code>.</p>
+<pre><code class="hljs language-text">tenant_id, trial_id, document_template_id, document_template_category_id,
+document_name, letter_number,
+generated_content, pdf_url, file_url, file_name, file_type,
+page_settings, total_budget,
+status (draft | sent | viewed | signed | declined),
+docuseal_submission_id,
+signing_token, sent_date, sent_to, viewed_date, viewed_by_ip,
+signed_date, signature_data, signer_name, signer_email, signer_ip,
+notes
+</code></pre>
+<p>Signature capture and audit trails are delegated to <strong>DocuSeal</strong> via
+<code>docuseal_submission_id</code>; the legacy <code>signature_data</code> column remains
+for historical rows imported from Base44 but is never populated for
+new signatures.</p>
+<h3 id="document_signers"><a href="#document_signers">document_signers</a></h3>
+<p>Individual signers for multi-signature documents.</p>
+<pre><code class="hljs language-text">tenant_id, generated_document_id,
+signer_name, signer_email,
+signer_type (client | frp | sales),
+signer_order, signing_token,
+status (sent | viewed | signed),
+sent_date, viewed_date, signed_date, signature_data, signer_ip
+</code></pre>
+<h3 id="document_audit_logs"><a href="#document_audit_logs">document_audit_logs</a></h3>
+<p>Audit trail for document delivery and viewing (renamed from separate
+<code>DocumentSend</code> + <code>DocumentView</code> tables into one append-only log).</p>
+<pre><code class="hljs language-text">generated_document_id, event_type (sent | viewed | signed | declined),
+actor_email, actor_ip, occurred_at, method, notes
+</code></pre>
+<h2 id="key-schema-patterns"><a href="#key-schema-patterns">Key Schema Patterns</a></h2>
+<h3 id="snapshot-pattern"><a href="#snapshot-pattern">Snapshot pattern</a></h3>
+<p>Denormalize critical display values onto transactional rows:</p>
+<ul>
+<li><code>service_name</code> on <code>trial_services</code></li>
+<li><code>trial_name</code>, <code>client_name</code>, <code>service_name</code> on <code>time_entries</code></li>
+<li><code>consultant_first_name</code>, <code>consultant_last_name</code> on <code>hsh_contracts</code></li>
+<li><code>consultant_name</code>, <code>responding_tenant_name</code>, <code>trial_name</code>, etc. on
+<code>notifications</code></li>
+</ul>
+<p>Reason: historical accuracy when source rows change (a service is
+renamed, a client firm rebrands, a consultant leaves).</p>
+<h3 id="soft-delete-pattern"><a href="#soft-delete-pattern">Soft delete pattern</a></h3>
+<p>Prefer <code>is_active</code> or <code>status</code> flags over hard deletes. Documents
+used in production are soft-deleted; unused draft templates may be
+hard-deleted. <code>contacts.contact_status = 'transferred'</code> hides
+transferred people without losing history. <code>hsh_contracts.status = 'cancelled'</code> retains the audit trail.</p>
+<h3 id="tenant-isolation"><a href="#tenant-isolation">Tenant isolation</a></h3>
+<p>Every tenant-scoped entity includes <code>tenant_id</code>. RLS policies are the
+primary guardrail; application-layer filters are defense in depth.
+See the <a href="/user-manual/backend-functions">Backend Functions</a> and
+<a href="/user-manual/technical-reference">Technical Reference</a> documents for
+the specific RLS patterns in use.</p>
+<h3 id="cross-tenant-references-hotseathub"><a href="#cross-tenant-references-hotseathub">Cross-tenant references (HotSeatHub)</a></h3>
+<p><code>hsh_contracts</code> links <code>hiring_tenant_id</code> and <code>subcontractor_tenant_id</code>.
+Time entries and expenses are mirrored in both tenants via
+<code>linked_time_entry_id</code> / <code>linked_expense_id</code>.</p>
+<h3 id="projected-daily-revenue-pdr"><a href="#projected-daily-revenue-pdr">Projected Daily Revenue (PDR)</a></h3>
+<p><code>trial_services</code> stores precomputed <code>projected_daily_revenue</code> fields for
+performant forecasting; split billing carries separate pre-trial and
+in-trial rates.</p>
+<h3 id="invoice-recipient-preferences"><a href="#invoice-recipient-preferences">Invoice recipient preferences</a></h3>
+<p><code>trials.invoice_recipient_preferences</code> (jsonb) remembers recipient
+selections for invoice emails — selected contacts and additional
+addresses with To/CC/BCC designations.</p>
+<h3 id="hsh-negotiation-history"><a href="#hsh-negotiation-history">HSH negotiation history</a></h3>
+<p><code>hsh_applications.negotiation_history</code> (jsonb) is an append-only array
+tracking every counter-offer: rate, message, proposer, timestamp, and
+type (<code>initial</code> | <code>counter</code> | <code>accept</code> | <code>decline</code>).
+<code>last_proposed_by</code> determines signing order on acceptance.</p>
+<h3 id="hsh-agreement-pdf-lifecycle"><a href="#hsh-agreement-pdf-lifecycle">HSH agreement PDF lifecycle</a></h3>
+<p><code>hsh_contracts.agreement_pdf_url</code> points at the auto-generated HSH
+agreement PDF. On cancellation, a cancellation-addendum page is
+appended to the existing PDF (not overwritten) so both sides retain a
+single document containing the full lifecycle.</p>
+<h3 id="quickbooks-graceful-degradation"><a href="#quickbooks-graceful-degradation">QuickBooks graceful degradation</a></h3>
+<p>The QuickBooks-integration columns referenced in later documents
+(<code>quickbooks_customer_id</code>, <code>quickbooks_invoice_id</code>,
+<code>quickbooks_sync_state</code>) exist on the relevant entities but all code
+paths short-circuit behind a "configured path deferred" banner until
+the dedicated QuickBooks phase lands. See
+<a href="/user-manual/quickbooks-integration">QuickBooks Integration</a>.</p>
+<h2 id="download"><a href="#download">Download</a></h2>
+<p>A plain-Markdown copy of this document is available at
+<a href="/user-manual/database-schema/download.md"><code>/user-manual/database-schema/download.md</code></a>.</p>
+</article>

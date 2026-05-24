@@ -1,0 +1,61 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="cloud-storage">
+<h2 id="overview"><a href="#overview">Overview</a></h2>
+<p>Cloud storage integration (Dropbox, Google Drive, OneDrive, Box) is <strong>deferred</strong> beyond v1 of HotSeaters. This document is a roadmap stub for the intended design.</p>
+<p>In v1, all file storage uses <strong>Supabase Storage</strong> with tenant-scoped buckets and RLS-enforced access. Receipts, generated documents, signed PDFs, and firm assets all live in private buckets with signed-URL access.</p>
+<h2 id="v1-supabase-storage-buckets"><a href="#v1-supabase-storage-buckets">v1 Supabase Storage Buckets</a></h2>
+<table>
+<thead>
+<tr>
+<th>Bucket</th>
+<th>Visibility</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>receipts</code></td>
+<td>private</td>
+<td>Receipt images uploaded from the time-tracking / expense flows</td>
+</tr>
+<tr>
+<td><code>documents</code></td>
+<td>private</td>
+<td>Generated PDFs (invoices, contracts, HSH agreements)</td>
+</tr>
+<tr>
+<td><code>signatures</code></td>
+<td>private</td>
+<td>DocuSeal-returned signed document binaries</td>
+</tr>
+<tr>
+<td><code>tenant-assets</code></td>
+<td>private</td>
+<td>Per-tenant logos, letterhead, email banners</td>
+</tr>
+<tr>
+<td><code>public-assets</code></td>
+<td>public</td>
+<td>Landing-page images, icons, shared branding</td>
+</tr>
+</tbody>
+</table>
+<p>Access control is RLS-enforced via <code>storage.objects</code> policies keyed on <code>tenant_id</code> paths.</p>
+<h2 id="deferred-third-party-cloud-storage"><a href="#deferred-third-party-cloud-storage">Deferred: Third-Party Cloud Storage</a></h2>
+<p>Future integrations will let a tenant connect Dropbox / Google Drive / OneDrive / Box and mirror chosen buckets. The intended architecture:</p>
+<ul>
+<li>OAuth-based connection per tenant, stored encrypted on <code>tenant_firms</code></li>
+<li>Edge Functions <code>cloud-storage-sync-{provider}</code> for bidirectional sync</li>
+<li>pg_cron nightly reconciliation (NOT Vercel Cron)</li>
+<li>Per-bucket mirror policy (one-way push, bidirectional, or none)</li>
+<li>Graceful degradation UI when no cloud provider is connected</li>
+</ul>
+<p>All of the above is <strong>deferred in v1</strong>. The Supabase-only path is feature-complete for current requirements.</p>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul>
+<li><a href="/user-manual/external-integrations">External Integrations</a></li>
+<li><a href="/user-manual/environment-setup">Environment Setup</a></li>
+<li><a href="/user-manual/database-schema">Database Schema</a></li>
+</ul>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/cloud-storage/download.md"><code>/user-manual/cloud-storage/download.md</code></a>.</p>
+</article>

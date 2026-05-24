@@ -1,0 +1,588 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="design-patterns">
+<h1 id="design-patterns--best-practices"><a href="#design-patterns--best-practices">Design Patterns &#x26; Best Practices</a></h1>
+<p>Architectural patterns, coding standards, and HotSeaters-specific conventions.</p>
+<p><a href="/user-manual">Back to User Manual</a></p>
+<h2 id="core-architectural-patterns"><a href="#core-architectural-patterns">Core Architectural Patterns</a></h2>
+<h3 id="entity-driven-design"><a href="#entity-driven-design">Entity-Driven Design</a></h3>
+<p>All business logic centers around entities (database records).</p>
+<ul>
+<li>Clear separation: entities = data, functions = orchestration, components = UI</li>
+<li>Entities represent domain objects (Trial, Client, TimeEntry, Invoice, etc.)</li>
+<li>Relationships via foreign keys (<code>client_id</code>, <code>trial_id</code>, <code>service_id</code>)</li>
+<li>Edge Functions and Route Handlers orchestrate complex entity interactions</li>
+<li>Frontend reads via the Supabase client; mutations trigger TanStack Query invalidation</li>
+</ul>
+<h3 id="module-based-navigation"><a href="#module-based-navigation">Module-Based Navigation</a></h3>
+<p>Navigation is organized by functional area with role-based visibility:</p>
+<ul>
+<li><strong>Overview</strong> — Dashboard with KPIs, revenue charts, quick actions (all roles)</li>
+<li><strong>Sales</strong> — Sales Hub, Deals pipeline, Clients (owner/admin/sales)</li>
+<li><strong>Operations</strong> — Trials, Schedule, Time &#x26; Expenses (all roles)</li>
+<li><strong>Financial</strong> — Approvals, Billing, Collections, Invoices (owner/admin)</li>
+<li><strong>HotSeatHub</strong> — Potential Gigs, Help Wanted, Favorites (owner, add-on)</li>
+<li><strong>Company</strong> — Consultants, Settings (owner/admin)</li>
+</ul>
+<p>A collapsible sidebar provides quick access to all features.</p>
+<h3 id="theme-driven-ui-v1-single-theme"><a href="#theme-driven-ui-v1-single-theme">Theme-Driven UI (v1: Single Theme)</a></h3>
+<p>HotSeaters v1 ships a <strong>single curated theme</strong> derived from the brand guide. CSS custom properties are still the mechanism, but per-tenant theme JSON is <strong>not</strong> exposed to end users in v1 — this keeps the UI predictable and the surface area small while we stabilize the core product. Multi-theme and white-label support are deferred to a later release.</p>
+<ul>
+<li>Brand variables live in <code>app/globals.css</code> and the Tailwind config</li>
+<li>Components consume <code>var(--color-brand-primary)</code>, <code>var(--color-surface)</code>, etc.</li>
+<li>Dark-mode toggling is deliberately deferred; do not add <code>dark:</code> variants</li>
+</ul>
+<h2 id="snapshot-pattern-historical-accuracy"><a href="#snapshot-pattern-historical-accuracy">Snapshot Pattern (Historical Accuracy)</a></h2>
+<p><strong>Core principle:</strong> store denormalized data at time of transaction to preserve historical accuracy even when source data changes.</p>
+<h3 id="why-snapshots-matter"><a href="#why-snapshots-matter">Why Snapshots Matter</a></h3>
+<p>Without snapshots: if a service is renamed from "Graphics" to "Visual Design," all historical time entries would show "Visual Design," making old invoices inaccurate.</p>
+<h3 id="real-examples-from-hotseaters"><a href="#real-examples-from-hotseaters">Real Examples from HotSeaters</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// TrialService: snapshot service name at creation</span>
+{
+  <span class="hljs-attr">trial_id</span>: <span class="hljs-string">"trial_123"</span>,
+  <span class="hljs-attr">service_id</span>: <span class="hljs-string">"service_abc"</span>,
+  <span class="hljs-attr">service_name</span>: <span class="hljs-string">"Trial Consulting"</span> <span class="hljs-comment">// frozen</span>
+}
+
+<span class="hljs-comment">// TimeEntry: comprehensive snapshots for audit trail</span>
+{
+  <span class="hljs-attr">trial_id</span>: <span class="hljs-string">"trial_xyz"</span>,
+  <span class="hljs-attr">trial_name</span>: <span class="hljs-string">"Smith v. Jones"</span>,
+  <span class="hljs-attr">client_name</span>: <span class="hljs-string">"Acme Law Firm"</span>,
+  <span class="hljs-attr">service_name</span>: <span class="hljs-string">"Jury Consulting"</span>,
+  <span class="hljs-attr">rate</span>: <span class="hljs-number">150</span>,        <span class="hljs-comment">// rate at time of work</span>
+  <span class="hljs-attr">consultant_id</span>: <span class="hljs-string">"consultant_123"</span>,
+  <span class="hljs-attr">amount</span>: <span class="hljs-number">300</span>
+}
+
+<span class="hljs-comment">// HSH contract: snapshot all pricing and names</span>
+{
+  <span class="hljs-attr">hiring_tenant_id</span>: <span class="hljs-string">"tenant_A"</span>,
+  <span class="hljs-attr">hiring_tenant_name</span>: <span class="hljs-string">"XYZ Consulting"</span>,
+  <span class="hljs-attr">subcontractor_tenant_id</span>: <span class="hljs-string">"tenant_B"</span>,
+  <span class="hljs-attr">subcontractor_tenant_name</span>: <span class="hljs-string">"ABC Firm"</span>,
+  <span class="hljs-attr">billing_rate</span>: <span class="hljs-number">200</span>,  <span class="hljs-comment">// what hiring company charges client</span>
+  <span class="hljs-attr">payout_rate</span>: <span class="hljs-number">180</span>,   <span class="hljs-comment">// what subcontractor receives</span>
+  <span class="hljs-attr">service_name</span>: <span class="hljs-string">"Graphics"</span>
+}
+
+<span class="hljs-comment">// Invoice: complete billing snapshot</span>
+{
+  <span class="hljs-attr">client_name</span>: <span class="hljs-string">"Law Firm LLC"</span>,
+  <span class="hljs-attr">trial_name</span>: <span class="hljs-string">"Case 2025-001"</span>,
+  <span class="hljs-attr">subtotal</span>: <span class="hljs-number">5000</span>,
+  <span class="hljs-attr">tax_rate</span>: <span class="hljs-number">0.08</span>,
+  <span class="hljs-attr">tax_amount</span>: <span class="hljs-number">400</span>,
+  <span class="hljs-attr">total</span>: <span class="hljs-number">5400</span>
+}
+</code></pre>
+<h3 id="snapshot-best-practices"><a href="#snapshot-best-practices">Snapshot Best Practices</a></h3>
+<ul>
+<li>Snapshot names, rates, and amounts on all financial/transactional records</li>
+<li>Use <code>*_name</code> fields for snapshots; keep <code>*_id</code> for relationship integrity</li>
+<li>Snapshot at creation time; never update snapshot fields later</li>
+<li>For display, show the snapshot name with an option to view the current linked entity</li>
+</ul>
+<h2 id="multi-tenancy-via-tenant_id"><a href="#multi-tenancy-via-tenant_id">Multi-Tenancy via tenant_id</a></h2>
+<p>Every tenant-scoped entity includes <code>tenant_id</code> for strict data isolation between firms. Row-Level Security (RLS) in Supabase enforces this at the database layer.</p>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// Frontend: filter by current user's tenant_id via RLS-backed client</span>
+<span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: trials } = <span class="hljs-title function_">useQuery</span>({
+  <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'trials'</span>, userInfo?.<span class="hljs-property">tenant_id</span>],
+  <span class="hljs-attr">queryFn</span>: <span class="hljs-title function_">async</span> () => {
+    <span class="hljs-keyword">const</span> { data } = <span class="hljs-keyword">await</span> supabase
+      .<span class="hljs-title function_">from</span>(<span class="hljs-string">'trials'</span>)
+      .<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>)
+      .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'tenant_id'</span>, userInfo.<span class="hljs-property">tenant_id</span>);
+    <span class="hljs-keyword">return</span> data ?? [];
+  },
+  <span class="hljs-attr">enabled</span>: !!userInfo?.<span class="hljs-property">tenant_id</span>,
+});
+
+<span class="hljs-comment">// Frontend: always include tenant_id on insert</span>
+<span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'client_firms'</span>).<span class="hljs-title function_">insert</span>({
+  <span class="hljs-attr">tenant_id</span>: userInfo.<span class="hljs-property">tenant_id</span>,
+  <span class="hljs-attr">firm_name</span>: <span class="hljs-string">'Acme Law'</span>,
+});
+
+<span class="hljs-comment">// Backend: marketplace operations cross tenant boundaries via service role</span>
+<span class="hljs-comment">// (Edge Function or Route Handler using SUPABASE_SERVICE_ROLE_KEY)</span>
+<span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: hiringTenantTrials } = <span class="hljs-keyword">await</span> serviceRoleClient
+  .<span class="hljs-title function_">from</span>(<span class="hljs-string">'trials'</span>)
+  .<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>)
+  .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'tenant_id'</span>, hiringTenantId);
+
+<span class="hljs-keyword">await</span> serviceRoleClient.<span class="hljs-title function_">from</span>(<span class="hljs-string">'notifications'</span>).<span class="hljs-title function_">insert</span>({
+  <span class="hljs-attr">tenant_id</span>: otherTenantId,
+  <span class="hljs-attr">user_id</span>: otherUserId,
+  <span class="hljs-attr">type</span>: <span class="hljs-string">'hsh_response_received'</span>,
+  <span class="hljs-attr">data</span>: responseData,
+});
+</code></pre>
+<h3 id="global-vs-tenant-specific-entities"><a href="#global-vs-tenant-specific-entities">Global vs Tenant-Specific Entities</a></h3>
+<p>A handful of reference entities support global defaults (<code>tenant_id IS NULL</code>), such as starter service catalogs. Tenants may override or extend them.</p>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// Global starter services shipped by the platform</span>
+<span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: globalServices } = <span class="hljs-keyword">await</span> supabase
+  .<span class="hljs-title function_">from</span>(<span class="hljs-string">'service_types'</span>)
+  .<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>)
+  .<span class="hljs-title function_">is</span>(<span class="hljs-string">'tenant_id'</span>, <span class="hljs-literal">null</span>);
+
+<span class="hljs-comment">// Tenant-specific services</span>
+<span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: tenantServices } = <span class="hljs-keyword">await</span> supabase
+  .<span class="hljs-title function_">from</span>(<span class="hljs-string">'service_types'</span>)
+  .<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>)
+  .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'tenant_id'</span>, userInfo.<span class="hljs-property">tenant_id</span>);
+
+<span class="hljs-keyword">const</span> allServices = [...(globalServices ?? []), ...(tenantServices ?? [])];
+</code></pre>
+<h3 id="benefits-of-the-tenant_id-pattern"><a href="#benefits-of-the-tenant_id-pattern">Benefits of the tenant_id Pattern</a></h3>
+<ul>
+<li><strong>Data isolation</strong> — Tenants never see each other's data except through explicit marketplace flows</li>
+<li><strong>Simple queries</strong> — Add a <code>tenant_id</code> filter; no complex joins</li>
+<li><strong>Clear ownership</strong> — Every record belongs to exactly one tenant</li>
+<li><strong>Debuggable</strong> — Filter by <code>tenant_id</code> to reproduce a tenant's view</li>
+</ul>
+<h2 id="service-role-elevation"><a href="#service-role-elevation">Service Role Elevation</a></h2>
+<p>Edge Functions and Route Handlers can operate with elevated privileges by constructing a Supabase client with the service role key. This bypasses RLS — use it intentionally.</p>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// Edge Function (Deno runtime on Supabase) or Next.js Route Handler</span>
+
+
+
+  <span class="hljs-keyword">const</span> authHeader = req.<span class="hljs-property">headers</span>.<span class="hljs-title function_">get</span>(<span class="hljs-string">'Authorization'</span>);
+  <span class="hljs-keyword">const</span> userClient = <span class="hljs-title function_">createClient</span>(
+    process.<span class="hljs-property">env</span>.<span class="hljs-property">NEXT_PUBLIC_SUPABASE_URL</span>!,
+    process.<span class="hljs-property">env</span>.<span class="hljs-property">NEXT_PUBLIC_SUPABASE_ANON_KEY</span>!,
+    { <span class="hljs-attr">global</span>: { <span class="hljs-attr">headers</span>: { <span class="hljs-title class_">Authorization</span>: authHeader ?? <span class="hljs-string">''</span> } } },
+  );
+
+  <span class="hljs-comment">// Always authenticate first</span>
+  <span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: { user } } = <span class="hljs-keyword">await</span> userClient.<span class="hljs-property">auth</span>.<span class="hljs-title function_">getUser</span>();
+  <span class="hljs-keyword">if</span> (!user) <span class="hljs-keyword">return</span> <span class="hljs-title class_">Response</span>.<span class="hljs-title function_">json</span>({ <span class="hljs-attr">error</span>: <span class="hljs-string">'Unauthorized'</span> }, { <span class="hljs-attr">status</span>: <span class="hljs-number">401</span> });
+
+  <span class="hljs-comment">// User-scoped: respects tenant_id via RLS</span>
+  <span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: myTrials } = <span class="hljs-keyword">await</span> userClient.<span class="hljs-title function_">from</span>(<span class="hljs-string">'trials'</span>).<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>);
+
+  <span class="hljs-comment">// Service role: admin privileges, can access any tenant</span>
+  <span class="hljs-keyword">const</span> serviceClient = <span class="hljs-title function_">createClient</span>(
+    process.<span class="hljs-property">env</span>.<span class="hljs-property">NEXT_PUBLIC_SUPABASE_URL</span>!,
+    process.<span class="hljs-property">env</span>.<span class="hljs-property">SUPABASE_SERVICE_ROLE_KEY</span>!,
+  );
+
+  <span class="hljs-keyword">await</span> serviceClient.<span class="hljs-title function_">from</span>(<span class="hljs-string">'notifications'</span>).<span class="hljs-title function_">insert</span>({
+    <span class="hljs-attr">tenant_id</span>: hiringTenantId,
+    <span class="hljs-attr">user_id</span>: hiringTenantUserId,
+    <span class="hljs-attr">type</span>: <span class="hljs-string">'hsh_new_response'</span>,
+    <span class="hljs-attr">data</span>: { <span class="hljs-comment">/* ... */</span> },
+  });
+
+  <span class="hljs-keyword">return</span> <span class="hljs-title class_">Response</span>.<span class="hljs-title function_">json</span>({ <span class="hljs-attr">ok</span>: <span class="hljs-literal">true</span> });
+}
+</code></pre>
+<h3 id="when-service-role-is-required"><a href="#when-service-role-is-required">When Service Role Is Required</a></h3>
+<ul>
+<li><strong>HSH marketplace</strong> — Reading job postings across tenants, creating linked time entries</li>
+<li><strong>Cross-tenant notifications</strong> — Notifying users in other tenants about marketplace activity</li>
+<li><strong>Webhooks</strong> — No user context (Stripe subscription events, Resend delivery callbacks)</li>
+<li><strong>pg_cron scheduled jobs</strong> — <code>check_auto_move_dates</code>, HSH sub-user expiry, retainer computation</li>
+<li><strong>Data migrations</strong> — Updating schema or data across all tenants</li>
+</ul>
+<blockquote>
+<p><strong>Security critical:</strong> service role bypasses all RLS. Validate user authorization and business logic <strong>before</strong> using it, and never expose service-role operations directly to the browser.</p>
+</blockquote>
+<h2 id="react-patterns"><a href="#react-patterns">React Patterns</a></h2>
+<h3 id="component-composition"><a href="#component-composition">Component Composition</a></h3>
+<p>Build complex UIs from small, reusable components.</p>
+<pre><code class="hljs language-tsx"><span class="hljs-comment">// Trials page hierarchy</span>
+<span class="hljs-title class_">PipelinePageContent</span> (mode=<span class="hljs-string">"trials"</span>)
+├── <span class="hljs-title class_">PipelineViewToggle</span> (kanban/list/cards)
+├── <span class="hljs-title class_">SearchAndFilters</span>
+├── <span class="hljs-title class_">PipelineKanban</span>
+│   └── <span class="hljs-title class_">TrialCard</span>
+│       ├── <span class="hljs-title class_">PipelineStageBadge</span>
+│       ├── <span class="hljs-title class_">AssignmentDisplay</span>
+│       └── <span class="hljs-title class_">MetadataRow</span>
+├── <span class="hljs-title class_">PipelineList</span>
+├── <span class="hljs-title class_">PipelineCards</span>
+└── <span class="hljs-title class_">TrialDetails</span> (modal)
+    ├── <span class="hljs-title class_">DealDocumentsSection</span>
+    ├── <span class="hljs-title class_">TrialContactsSection</span>
+    └── <span class="hljs-title class_">ServiceSelector</span>
+</code></pre>
+<h3 id="controlled-components"><a href="#controlled-components">Controlled Components</a></h3>
+<p>All form inputs are controlled via React state.</p>
+<pre><code class="hljs language-tsx"><span class="hljs-keyword">const</span> [formData, setFormData] = <span class="hljs-title function_">useState</span>({ <span class="hljs-attr">case_name</span>: <span class="hljs-string">''</span>, <span class="hljs-attr">start_date</span>: <span class="hljs-string">''</span> });
+
+<span class="xml"><span class="hljs-tag">&#x3C;<span class="hljs-name">Input</span>
+  <span class="hljs-attr">value</span>=<span class="hljs-string">{formData.case_name}</span>
+  <span class="hljs-attr">onChange</span>=<span class="hljs-string">{(e)</span> =></span> setFormData({ ...formData, case_name: e.target.value })}
+/></span>
+</code></pre>
+<p>Benefits: single source of truth, straightforward validation, simple reset/undo.</p>
+<h3 id="lifting-state-up"><a href="#lifting-state-up">Lifting State Up</a></h3>
+<p>Share state between siblings by moving it to the parent.</p>
+<pre><code class="hljs language-tsx"><span class="hljs-keyword">function</span> <span class="hljs-title function_">DashboardPage</span>(<span class="hljs-params"></span>) {
+  <span class="hljs-keyword">const</span> [selectedPeriod, setSelectedPeriod] = useState&#x3C;<span class="hljs-string">'month'</span> | <span class="hljs-string">'quarter'</span>>(<span class="hljs-string">'month'</span>);
+  <span class="hljs-keyword">return</span> (
+    <span class="xml"><span class="hljs-tag">&#x3C;></span>
+      <span class="hljs-tag">&#x3C;<span class="hljs-name">PeriodSelector</span> <span class="hljs-attr">value</span>=<span class="hljs-string">{selectedPeriod}</span> <span class="hljs-attr">onChange</span>=<span class="hljs-string">{setSelectedPeriod}</span> /></span>
+      <span class="hljs-tag">&#x3C;<span class="hljs-name">RevenueChart</span> <span class="hljs-attr">period</span>=<span class="hljs-string">{selectedPeriod}</span> /></span>
+      <span class="hljs-tag">&#x3C;<span class="hljs-name">TeamPerformance</span> <span class="hljs-attr">period</span>=<span class="hljs-string">{selectedPeriod}</span> /></span>
+    <span class="hljs-tag">&#x3C;/></span></span>
+  );
+}
+</code></pre>
+<h3 id="view-persistence-pattern"><a href="#view-persistence-pattern">View Persistence Pattern</a></h3>
+<p>Persist UI preferences to <code>user_profiles.preferences</code> + <code>localStorage</code> for instant load plus cross-device sync.</p>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">const</span> [viewType, setViewType] = useState&#x3C;<span class="hljs-string">'card'</span> | <span class="hljs-string">'kanban'</span> | <span class="hljs-string">'list'</span>>(<span class="hljs-string">'card'</span>);
+
+<span class="hljs-title function_">useEffect</span>(<span class="hljs-function">() =></span> {
+  <span class="hljs-keyword">const</span> savedInDb = userInfo?.<span class="hljs-property">preferences</span>?.<span class="hljs-property">deals_view</span>;
+  <span class="hljs-keyword">const</span> savedLocal = <span class="hljs-keyword">typeof</span> <span class="hljs-variable language_">window</span> !== <span class="hljs-string">'undefined'</span> ? <span class="hljs-variable language_">localStorage</span>.<span class="hljs-title function_">getItem</span>(<span class="hljs-string">'deals_view'</span>) : <span class="hljs-literal">null</span>;
+  <span class="hljs-title function_">setViewType</span>((savedInDb ?? savedLocal ?? <span class="hljs-string">'card'</span>) <span class="hljs-keyword">as</span> <span class="hljs-keyword">typeof</span> viewType);
+}, [userInfo]);
+
+<span class="hljs-keyword">const</span> <span class="hljs-title function_">handleViewChange</span> = <span class="hljs-keyword">async</span> (<span class="hljs-params"><span class="hljs-attr">newView</span>: <span class="hljs-keyword">typeof</span> viewType</span>) => {
+  <span class="hljs-title function_">setViewType</span>(newView);
+  <span class="hljs-variable language_">localStorage</span>.<span class="hljs-title function_">setItem</span>(<span class="hljs-string">'deals_view'</span>, newView);
+  <span class="hljs-keyword">const</span> prefs = userInfo?.<span class="hljs-property">preferences</span> ?? {};
+  <span class="hljs-keyword">await</span> supabase
+    .<span class="hljs-title function_">from</span>(<span class="hljs-string">'user_profiles'</span>)
+    .<span class="hljs-title function_">update</span>({ <span class="hljs-attr">preferences</span>: { ...prefs, <span class="hljs-attr">deals_view</span>: newView } })
+    .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'id'</span>, userInfo.<span class="hljs-property">id</span>);
+};
+</code></pre>
+<h3 id="custom-hooks-pattern"><a href="#custom-hooks-pattern">Custom Hooks Pattern</a></h3>
+<p>Extract reusable logic into hooks. Hooks are the only bridge between components and stores.</p>
+<pre><code class="hljs language-ts">
+  <span class="hljs-keyword">return</span> <span class="hljs-title function_">useQuery</span>({
+    <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'currentUserAndInfo'</span>],
+    <span class="hljs-attr">queryFn</span>: <span class="hljs-title function_">async</span> () => {
+      <span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: { user } } = <span class="hljs-keyword">await</span> supabase.<span class="hljs-property">auth</span>.<span class="hljs-title function_">getUser</span>();
+      <span class="hljs-keyword">if</span> (!user) <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+      <span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: userInfo } = <span class="hljs-keyword">await</span> supabase
+        .<span class="hljs-title function_">from</span>(<span class="hljs-string">'user_profiles'</span>)
+        .<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>)
+        .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'id'</span>, user.<span class="hljs-property">id</span>)
+        .<span class="hljs-title function_">single</span>();
+      <span class="hljs-keyword">return</span> { user, userInfo };
+    },
+  });
+};
+</code></pre>
+<h2 id="real-time-notification-pattern"><a href="#real-time-notification-pattern">Real-Time Notification Pattern</a></h2>
+<p>The notification system combines <strong>Supabase Realtime</strong> (postgres_changes) with a polling fallback for tabs that miss a channel event.</p>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// NotificationsMenu — realtime channel + polling safety net</span>
+<span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: notifications = [] } = <span class="hljs-title function_">useQuery</span>({
+  <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'notifications'</span>, userInfo?.<span class="hljs-property">id</span>],
+  <span class="hljs-attr">queryFn</span>: <span class="hljs-title function_">async</span> () => {
+    <span class="hljs-keyword">const</span> { data } = <span class="hljs-keyword">await</span> supabase
+      .<span class="hljs-title function_">from</span>(<span class="hljs-string">'notifications'</span>)
+      .<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>)
+      .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'tenant_id'</span>, userInfo.<span class="hljs-property">tenant_id</span>)
+      .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'user_id'</span>, userInfo.<span class="hljs-property">user_id</span>)
+      .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'is_dismissed'</span>, <span class="hljs-literal">false</span>)
+      .<span class="hljs-title function_">order</span>(<span class="hljs-string">'created_at'</span>, { <span class="hljs-attr">ascending</span>: <span class="hljs-literal">false</span> });
+    <span class="hljs-keyword">return</span> data ?? [];
+  },
+  <span class="hljs-attr">enabled</span>: !!userInfo?.<span class="hljs-property">id</span>,
+  <span class="hljs-attr">refetchInterval</span>: <span class="hljs-number">15_000</span>,
+  <span class="hljs-attr">refetchOnWindowFocus</span>: <span class="hljs-literal">true</span>,
+});
+
+<span class="hljs-title function_">useEffect</span>(<span class="hljs-function">() =></span> {
+  <span class="hljs-keyword">const</span> channel = supabase
+    .<span class="hljs-title function_">channel</span>(<span class="hljs-string">`notif:<span class="hljs-subst">${userInfo.user_id}</span>`</span>)
+    .<span class="hljs-title function_">on</span>(<span class="hljs-string">'postgres_changes'</span>,
+      { <span class="hljs-attr">event</span>: <span class="hljs-string">'INSERT'</span>, <span class="hljs-attr">schema</span>: <span class="hljs-string">'public'</span>, <span class="hljs-attr">table</span>: <span class="hljs-string">'notifications'</span>,
+        <span class="hljs-attr">filter</span>: <span class="hljs-string">`user_id=eq.<span class="hljs-subst">${userInfo.user_id}</span>`</span> },
+      <span class="hljs-function">() =></span> queryClient.<span class="hljs-title function_">invalidateQueries</span>({ <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'notifications'</span>] }))
+    .<span class="hljs-title function_">subscribe</span>();
+  <span class="hljs-keyword">return</span> <span class="hljs-function">() =></span> { supabase.<span class="hljs-title function_">removeChannel</span>(channel); };
+}, [userInfo.<span class="hljs-property">user_id</span>]);
+</code></pre>
+<h3 id="creating-notifications"><a href="#creating-notifications">Creating Notifications</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'notifications'</span>).<span class="hljs-title function_">insert</span>({
+  <span class="hljs-attr">tenant_id</span>: userInfo.<span class="hljs-property">tenant_id</span>,
+  <span class="hljs-attr">user_id</span>: affectedUserId,
+  <span class="hljs-attr">type</span>: <span class="hljs-string">'trial_date_changed'</span>,
+  <span class="hljs-attr">title</span>: <span class="hljs-string">'Trial Rescheduled'</span>,
+  <span class="hljs-attr">message</span>: <span class="hljs-string">`Trial "<span class="hljs-subst">${trialName}</span>" moved to <span class="hljs-subst">${newDate}</span>`</span>,
+  <span class="hljs-attr">data</span>: { <span class="hljs-attr">trial_id</span>: trialId, <span class="hljs-attr">old_date</span>: oldDate, <span class="hljs-attr">new_date</span>: newDate },
+  <span class="hljs-attr">is_read</span>: <span class="hljs-literal">false</span>,
+  <span class="hljs-attr">is_dismissed</span>: <span class="hljs-literal">false</span>,
+});
+</code></pre>
+<p>Notification types in use include <code>assignment_created</code>, <code>assignment_removed</code>, <code>trial_date_changed</code>, <code>trial_continued</code>, <code>pipeline_stage_auto_moved</code>, <code>hsh_new_request</code>, <code>hsh_response_received</code>, <code>hsh_request_cancelled</code>, <code>hsh_declines_aggregated</code>, and <code>expense_requires_approval</code>.</p>
+<h3 id="notification-router-pattern"><a href="#notification-router-pattern">Notification Router Pattern</a></h3>
+<p>A single <code>NotificationRouter</code> component dispatches the right dialog or navigation per notification <code>type</code>, keeping per-type behavior co-located.</p>
+<h2 id="theme-system-pattern-v1-scope"><a href="#theme-system-pattern-v1-scope">Theme System Pattern (v1 Scope)</a></h2>
+<p>HotSeaters v1 uses a single, opinionated brand theme — not per-tenant customization. The CSS-variable mechanism remains so future white-labeling is a pure additive change, but end users cannot edit theme tokens.</p>
+<pre><code class="hljs language-css"><span class="hljs-comment">/* app/globals.css */</span>
+<span class="hljs-selector-pseudo">:root</span> {
+  <span class="hljs-attr">--color-brand-primary</span>: <span class="hljs-built_in">oklch</span>(<span class="hljs-number">0.72</span> <span class="hljs-number">0.14</span> <span class="hljs-number">220</span>);
+  <span class="hljs-attr">--color-brand-secondary</span>: <span class="hljs-built_in">oklch</span>(<span class="hljs-number">0.68</span> <span class="hljs-number">0.17</span> <span class="hljs-number">260</span>);
+  <span class="hljs-attr">--color-accent-warm</span>: <span class="hljs-built_in">oklch</span>(<span class="hljs-number">0.76</span> <span class="hljs-number">0.17</span> <span class="hljs-number">55</span>);
+  <span class="hljs-attr">--color-surface</span>: <span class="hljs-built_in">oklch</span>(<span class="hljs-number">0.99</span> <span class="hljs-number">0</span> <span class="hljs-number">0</span>);
+  <span class="hljs-attr">--color-text</span>: <span class="hljs-built_in">oklch</span>(<span class="hljs-number">0.18</span> <span class="hljs-number">0</span> <span class="hljs-number">0</span>);
+
+  <span class="hljs-attr">--font-brand-title</span>: <span class="hljs-string">'Zen Dots'</span>, sans-serif;
+  <span class="hljs-attr">--font-brand-subtitle</span>: <span class="hljs-string">'Michroma'</span>, sans-serif;
+  <span class="hljs-attr">--font-body</span>: <span class="hljs-string">'Inter'</span>, system-ui, sans-serif;
+
+  <span class="hljs-attr">--radius-card</span>: <span class="hljs-number">12px</span>;
+  <span class="hljs-attr">--radius-button</span>: <span class="hljs-number">8px</span>;
+  <span class="hljs-attr">--shadow-card</span>: <span class="hljs-number">0</span> <span class="hljs-number">4px</span> <span class="hljs-number">6px</span> <span class="hljs-built_in">rgba</span>(<span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0.1</span>);
+}
+</code></pre>
+<p>Components consume these tokens via Tailwind utilities mapped in <code>tailwind.config.ts</code> or directly via <code>style={{ color: 'var(--color-text)' }}</code>.</p>
+<h2 id="common-pitfalls--how-to-avoid-them"><a href="#common-pitfalls--how-to-avoid-them">Common Pitfalls &#x26; How to Avoid Them</a></h2>
+<h3 id="1-query-running-before-data-is-ready"><a href="#1-query-running-before-data-is-ready">1. Query running before data is ready</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// Bad: runs immediately, tenantId is undefined</span>
+<span class="hljs-keyword">const</span> { data } = <span class="hljs-title function_">useQuery</span>({
+  <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'clients'</span>, tenantId],
+  <span class="hljs-attr">queryFn</span>: <span class="hljs-function">() =></span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'client_firms'</span>).<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>).<span class="hljs-title function_">eq</span>(<span class="hljs-string">'tenant_id'</span>, tenantId),
+});
+
+<span class="hljs-comment">// Good: gate with `enabled`</span>
+<span class="hljs-keyword">const</span> { data } = <span class="hljs-title function_">useQuery</span>({
+  <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'clients'</span>, tenantId],
+  <span class="hljs-attr">queryFn</span>: <span class="hljs-function">() =></span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'client_firms'</span>).<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>).<span class="hljs-title function_">eq</span>(<span class="hljs-string">'tenant_id'</span>, tenantId),
+  <span class="hljs-attr">enabled</span>: !!tenantId,
+});
+</code></pre>
+<h3 id="2-not-invalidating-queries-after-mutations"><a href="#2-not-invalidating-queries-after-mutations">2. Not invalidating queries after mutations</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">const</span> updateMutation = <span class="hljs-title function_">useMutation</span>({
+  <span class="hljs-attr">mutationFn</span>: <span class="hljs-function">(<span class="hljs-params">{ id, data }: { id: <span class="hljs-built_in">string</span>; data: Partial&#x3C;Trial> }</span>) =></span>
+    supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'trials'</span>).<span class="hljs-title function_">update</span>(data).<span class="hljs-title function_">eq</span>(<span class="hljs-string">'id'</span>, id),
+  <span class="hljs-attr">onSuccess</span>: <span class="hljs-function">(<span class="hljs-params">_, { id }</span>) =></span> {
+    queryClient.<span class="hljs-title function_">invalidateQueries</span>({ <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'trials'</span>] });
+    queryClient.<span class="hljs-title function_">invalidateQueries</span>({ <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'trialServices'</span>, id] });
+    toast.<span class="hljs-title function_">success</span>(<span class="hljs-string">'Updated'</span>);
+  },
+});
+</code></pre>
+<h3 id="3-missing-snapshot-fields"><a href="#3-missing-snapshot-fields">3. Missing snapshot fields</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// Bad: only the ID — name could change later</span>
+<span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'time_entries'</span>).<span class="hljs-title function_">insert</span>({ <span class="hljs-attr">service_id</span>: <span class="hljs-string">'123'</span> });
+
+<span class="hljs-comment">// Good: snapshot name and rate at transaction time</span>
+<span class="hljs-keyword">const</span> service = services.<span class="hljs-title function_">find</span>(<span class="hljs-function">(<span class="hljs-params">s</span>) =></span> s.<span class="hljs-property">id</span> === serviceId)!;
+<span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'time_entries'</span>).<span class="hljs-title function_">insert</span>({
+  <span class="hljs-attr">service_id</span>: serviceId,
+  <span class="hljs-attr">service_name</span>: service.<span class="hljs-property">name</span>,
+  <span class="hljs-attr">rate</span>: calculatedRate,
+});
+</code></pre>
+<h3 id="4-not-handling-all-ui-states"><a href="#4-not-handling-all-ui-states">4. Not handling all UI states</a></h3>
+<p>Always render loading, error, empty, and populated states explicitly. Use <code>AppEmptyState</code> for the empty case.</p>
+<h3 id="5-forgetting-tenant_id-filterinclude"><a href="#5-forgetting-tenant_id-filterinclude">5. Forgetting tenant_id filter/include</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// Bad: returns all tenants' data (RLS should catch this, but don't rely on it)</span>
+<span class="hljs-keyword">const</span> { data } = <span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'client_firms'</span>).<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>);
+
+<span class="hljs-comment">// Good: explicit tenant_id filter</span>
+<span class="hljs-keyword">const</span> { data } = <span class="hljs-keyword">await</span> supabase
+  .<span class="hljs-title function_">from</span>(<span class="hljs-string">'client_firms'</span>)
+  .<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>)
+  .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'tenant_id'</span>, userInfo.<span class="hljs-property">tenant_id</span>);
+
+<span class="hljs-comment">// Bad: insert without tenant_id</span>
+<span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'service_types'</span>).<span class="hljs-title function_">insert</span>({ <span class="hljs-attr">name</span>: <span class="hljs-string">'Trial Consulting'</span> });
+
+<span class="hljs-comment">// Good: include tenant_id on insert</span>
+<span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'service_types'</span>).<span class="hljs-title function_">insert</span>({
+  <span class="hljs-attr">tenant_id</span>: userInfo.<span class="hljs-property">tenant_id</span>,
+  <span class="hljs-attr">name</span>: <span class="hljs-string">'Trial Consulting'</span>,
+});
+</code></pre>
+<h3 id="6-hardcoding-brand-values"><a href="#6-hardcoding-brand-values">6. Hardcoding brand values</a></h3>
+<p>Use CSS custom properties or the Tailwind brand tokens — not raw hex codes — so future theming remains additive.</p>
+<pre><code class="hljs language-tsx">&#x3C;<span class="hljs-title class_">Button</span>
+  className=<span class="hljs-string">"px-4 py-2"</span>
+  style={{
+    <span class="hljs-attr">backgroundColor</span>: <span class="hljs-string">'var(--color-brand-primary)'</span>,
+    <span class="hljs-attr">borderRadius</span>: <span class="hljs-string">'var(--radius-button)'</span>,
+  }}
+>
+  <span class="hljs-title class_">Click</span> me
+&#x3C;/<span class="hljs-title class_">Button</span>>
+</code></pre>
+<h2 id="hotseaters-specific-patterns"><a href="#hotseaters-specific-patterns">HotSeaters-Specific Patterns</a></h2>
+<h3 id="rate-calculation-cascade"><a href="#rate-calculation-cascade">Rate Calculation Cascade</a></h3>
+<p>Apply pricing modifiers in order of specificity (most specific wins).</p>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">let</span> rate = service.<span class="hljs-property">base_rate</span>;
+
+<span class="hljs-comment">// 1. Consultant tier multiplier (if consultant is sales lead)</span>
+<span class="hljs-keyword">if</span> (consultantTier) rate *= consultantTier.<span class="hljs-property">multiplier</span>;
+
+<span class="hljs-comment">// 2. Client tier multiplier</span>
+<span class="hljs-keyword">if</span> (clientTier) rate *= clientTier.<span class="hljs-property">multiplier</span>;
+
+<span class="hljs-comment">// 3. Client service rate override (most specific — wins)</span>
+<span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: <span class="hljs-keyword">override</span> } = <span class="hljs-keyword">await</span> supabase
+  .<span class="hljs-title function_">from</span>(<span class="hljs-string">'client_service_rates'</span>)
+  .<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>)
+  .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'client_firm_id'</span>, clientId)
+  .<span class="hljs-title function_">eq</span>(<span class="hljs-string">'service_type_id'</span>, serviceId)
+  .<span class="hljs-title function_">maybeSingle</span>();
+
+<span class="hljs-keyword">if</span> (<span class="hljs-keyword">override</span>) rate = <span class="hljs-keyword">override</span>.<span class="hljs-property">custom_rate</span>;
+
+<span class="hljs-comment">// Final rate snapshotted to trial_services.rate</span>
+</code></pre>
+<h3 id="projected-daily-revenue-pdr"><a href="#projected-daily-revenue-pdr">Projected Daily Revenue (PDR)</a></h3>
+<pre><code class="hljs language-text">// Hourly billing
+PDR = (estimated_quantity * rate) / duration_days
+     = (40 * 150) / 10 = $600/day
+
+// Daily minimum (in-trial services)
+PDR = daily_minimum_hours * rate
+     = 8 * 150 = $1,200/day
+
+// Split billing
+pre_trial_PDR = (pre_trial_hours * rate) / pre_trial_days
+in_trial_PDR  = daily_minimum_hours * rate
+</code></pre>
+<p>PDR fields are pre-computed on <code>trial_services</code> for performant revenue forecasting on the Dashboard and Forecasting surfaces.</p>
+<h3 id="split-billing-visual-pattern"><a href="#split-billing-visual-pattern">Split Billing Visual Pattern</a></h3>
+<p>Services that span pre-trial and in-trial render as two adjacent bars on the Gantt — a light pre-trial segment (hourly) and a darker in-trial segment (daily minimum). Fields on <code>trial_services</code>:</p>
+<ul>
+<li><code>split_billing_at_threshold: true</code></li>
+<li><code>pre_trial_estimated_hours</code></li>
+<li><code>final_billing_method: 'split'</code></li>
+<li><code>pre_trial_projected_daily_revenue</code></li>
+<li><code>in_trial_projected_daily_revenue</code></li>
+</ul>
+<h3 id="document-placeholder-replacement"><a href="#document-placeholder-replacement">Document Placeholder Replacement</a></h3>
+<p>Document templates use <code>{{PLACEHOLDER}}</code> tokens. DocuSeal renders the final PDF after placeholder substitution; HotSeaters supplies the filled HTML/Markdown, DocuSeal handles signature capture and PDF sealing.</p>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">const</span> <span class="hljs-attr">replacements</span>: <span class="hljs-title class_">Record</span>&#x3C;<span class="hljs-built_in">string</span>, <span class="hljs-built_in">string</span>> = {
+  <span class="hljs-attr">CASE_NAME</span>: trial.<span class="hljs-property">case_name</span>,
+  <span class="hljs-attr">CLIENT_NAME</span>: clientName,
+  <span class="hljs-attr">CASE_NUMBER</span>: trial.<span class="hljs-property">case_number</span>,
+  <span class="hljs-attr">TRIAL_START</span>: <span class="hljs-title function_">formatDate</span>(trial.<span class="hljs-property">start_date</span>),
+  <span class="hljs-attr">TOTAL_BUDGET</span>: <span class="hljs-title function_">formatCurrency</span>(totalBudget),
+};
+
+<span class="hljs-keyword">let</span> filled = template.<span class="hljs-property">content</span>;
+<span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> [key, value] <span class="hljs-keyword">of</span> <span class="hljs-title class_">Object</span>.<span class="hljs-title function_">entries</span>(replacements)) {
+  filled = filled.<span class="hljs-title function_">replaceAll</span>(<span class="hljs-string">`{{<span class="hljs-subst">${key}</span>}}`</span>, value ?? <span class="hljs-string">''</span>);
+}
+</code></pre>
+<h3 id="e-signature-workflow-docuseal"><a href="#e-signature-workflow-docuseal">E-Signature Workflow (DocuSeal)</a></h3>
+<p>DocuSeal replaces the legacy API2PDF + custom signing pipeline. The flow:</p>
+<ol>
+<li>Template defines signature fields (client, FRP, sales). HotSeaters maps our placeholders to DocuSeal roles.</li>
+<li>"Send for signature" creates a DocuSeal submission via the DocuSeal API; we persist a <code>signature_requests</code> row keyed by the submission ID.</li>
+<li>DocuSeal emails each signer a signing link (Resend handles transactional email app-wide; DocuSeal uses its own sender for signing invitations).</li>
+<li>Signers complete signing in DocuSeal's hosted UI (600x180 canvas, audit trail).</li>
+<li>DocuSeal webhook → our Edge Function marks the request complete, downloads the sealed PDF to Supabase Storage, and updates <code>generated_documents.status = 'signed'</code>.</li>
+<li>Optional: auto-advance the pipeline stage if the deal's stage is configured to move on "document fully signed."</li>
+</ol>
+<h3 id="hsh-subcontractor-identity-email--oauth-coexist"><a href="#hsh-subcontractor-identity-email--oauth-coexist">HSH Subcontractor Identity (Email + OAuth Coexist)</a></h3>
+<p>Subcontractors engaged through HotSeatHub exist as constrained <code>user_profiles</code> rows. Two identity paths are supported side-by-side:</p>
+<ul>
+<li><strong>Email-only sub-user</strong> — The hiring firm invites by email; a pg_cron job expires the account <strong>14 days</strong> after the contract ends.</li>
+<li><strong>OAuth (Google/Microsoft)</strong> — The subcontractor signs in with their own account and links to the contract. No automatic expiry (they own the identity).</li>
+</ul>
+<p>Both coexist on the same contract; choose per invitee.</p>
+<h3 id="scheduled-work-pg_cron-only"><a href="#scheduled-work-pg_cron-only">Scheduled Work: pg_cron Only</a></h3>
+<p>All scheduled work runs via Supabase <code>pg_cron</code>. There is <strong>no Vercel Cron</strong>, no <code>vercel.json</code>, and no <code>VERCEL_URL</code>-bearer endpoints. Typical jobs:</p>
+<ul>
+<li><code>check_auto_move_dates</code> — advance pipeline stages on date triggers</li>
+<li><code>expire_hsh_sub_users</code> — deactivate email-only sub-users 14 days post-contract</li>
+<li><code>compute_retainer_balances</code> — nightly retainer consumption rollup</li>
+<li><code>collections_aging_buckets</code> — refresh overdue invoice buckets</li>
+</ul>
+<h3 id="quickbooks-integration-graceful-degradation"><a href="#quickbooks-integration-graceful-degradation">QuickBooks Integration: Graceful Degradation</a></h3>
+<p>QuickBooks sync is <strong>optional and non-blocking</strong>. If the tenant has not connected QuickBooks, or if the QBO token is expired / QBO is returning errors, every QuickBooks-dependent surface must degrade gracefully:</p>
+<ul>
+<li>Show a neutral "Not connected" or "Sync paused" state — never a hard error</li>
+<li>Let users complete their primary workflow (approve time, send invoice) without QBO</li>
+<li>Queue sync attempts and retry; surface sync health in Settings, not on operational pages</li>
+</ul>
+<h2 id="performance-patterns"><a href="#performance-patterns">Performance Patterns</a></h2>
+<h3 id="computed-fields-pattern"><a href="#computed-fields-pattern">Computed Fields Pattern</a></h3>
+<p>Pre-calculate expensive values (PDR, totals) and store them; write-time cost, read-time savings.</p>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// When a trial_service is created/updated</span>
+<span class="hljs-keyword">const</span> pdr = <span class="hljs-title function_">calculatePDR</span>(service, trial);
+<span class="hljs-keyword">await</span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'trial_services'</span>).<span class="hljs-title function_">update</span>({ <span class="hljs-attr">projected_daily_revenue</span>: pdr }).<span class="hljs-title function_">eq</span>(<span class="hljs-string">'id'</span>, service.<span class="hljs-property">id</span>);
+
+<span class="hljs-comment">// Frontend just sums the stored values</span>
+<span class="hljs-keyword">const</span> totalProjected = trialServices.<span class="hljs-title function_">reduce</span>(<span class="hljs-function">(<span class="hljs-params">s, x</span>) =></span> s + (x.<span class="hljs-property">projected_daily_revenue</span> ?? <span class="hljs-number">0</span>), <span class="hljs-number">0</span>);
+</code></pre>
+<h3 id="tanstack-query-stale-time"><a href="#tanstack-query-stale-time">TanStack Query Stale Time</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// Tenant row rarely changes</span>
+<span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: tenant } = <span class="hljs-title function_">useQuery</span>({
+  <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'tenant'</span>, tenantId],
+  <span class="hljs-attr">queryFn</span>: <span class="hljs-function">() =></span> supabase.<span class="hljs-title function_">from</span>(<span class="hljs-string">'tenant_firms'</span>).<span class="hljs-title function_">select</span>(<span class="hljs-string">'*'</span>).<span class="hljs-title function_">eq</span>(<span class="hljs-string">'id'</span>, tenantId).<span class="hljs-title function_">single</span>(),
+  <span class="hljs-attr">staleTime</span>: <span class="hljs-number">5</span> * <span class="hljs-number">60</span> * <span class="hljs-number">1000</span>,
+});
+
+<span class="hljs-comment">// Notifications: always stale, realtime + poll</span>
+<span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: notifications } = <span class="hljs-title function_">useQuery</span>({
+  <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'notifications'</span>, userId],
+  <span class="hljs-attr">queryFn</span>: fetchNotifications,
+  <span class="hljs-attr">refetchInterval</span>: <span class="hljs-number">15_000</span>,
+  <span class="hljs-attr">staleTime</span>: <span class="hljs-number">0</span>,
+});
+</code></pre>
+<h3 id="lazy-loading-pattern"><a href="#lazy-loading-pattern">Lazy Loading Pattern</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-keyword">const</span> [showDetails, setShowDetails] = <span class="hljs-title function_">useState</span>(<span class="hljs-literal">false</span>);
+
+<span class="hljs-keyword">const</span> { <span class="hljs-attr">data</span>: trialDetails } = <span class="hljs-title function_">useQuery</span>({
+  <span class="hljs-attr">queryKey</span>: [<span class="hljs-string">'trialDetails'</span>, trialId],
+  <span class="hljs-attr">queryFn</span>: <span class="hljs-function">() =></span> <span class="hljs-title function_">fetchAllTrialData</span>(trialId),
+  <span class="hljs-attr">enabled</span>: showDetails,
+});
+</code></pre>
+<p>Apply to modals, tabs, and accordions so heavy data loads only when the user opens the surface.</p>
+<h2 id="code-style-guidelines"><a href="#code-style-guidelines">Code Style Guidelines</a></h2>
+<h3 id="naming-conventions"><a href="#naming-conventions">Naming Conventions</a></h3>
+<ul>
+<li><strong>Components</strong> — PascalCase (<code>TrialCard</code>, <code>ServiceSelector</code>)</li>
+<li><strong>Functions</strong> — camelCase (<code>calculatePDR</code>, <code>generateInvoicePdf</code>)</li>
+<li><strong>Variables</strong> — camelCase (<code>trialServices</code>, <code>userInfo</code>)</li>
+<li><strong>Constants</strong> — UPPER_SNAKE_CASE (<code>API_ENDPOINT</code>, <code>MAX_RETRIES</code>)</li>
+<li><strong>Files</strong> — match export name (<code>TrialCard.tsx</code>, <code>pdrCalculations.ts</code>)</li>
+<li><strong>Booleans</strong> — <code>is</code>, <code>has</code>, <code>should</code>, <code>can</code> prefixes</li>
+</ul>
+<h3 id="import-order"><a href="#import-order">Import Order</a></h3>
+<pre><code class="hljs language-ts"><span class="hljs-comment">// 1. React and external libraries</span>
+
+
+
+<span class="hljs-comment">// 2. UI components (shadcn)</span>
+
+
+
+<span class="hljs-comment">// 3. Custom components</span>
+
+
+
+<span class="hljs-comment">// 4. Hooks and utilities</span>
+
+
+
+
+<span class="hljs-comment">// 5. Icons last</span>
+
+</code></pre>
+<h3 id="comment-standards"><a href="#comment-standards">Comment Standards</a></h3>
+<ul>
+<li>Comment non-obvious business logic and calculations</li>
+<li>JSDoc on reusable utility functions</li>
+<li><code>TODO(owner):</code> comments for known follow-ups</li>
+<li>Remove <code>console.log</code> before committing</li>
+</ul>
+<h2 id="related-documents"><a href="#related-documents">Related Documents</a></h2>
+<ul>
+<li><a href="/user-manual/app-overview">App Overview</a></li>
+<li><a href="/user-manual/database-schema">Database Schema</a></li>
+<li><a href="/user-manual/user-workflows">User Workflows</a></li>
+<li><a href="/user-manual/technical-reference">Technical Reference</a></li>
+<li><a href="/user-manual/backend-functions">Backend Functions</a></li>
+<li><a href="/user-manual/external-integrations">External Integrations</a></li>
+<li><a href="/user-manual/style-guide">Style Guide</a></li>
+<li><a href="/user-manual/notification-system">Notification System</a></li>
+<li><a href="/user-manual/quickbooks-integration">QuickBooks Integration</a></li>
+</ul>
+<h2 id="download"><a href="#download">Download</a></h2>
+<p>A plain-Markdown copy of this document is available at
+<a href="/user-manual/design-patterns/download.md"><code>/user-manual/design-patterns/download.md</code></a>.</p>
+</article>

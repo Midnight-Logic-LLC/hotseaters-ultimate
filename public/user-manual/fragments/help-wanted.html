@@ -1,0 +1,143 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="help-wanted">
+<h1 id="help-wanted"><a href="#help-wanted">Help Wanted</a></h1>
+<p>The hiring tenant's view of HotSeatHub. Post subcontractor needs to the marketplace, review incoming applications, accept or decline proposals, manage favorites, and track the full lifecycle of postings from open through filled or cancelled. This is the "post" side of the HSH marketplace.</p>
+<h2 id="visibility-and-access"><a href="#visibility-and-access">Visibility and access</a></h2>
+<ul>
+<li>Renders only when <code>tenant_firms.marketplace_post_jobs = true</code>.</li>
+<li>Visible to all tenant roles when enabled.</li>
+<li>HSH-themed background with the orbit header treatment.</li>
+</ul>
+<h2 id="header-and-controls"><a href="#header-and-controls">Header and controls</a></h2>
+<ul>
+<li><strong>Title:</strong> "Help Wanted" with HSH primary accent.</li>
+<li><strong>Search:</strong> filters the tenant's own postings by service name, description, location, or case name.</li>
+<li><strong>View toggle:</strong> Kanban, Card, List — persisted to <code>user_profiles.preferences.help_wanted_view_type</code>.</li>
+</ul>
+<h2 id="favorites-banner"><a href="#favorites-banner">Favorites banner</a></h2>
+<p>When the tenant has <code>favorite_subcontractors</code> rows, a banner renders below the search bar:</p>
+<ul>
+<li>Star icon plus "Your Favorite Subcontractors" heading.</li>
+<li>Badge pills for each favorited tenant name and individual consultant name.</li>
+<li>Favorites are added from the application-review workflow (see Favoriting below), not from this banner.</li>
+</ul>
+<h2 id="data-loading"><a href="#data-loading">Data loading</a></h2>
+<ul>
+<li><strong>myPostings</strong> — all <code>hsh_postings</code> for the current tenant, enriched with <code>billing_rate</code> (from the matching <code>trial_services</code> row), daily-minimum hours (from <code>trials</code>), case name, and <code>pipeline_stage_id</code>. Sorted by <code>created_at</code> descending.</li>
+<li><strong>receivedApplications</strong> — all <code>hsh_applications</code> for the tenant's postings, enriched with subcontractor tenant name, consultant name, posting details, service details, trial details, and daily-minimum hours. Live via Supabase Realtime.</li>
+<li><strong>allTrialServices</strong> — <code>trial_services</code> for the tenant, enriched with trial data, service data, assignment status (count and <code>is_assigned</code>), whether the service is already on HSH, and daily-minimum info. Used by the unassigned-services lists.</li>
+<li><strong>favorites / favoriteTenants / favoriteUsers</strong> — <code>favorite_subcontractors</code> resolved to tenant and user-profile rows for display.</li>
+<li><strong>timeEntriesByPosting</strong> — map of <code>trial_id</code> + <code>service_id</code> → boolean, used to decide whether a cancelled posting can be permanently deleted (blocked when any linked <code>time_entries</code> exist).</li>
+</ul>
+<h2 id="three-kanban-columns-plus-cancelled"><a href="#three-kanban-columns-plus-cancelled">Three kanban columns plus cancelled</a></h2>
+<p>Postings are grouped by <code>hsh_postings.status</code>. Each column uses the shared postings kanban/card/list components.</p>
+<h3 id="column-1-open-postings"><a href="#column-1-open-postings">Column 1: Open Postings</a></h3>
+<p>Postings with <code>status = 'open'</code> — actively published and accepting applications.</p>
+<ul>
+<li><strong>Posting card:</strong>
+<ul>
+<li>Header: case name with deal or trial icon, pipeline-stage badge, and a visibility badge ("Public" green globe or "Private" amber lock with invited count).</li>
+<li>Body: service name (HSH accent), daily-minimum badge when applicable, description, and the metadata row (dates, location, estimated rate with type, daily-minimum calculation, application count).</li>
+<li><strong>Cancel</strong> button opens a confirmation dialog → sets <code>status = 'cancelled'</code>, fires <code>createHSHNotifications</code> with <code>type = posting_cancelled</code> to notify invited subcontractors.</li>
+</ul>
+</li>
+<li><strong>Application sub-cards (nested per received <code>hsh_applications</code> row):</strong>
+<ul>
+<li>HSH-tinted wrapper with accent border.</li>
+<li>Respondent: tenant name, consultant name, proposed rate (green when matching, amber when counter-offer).</li>
+<li>Status badge: "Pending (Agreed)" or "Pending (Counter)".</li>
+<li>Message text when present.</li>
+<li>Rate comparison: estimated vs. proposed side-by-side; daily-minimum calculation for hourly services with minimums.</li>
+<li>Favorite indicator: star icon (filled when tenant or consultant already favorited) opens the favorite-choice dialog.</li>
+<li><strong>Action buttons:</strong>
+<ul>
+<li><strong>Accept</strong> (green) opens the accept-confirmation modal with two paths:
+<ul>
+<li><strong>Accept &#x26; Close Posting</strong> — accepts the application and sets the posting to <code>filled</code>. All other pending applications on that posting move to <code>status = 'lost'</code>. Calls the <code>acceptHSHApplication</code> Edge Function, which writes the <code>hsh_contracts</code> row.</li>
+<li><strong>Accept &#x26; Keep Open</strong> — accepts the application but leaves <code>status = 'open'</code> so additional subcontractors can be hired for the same service need. Other pending applications stay pending.</li>
+</ul>
+</li>
+<li><strong>Decline</strong> (red outline) — sets the application to <code>status = 'declined'</code>. If the subcontractor's notification preference allows it, a decline notification is sent.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id="column-2-filled-postings"><a href="#column-2-filled-postings">Column 2: Filled Postings</a></h3>
+<p>Postings with <code>status = 'filled'</code> — a subcontractor was accepted and the posting was closed.</p>
+<ul>
+<li>Same posting card layout as Open.</li>
+<li>Accepted application sub-card shows the green "Accepted" badge, tenant, consultant, and agreed rate.</li>
+<li>Other applications marked <code>lost</code> render dimmed with a gray "Lost" badge.</li>
+<li>No action buttons on the posting itself.</li>
+</ul>
+<h3 id="cancelled-postings"><a href="#cancelled-postings">Cancelled Postings</a></h3>
+<p>Postings with <code>status = 'cancelled'</code>. Rendered as a collapsible section in list view or a column in kanban view, at 60% opacity.</p>
+<ul>
+<li>Same card layout, dimmed.</li>
+<li><strong>Delete</strong> button permanently deletes the posting via the <code>deleteHSHPosting</code> Edge Function. Blocked when linked <code>time_entries</code> exist. The function cascades deletion of related <code>hsh_applications</code> and <code>hsh_contracts</code>.</li>
+<li>Cancelled date is surfaced.</li>
+</ul>
+<h2 id="accept-confirmation-modal"><a href="#accept-confirmation-modal">Accept confirmation modal</a></h2>
+<p>Opens when clicking <strong>Accept</strong> on an application sub-card. Shows the posting and application details with two actions:</p>
+<ul>
+<li><strong>Accept &#x26; Close Posting</strong> — calls <code>useAcceptHSHApplication.mutateAsync({ id, status: 'accepted', postingId, closePosting: true })</code>. The <code>acceptHSHApplication</code> Edge Function:
+<ul>
+<li>Sets the application status to <code>accepted</code>.</li>
+<li>Inserts an <code>hsh_contracts</code> row (<code>hiring_tenant_id</code>, <code>subcontractor_tenant_id</code>, <code>trial_id</code>, <code>trial_service_id</code>, <code>consultant_id</code>, <code>agreed_rate</code>, etc.).</li>
+<li>Inserts an <code>assignments</code> row linking the consultant to the <code>trial_services</code> row.</li>
+<li>Sets the <code>hsh_postings</code> row to <code>filled</code>.</li>
+<li>Sets all other pending applications for that posting to <code>lost</code>.</li>
+<li>Sends notifications to the accepted subcontractor and each "lost" respondent via Resend.</li>
+</ul>
+</li>
+<li><strong>Accept &#x26; Keep Open</strong> — same flow except the posting remains <code>open</code> and other pending applications are not moved to <code>lost</code>.</li>
+</ul>
+<h2 id="favoriting-workflow"><a href="#favoriting-workflow">Favoriting workflow</a></h2>
+<p>While reviewing applications, clicking the star on a sub-card opens the favorite-choice dialog:</p>
+<ul>
+<li><strong>Tenant only</strong> — inserts <code>favorite_subcontractors</code> with <code>favorite_tenant_id</code> set.</li>
+<li><strong>Individual only</strong> — inserts <code>favorite_subcontractors</code> with <code>favorite_user_id</code> set.</li>
+<li><strong>Both</strong> — inserts two <code>favorite_subcontractors</code> rows.</li>
+<li>Duplicates are prevented; the star renders filled when already favorited.</li>
+<li>Favorites populate the banner at the top of Help Wanted and on the Favorites page, and power the invited-party quick-pick when posting private jobs.</li>
+</ul>
+<h2 id="unassigned-services-lists-owner-only"><a href="#unassigned-services-lists-owner-only">Unassigned services lists (owner only)</a></h2>
+<p>Below the columns, when the current user is a tenant owner, two side-by-side unassigned-services lists appear:</p>
+<ul>
+<li><strong>Left — Unassigned Trial Services:</strong> <code>trial_services</code> where <code>assignment_count = 0</code>, not subcontracted, pipeline-stage type is <code>operations</code>, and the trial is not completed/settled/lost. Sorted by start date ascending. Clicking a service opens the service-assignment modal (internal assignment or post to HSH).</li>
+<li><strong>Right — Unassigned Deal Services:</strong> same as above but filtered to pipeline-stage type <code>sales</code>. Enables proactive sourcing before the deal closes.</li>
+</ul>
+<p>Each row shows the case name, service name, dates, rate, assignment status, and whether the service is already on HSH ("On HSH" badge).</p>
+<h2 id="post-to-hotseathub-dialog"><a href="#post-to-hotseathub-dialog">Post to HotSeatHub dialog</a></h2>
+<p>Triggered from:</p>
+<ul>
+<li>The service-assignment modal's <strong>Post to HotSeatHub</strong> action.</li>
+<li>The unassigned-services list item actions.</li>
+</ul>
+<p>The <code>useCreateHSHPosting</code> hook writes an <code>hsh_postings</code> row with <code>tenant_id</code>, <code>trial_id</code>, <code>service_id</code>, <code>service_name</code>, <code>start_date</code>, <code>end_date</code>, <code>description</code>, <code>estimated_rate</code>, <code>location</code> (from trial city/state), <code>is_public</code>, <code>invited_tenant_ids</code>, <code>invited_user_ids</code>, and <code>posted_by_user_id</code>. The hook also fires <code>createHSHNotifications</code> and <code>notifyMarketplace</code> Edge Functions.</p>
+<h2 id="cancel-and-delete-rules"><a href="#cancel-and-delete-rules">Cancel and delete rules</a></h2>
+<ul>
+<li><strong>Cancel (open → cancelled):</strong> available on any open posting. Confirmation dialog. Sets <code>status = 'cancelled'</code> and <code>cancelled_at</code>. Sends cancellation notifications to invited users. Does not delete the posting or its applications.</li>
+<li><strong>Delete (cancelled → permanent):</strong> only available on cancelled postings. <strong>Blocked</strong> when any <code>time_entries</code> exist for the posting's trial + service. When allowed, the <code>deleteHSHPosting</code> Edge Function cascades deletion of the posting's <code>hsh_applications</code>, related <code>hsh_contracts</code>, linked <code>assignments</code>, and finally the <code>hsh_postings</code> row itself.</li>
+</ul>
+<h2 id="end-to-end-hsh-workflow"><a href="#end-to-end-hsh-workflow">End-to-end HSH workflow</a></h2>
+<ol>
+<li>An owner sees an unassigned service and opens the service-assignment modal.</li>
+<li>Owner posts to HotSeatHub — an <code>hsh_postings</code> row is created (<code>status = open</code>) and appears on Help Wanted under Open, and on other tenants' Potential Gigs under New Opportunities.</li>
+<li>A subcontractor responds from Potential Gigs — an <code>hsh_applications</code> row is created and surfaces as a sub-card on Help Wanted.</li>
+<li>Owner reviews applications and accepts (confirmation modal) or declines each.</li>
+<li>On accept, <code>hsh_contracts</code> and <code>assignments</code> rows are created and the consultant is linked to the service. "Close Posting" moves the posting to Filled and other applications to Lost; "Keep Open" leaves the posting open for additional hires.</li>
+<li>The subcontractor's consultant logs time in their tenant. Time entries mirror into the hiring tenant automatically via the <code>hshSyncTimeEntry</code> Edge Function, linked by <code>entry_group_id</code> and <code>hsh_contract_id</code>.</li>
+<li>The hiring tenant invoices the end client with the subcontractor's time. The subcontractor invoices the hiring tenant via HSH invoices (<code>is_hsh_invoice = true</code>).</li>
+</ol>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul>
+<li><a href="/user-manual/potential-gigs">Potential Gigs</a></li>
+<li><a href="/user-manual/favorites">Favorites</a></li>
+<li><a href="/user-manual/backend-functions">Backend Functions</a></li>
+<li><a href="/user-manual/notification-system">Notification System</a></li>
+<li><a href="/user-manual/trials">Trials</a></li>
+</ul>
+<h2 id="download-this-document"><a href="#download-this-document">Download this document</a></h2>
+<p>Download as markdown: <a href="/user-manual/help-wanted/download.md"><code>/user-manual/help-wanted/download.md</code></a>.</p>
+</article>

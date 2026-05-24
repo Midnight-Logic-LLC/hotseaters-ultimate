@@ -1,0 +1,129 @@
+<article class="prose prose-neutral dark:prose-invert max-w-none" data-user-manual-slug="dashboard">
+<h1 id="dashboard"><a href="#dashboard">Dashboard</a></h1>
+<p>The Dashboard is the landing page after login. It provides an at-a-glance overview of the firm's key performance indicators, sales pipeline, team performance, and recent activity. Content adapts based on the signed-in user's role. For a sales-only view with a narrower focus on pipeline health and client insights, see the <a href="/user-manual/sales-hub">Sales Hub</a>.</p>
+<h2 id="overall-function"><a href="#overall-function">Overall Function</a></h2>
+<p>Displays a personalized welcome message using the user's first name and a summary subtitle. All data is scoped to the current <code>tenant_id</code> via Supabase RLS. The page fetches <code>trials</code>, <code>client_firms</code>, <code>time_entries</code>, <code>expense_entries</code>, <code>invoices</code>, <code>deal_stages</code>, <code>user_profiles</code>, <code>hsh_postings</code>, <code>hsh_contracts</code>, <code>service_types</code>, and <code>trial_services</code> to compute metrics and charts.</p>
+<p>Live data changes propagate via <strong>Supabase Realtime</strong> channel subscriptions — no polling.</p>
+<h2 id="key-metrics-grid"><a href="#key-metrics-grid">Key Metrics Grid</a></h2>
+<p>A responsive 2×3 (desktop) / 2-column (mobile) grid of clickable metric tiles. Each tile navigates to a relevant page.</p>
+<table>
+<thead>
+<tr>
+<th>Tile</th>
+<th>Definition</th>
+<th>Visible to</th>
+<th>Navigates to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Pipeline Value</strong></td>
+<td>Sum of <code>estimated_value</code> for active deals in sales stages (no <code>completion_type</code>). Also shows weighted pipeline (<code>estimated_value × stage.revenue_probability</code>).</td>
+<td>owner, admin, sales</td>
+<td><a href="/user-manual/deals">Deals</a></td>
+</tr>
+<tr>
+<td><strong>Revenue (MTD)</strong></td>
+<td>Sum of <code>invoices.total</code> with <code>invoice_date</code> in the current calendar month. Shows percentage change vs. previous month.</td>
+<td>owner, admin, sales</td>
+<td><a href="/user-manual/billing">Billing</a></td>
+</tr>
+<tr>
+<td><strong>Active Trials</strong></td>
+<td>Count of <code>trials</code> in operations stages with no <code>completion_type</code>. Breaks out upcoming vs. in-progress.</td>
+<td>all roles</td>
+<td><a href="/user-manual/trials">Trials</a></td>
+</tr>
+<tr>
+<td><strong>Unbilled Time</strong></td>
+<td>Sum of <code>amount</code> and <code>duration_hours</code> for <code>time_entries</code> with <code>status = 'approved'</code> and <code>invoice_id IS NULL</code>.</td>
+<td>owner, admin, sales</td>
+<td><a href="/user-manual/billing">Billing</a></td>
+</tr>
+<tr>
+<td><strong>Trials YTD</strong></td>
+<td>Count of trials with <code>won_date</code> in the current calendar year.</td>
+<td>owner, admin, sales</td>
+<td><a href="/user-manual/trials">Trials</a></td>
+</tr>
+<tr>
+<td><strong>Revenue / Trial YTD</strong></td>
+<td>Total invoiced revenue YTD divided by trials won YTD.</td>
+<td>owner, admin, sales</td>
+<td><a href="/user-manual/trials">Trials</a></td>
+</tr>
+<tr>
+<td><strong>Team Utilization</strong></td>
+<td>Approved billable hours this week divided by total capacity (active consultants × target hours).</td>
+<td>owner, admin</td>
+<td><a href="/user-manual/consultants">Consultants</a></td>
+</tr>
+<tr>
+<td><strong>HSH Pipeline</strong></td>
+<td>Open <code>hsh_postings</code> plus active <code>hsh_contracts</code> where the firm is hiring or subcontracting.</td>
+<td>owner with marketplace flag</td>
+<td><a href="/user-manual/help-wanted">Help Wanted</a> / <a href="/user-manual/potential-gigs">Potential Gigs</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="charts"><a href="#charts">Charts</a></h2>
+<ul>
+<li><strong>Sales Pipeline</strong> — vertical bar chart of deal count by sales <code>deal_stages.position</code> (reversed so the first stage is leftmost). Visible to owner/admin/sales when active sales deals exist.</li>
+<li><strong>Revenue by Month</strong> — bar or line chart of invoiced revenue per month across the selected fiscal year, with an optional cumulative toggle.</li>
+<li><strong>Trial Phase Distribution</strong> — count of active trials grouped by operations stage (pre-trial, in-trial, verdict/settlement).</li>
+<li><strong>Team Capacity</strong> — hours logged vs. target per consultant for the current period.</li>
+</ul>
+<p>Fiscal year and cumulative toggle state persist in <code>user_profiles.preferences</code> (<code>dashboardRevenueFiscalYear</code>, <code>dashboardRevenueShowCumulative</code>) and restore on load.</p>
+<h2 id="quick-stats"><a href="#quick-stats">Quick Stats</a></h2>
+<p>Label–value rows summarizing firm-wide counts:</p>
+<ul>
+<li><strong>Active Clients</strong> — <code>client_firms</code> with <code>is_active = true</code></li>
+<li><strong>Team Members</strong> — active <code>user_profiles</code> in the tenant</li>
+<li><strong>Outstanding</strong> — sum of <code>invoices.total</code> where <code>status IN ('sent', 'overdue')</code></li>
+<li><strong>Avg Hours / Week</strong> — total hours logged this week ÷ active consultant count</li>
+<li><strong>HSH Posts</strong> — open <code>hsh_postings</code> (visible if <code>marketplace_post_jobs</code> is enabled)</li>
+<li><strong>HSH Gigs</strong> — active <code>hsh_contracts</code> where the firm is the subcontractor (visible if <code>marketplace_fill_jobs</code> is enabled)</li>
+</ul>
+<h2 id="recent-activity"><a href="#recent-activity">Recent Activity</a></h2>
+<ul>
+<li>The 3 most recent won deals (ordered by <code>won_date</code> desc).</li>
+<li>The 3 most recent invoices (ordered by <code>invoice_date</code> desc) with a status badge; clicking an invoice opens <a href="/user-manual/billing">Billing</a>.</li>
+<li>Empty state renders when no activity exists.</li>
+</ul>
+<h2 id="team-performance"><a href="#team-performance">Team Performance</a></h2>
+<p>A 4-column (desktop) grid:</p>
+<ul>
+<li><strong>Weekly Team Performance</strong> — top 5 members by revenue this week. Horizontal bars display revenue with hours inline. Includes HSH subcontractors whose mirrored time entries land in this tenant.</li>
+<li><strong>Monthly Team Performance</strong> — same calculation over the current calendar month.</li>
+<li><strong>Active Trial Performance</strong> — top 5 active trials by all-time revenue.</li>
+<li><strong>Upcoming Trials</strong> — up to 3 trials with a future <code>start_date</code>, showing case name, client, date, and days-until countdown. Includes a <strong>View Schedule</strong> link to the <a href="/user-manual/schedule">Schedule</a>.</li>
+</ul>
+<h2 id="quick-actions"><a href="#quick-actions">Quick Actions</a></h2>
+<p>Shortcut buttons sized by available role actions (2–6 columns):</p>
+<ul>
+<li><strong>New Deal</strong> → <a href="/user-manual/deals">Deals</a> — owner, admin, sales</li>
+<li><strong>Log Time</strong> → <a href="/user-manual/time-tracking">Time Tracking</a> — all roles</li>
+<li><strong>Approve Pending</strong> → <a href="/user-manual/approvals">Approvals</a> — owner, admin</li>
+<li><strong>Add Client</strong> → <a href="/user-manual/clients">Clients</a> — owner, admin, sales</li>
+<li><strong>View Schedule</strong> → <a href="/user-manual/schedule">Schedule</a> — all roles</li>
+<li><strong>Post HSH Request</strong> → <a href="/user-manual/help-wanted">Help Wanted</a> — owner with <code>marketplace_post_jobs</code></li>
+<li><strong>New Invoice</strong> → <a href="/user-manual/billing">Billing</a> — owner, admin, sales</li>
+</ul>
+<h2 id="role-based-variants"><a href="#role-based-variants">Role-Based Variants</a></h2>
+<ul>
+<li><strong>Owner / Admin</strong> — full dashboard: financial KPIs, pipeline, quick stats, team performance, all quick actions.</li>
+<li><strong>Sales</strong> — pipeline-focused: Pipeline Value, Revenue (MTD), Sales Pipeline chart, recent won deals, sales-related actions. Also see the dedicated <a href="/user-manual/sales-hub">Sales Hub</a>.</li>
+<li><strong>Trial Consultant</strong> — assignment list for active trials, a time clock widget, upcoming trials, and <strong>Log Time</strong> / <strong>View Schedule</strong> actions only. No pipeline or revenue tiles.</li>
+</ul>
+<h2 id="real-time-updates"><a href="#real-time-updates">Real-Time Updates</a></h2>
+<p>The Dashboard subscribes to Supabase Realtime channels for <code>trials</code>, <code>time_entries</code>, <code>invoices</code>, <code>deals</code>, and <code>hsh_postings</code> scoped to the current <code>tenant_id</code>. New records, status transitions, and approvals update tiles, charts, and activity feeds without a page refresh.</p>
+<h2 id="related-docs"><a href="#related-docs">Related Docs</a></h2>
+<ul>
+<li><a href="/user-manual/sales-hub">Sales Hub</a> — narrower sales-focused workspace</li>
+<li><a href="/user-manual/app-overview">App Overview</a></li>
+<li><a href="/user-manual/design-patterns">Design Patterns</a></li>
+<li><a href="/user-manual/notification-system">Notification System</a></li>
+</ul>
+<hr>
+<p>Download a plain-text copy: <a href="/user-manual/dashboard/download.md"><code>/user-manual/dashboard/download.md</code></a>.</p>
+</article>
