@@ -49,11 +49,17 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Checkout sibling latest-data
+      # Checkout latest-data into a subdirectory of the workspace (NOT `../`,
+      # which actions/checkout rejects for security). The migrations step
+      # below references it via the in-workspace path.
+      #
+      # The remote repo name is `hotseaters-data-migration-system` (the
+      # `latest-data` directory name is a local convention only).
+      - name: Checkout latest-data (in-workspace)
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/latest-data
-          path: ../latest-data
+          repository: ${{ github.repository_owner }}/hotseaters-data-migration-system
+          path: latest-data
           submodules: recursive
 
       - name: Setup pnpm
@@ -107,7 +113,7 @@ jobs:
         run: |
           PGPASSWORD=postgres psql -h localhost -U supabase_admin -d postgres \
             -c "CREATE EXTENSION IF NOT EXISTS pgtap;"
-          for f in ../latest-data/supabase/migrations/*.sql; do
+          for f in latest-data/supabase/migrations/*.sql; do
             echo "Applying $f"
             PGPASSWORD=postgres psql -h localhost -U supabase_admin -d postgres -f "$f"
           done

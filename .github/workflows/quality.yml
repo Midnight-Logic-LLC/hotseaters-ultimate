@@ -27,7 +27,6 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'supabase/migrations/**'
-      - '../latest-data/supabase/migrations/**'
       - 'content/user-manual/**'
       - '.github/workflows/quality.yml'
 
