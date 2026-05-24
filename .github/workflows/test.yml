@@ -55,10 +55,14 @@ jobs:
       #
       # The remote repo name is `hotseaters-data-migration-system` (the
       # `latest-data` directory name is a local convention only).
+      #
+      # Auth: the default GITHUB_TOKEN cannot read another repo. Use the
+      # same SSH deploy key as deploy.yml (LATEST_DATA_DEPLOY_KEY).
       - name: Checkout latest-data (in-workspace)
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/hotseaters-data-migration-system
+          ssh-key: ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
           path: latest-data
           submodules: recursive
 
