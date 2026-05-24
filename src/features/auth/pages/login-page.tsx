@@ -10,8 +10,8 @@
 
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthCard } from '@/features/auth/components/AuthCard';
-import { GoogleSignInButton } from '@/features/auth/components/GoogleSignInButton';
+import { AuthCard } from '@/features/auth/components/auth-card';
+import { GoogleSignInButton } from '@/features/auth/components/google-sign-in-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

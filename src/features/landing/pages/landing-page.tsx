@@ -49,7 +49,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AuthOptionsDialog } from '@/features/auth/components/AuthOptionsDialog';
+import { AuthOptionsDialog } from '@/features/auth/components/auth-options-dialog';
 import { PolicyViewerModal } from '@/features/marketing/components/policy-viewer-modal';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import {

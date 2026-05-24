@@ -292,6 +292,27 @@ kebab-case (`landing-page.tsx`, `policy-viewer-modal.tsx`,
 (`export function LandingPage()`, `export function useAuth()`); the
 **filename** is kebab.
 
+#### RULE A.1 — Rename BEFORE editing (no exceptions)
+
+Before editing ANY file, check the basename. If it is not kebab-case,
+`git mv` it to a kebab-case basename FIRST, fix every import site,
+re-run `pnpm typecheck && pnpm check:filenames`, THEN proceed with the
+edit. Encountering a PascalCase file in the wild is not an excuse to
+keep it that way — it's a chance to pay down the credit-card debt in
+`scripts/check-kebab-filenames.mjs` `KNOWN_VIOLATIONS`.
+
+The `pnpm check:filenames` script fails the build on any new
+PascalCase file under `src/**`. Pre-commit + CI will block. Skipping
+RULE A is no longer possible — but the rename must still be done
+before the edit, not after, or the typecheck stage will fail on the
+import path mismatch.
+
+#### Anti-pattern (real example from 2026-05-24, see docs/LESSONS.md)
+
+> "I treated existing PascalCase filenames as 'already there, just keep
+> editing.'" — me, when the user caught it. RULE A applies every time
+> you touch a file, not only on creation.
+
 ### RULE B — Components → hooks only
 
 A React component MUST NOT import from `stores/*` or call a Zustand

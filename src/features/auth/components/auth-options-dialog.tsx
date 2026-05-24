@@ -1,7 +1,7 @@
 /**
  * AuthOptionsDialog — modal that initiates a sign-in flow.
  *
- * Bible: `HotSeatersMVP/src/components/AuthOptionsDialog.jsx` (50 lines).
+ * Bible: `HotSeatersMVP/src/components/auth-options-dialog.jsx` (50 lines).
  * Verbatim copy, adapted from base44's `redirectToLogin` to our
  * `useAuth().signInWithGoogle()` (which performs PKCE + redirect to
  * `/auth/callback?next=<redirectUrl>`).

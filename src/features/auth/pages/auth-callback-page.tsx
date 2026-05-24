@@ -6,7 +6,7 @@
  */
 
 import { Navigate } from 'react-router-dom';
-import { AuthCard } from '@/features/auth/components/AuthCard';
+import { AuthCard } from '@/features/auth/components/auth-card';
 import { useAuthCallback } from '@/features/auth/hooks/use-auth-callback';
 
 export function AuthCallbackPage() {

@@ -5,7 +5,7 @@
  */
 
 import { Link, useLocation } from 'react-router-dom';
-import { AuthCard } from '@/features/auth/components/AuthCard';
+import { AuthCard } from '@/features/auth/components/auth-card';
 
 interface LocationState {
   email?: string;

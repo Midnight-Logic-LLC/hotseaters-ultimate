@@ -40,7 +40,8 @@
     "tauri:android:init": "tauri android init",
     "tauri:android:dev": "tauri android dev",
     "tauri:android:build": "tauri android build",
-    "verify:pglite-webview": "node scripts/verify-pglite-in-webview.mjs"
+    "verify:pglite-webview": "node scripts/verify-pglite-in-webview.mjs",
+    "check:filenames": "node scripts/check-kebab-filenames.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.0",

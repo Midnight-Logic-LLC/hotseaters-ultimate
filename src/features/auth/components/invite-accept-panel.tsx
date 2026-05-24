@@ -12,12 +12,18 @@
 
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { GoogleSignInButton } from './GoogleSignInButton';
+import { GoogleSignInButton } from './google-sign-in-button';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useInvitation } from '@/features/auth/hooks/use-invitation';
 
 export interface InviteAcceptPanelProps {
   token: string | null;
+  /**
+   * Called after server-side acceptInvitation() succeeds, before any
+   * navigation. AcceptInvitePage uses this to swap in the NewMemberWizard.
+   * When omitted, the panel falls back to navigating to /Dashboard.
+   */
+  onAccepted?: (ctx: { companyName: string; role: string; assignedServiceNames: string[] }) => void;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -27,7 +33,7 @@ const ROLE_LABELS: Record<string, string> = {
   'Trial Consultant': 'Trial Consultant',
 };
 
-export function InviteAcceptPanel({ token }: InviteAcceptPanelProps) {
+export function InviteAcceptPanel({ token, onAccepted }: InviteAcceptPanelProps) {
   const navigate = useNavigate();
   const { signInWithGoogle, signOut } = useAuth();
   const {
@@ -168,8 +174,17 @@ export function InviteAcceptPanel({ token }: InviteAcceptPanelProps) {
       <Button
         onClick={() => {
           void (async () => {
-            await acceptNow();
-            navigate('/Dashboard');
+            const result = await acceptNow();
+            if (!result) return; // error already surfaced
+            if (onAccepted) {
+              onAccepted({
+                companyName: result.companyName ?? companyLabel,
+                role: decoded?.role ?? 'Trial Consultant',
+                assignedServiceNames: [],
+              });
+            } else {
+              navigate('/Dashboard');
+            }
           })();
         }}
         disabled={accepting}

@@ -41,7 +41,7 @@
 import type { PropsWithChildren, ReactNode } from 'react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { AuthOptionsDialog } from '@/features/auth/components/AuthOptionsDialog';
+import { AuthOptionsDialog } from '@/features/auth/components/auth-options-dialog';
 import { PolicyViewerModal } from '@/features/marketing/components/policy-viewer-modal';
 
 interface MarketingShellProps {

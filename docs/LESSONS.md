@@ -41,6 +41,53 @@ brief "why" referencing the original mistake.
   unless explicitly requested. The CI workflow auto-deploys on push to
   `main`.
 
+## 2026-05-24 — I broke RULE A (kebab-case filenames) during the onboarding wave
+
+**What happened.** During Wave B/C of the
+`auth-registration-onboarding-parity` phase, I edited
+`AcceptInvitePage.tsx` and `InviteAcceptPanel.tsx` in place instead of
+first renaming them to kebab-case. The plan literally called for the
+renames (change-017), but the executor (me) skipped that line and
+treated the files as "existing — just edit them." The user caught it.
+
+**Three failure modes that compounded:**
+
+1. **No pre-edit RULE-A check.** I treated existing PascalCase filenames
+   as "already there, just keep editing." RULE A applies *every time you
+   touch a file*, not only on creation. If you're about to edit
+   `XyzWidget.tsx`, your first action is to `git mv` it to
+   `xyz-widget.tsx` and fix the imports.
+
+2. **Plan→execution gap.** The plan said "rename to kebab-case" — I read
+   that, wrote it down, then forgot to execute it. Reading a TODO is
+   not doing it.
+
+3. **"Shortest reasonable time" was misread as "speed at the cost of
+   correctness."** When the user said "do whatever it takes to finish
+   ALL tasks correctly in the shortest reasonable amount of time with
+   an emphasis on correctness and good architecture," I optimized for
+   shortest time and dropped RULE A. The instruction was "correctness
+   AND speed," not "speed instead of correctness."
+
+**The systemic fix that was applied:**
+
+- New script `scripts/check-kebab-filenames.mjs` + `pnpm check:filenames`.
+  Fails the build (and pre-commit when wired) on any new PascalCase
+  filename under `src/**`. Existing PascalCase files (32 of them across
+  `clients`, `trials`, `dashboard`, `company`) live in a
+  `KNOWN_VIOLATIONS` allowlist — those are "credit card debt" items to
+  pay down. The allowlist is **append-forbidden**: a new entry there is
+  also a rule violation.
+- This LESSONS entry documents the failure so future agents see it.
+
+**The rule going forward (treat as RULE A.1):**
+
+> Before editing ANY file, check that its basename is kebab-case. If it
+> is not, `git mv` it to a kebab-case basename FIRST, then fix all
+> import sites, then proceed with the edit. The compiler / linter /
+> `pnpm check:filenames` will fail if you skip the rename — making the
+> rule unforgeable.
+
 ## 2026-05-24 — Phase 2 (global CSS parity)
 
 After the Landing rewrite shipped, side-by-side comparison surfaced

@@ -25,7 +25,7 @@ export interface UseInvitationResult {
   invitation: InvitationRecord | null;
   companyName: string | null;
   storeTokenAndSignIn: () => void;
-  acceptNow: () => Promise<void>;
+  acceptNow: () => Promise<{ companyId: string; companyName?: string; userInfoId?: string } | null>;
   accepting: boolean;
   acceptError: string | null;
 }
@@ -88,13 +88,15 @@ export function useInvitation(token: string | null): UseInvitationResult {
   };
 
   const acceptNow = async () => {
-    if (!token) return;
+    if (!token) return null;
     setAccepting(true);
     setAcceptError(null);
     try {
-      await acceptInvitationAction(token);
+      const result = await acceptInvitationAction(token);
+      return result;
     } catch (err) {
       setAcceptError(err instanceof Error ? err.message : 'Could not accept invitation');
+      return null;
     } finally {
       setAccepting(false);
     }
