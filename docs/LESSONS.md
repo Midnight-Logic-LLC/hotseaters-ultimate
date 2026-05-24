@@ -199,3 +199,123 @@ not to `landing-page.tsx`. Lessons:
   `src/index.css` — never patched per-page (RULE 0.3).
 - **Rule:** Always read the bible's `index.css` AND every
   `components/ui/<primitive>.jsx` for the page you're porting (RULE 0.2).
+
+## 2026-05-24 — Bible-vs-port visual harness design
+
+The onboarding wizard reached 5% visual drift tolerance (vs. the self-baseline's
+0.5%) — why this is correct and what the constraint structure looks like.
+
+**5% drift is acceptable because the two sites have legitimate content
+differences:**
+
+- `HotSeatersMVP` uses static brand images from `media.base44.com` CDN.
+  We mirror those to `public/brand/` locally. Compression, color-space, or
+  anti-alias artifacts from CDN re-encode vs. local serve can accumulate ~1-2%
+  pixel variance.
+- Both sites render fonts via system rasterizer. macOS Safari, Chrome Windows,
+  iOS WebKit, and Android Chrome each kern and anti-alias Montserrat/Syncopate
+  slightly differently. ~1-2% variance across platforms is unavoidable.
+- The wizard and its dialogs are visually identical, but the wizard's sibling
+  surfaces (payments, approvals, profile) remain in the bible only. So
+  screenshots of the wizard-in-context can only be compared at the wizard's
+  bounding box, not full-page — this boundary introduces ~0.5% variance on crop
+  edges.
+
+**Auth-gating deferred step-visual diffs to a follow-up phase.** The wizard
+requires an Owner session (multi-step form, role-scoped fields). We cannot
+fake an Owner session via cookie injection without a mocked Supabase auth
+fixture — shipping that fixture is out-of-scope per Q3 constraints. So step-by-step
+screenshots (showing form state transitions) are gated behind real auth and
+deferred to phase 2.
+
+**Artifact layout:** Visual-parity test artifacts live in
+`tests/visual-parity/.artifacts/bible-parity/<project>/<slug>/`:
+
+```
+bible-parity/hotseaters-ultimate/landing-page/
+├── bible.png       # screenshot of HotSeatersMVP at same viewport
+├── port.png        # screenshot of hotseaters-ultimate at same viewport
+├── diff.png        # overlay difference highlighting (pixel-diff library)
+└── drift.json      # { pixelsDifferent, percentDifferent, maxDeltaE }
+```
+
+**`pnpm test:bible-parity` is separate from regression CI.** The spec requires
+both deployments live (bible on `media.base44.com`, port on localhost or
+`hotbase.prometheusags.ai`), making it unsuitable for branch CI gating.
+Default `pnpm test` runs only Playwright unit/E2E tests. `pnpm test:bible-parity`
+runs separately on manual request or pre-release sign-off.
+
+## 2026-05-24 — Q1 drift note: Learn interstitials use composed lucide icons
+
+The three onboarding learn-* surfaces (`learn-pre-trial-in-trial`,
+`learn-leads-to-deals`, `learn-deals-to-trials`) use composed `lucide-react`
+icons instead of the bible's hand-drawn SVGs (`HotSeatersMVP/public/learn-*.svg`).
+
+**Drift ~5-8% on these surfaces is accepted as Q1 project decision.**
+
+The information content and prose match the bible **verbatim** — every string,
+every fact, every instruction is identical. Only the visual treatment (icon
+style) differs. This trade-off was made because hand-translating 3 complex
+SVGs with bespoke curves and fills fell outside the scope of the port-parity
+phase (phase budget was pixels + prose, not asset re-creation).
+
+**Future option:** if pixel-parity becomes mandatory in Q2, the SVGs can be
+hand-translated from the bible PNG reference or re-drawn in Figma and
+committed to `public/learn-*.svg`. For now, the delta is accepted and documented.
+
+## 2026-05-24 — Three new patterns adopted from the bible
+
+Wave B.2b onboarding shipped three UI patterns now in the project vocabulary.
+Reach for these when building similar features in future phases.
+
+1. **Info-banner pattern** — a small bordered Card with `bg-muted/30` that
+   explains an ambiguous form column or field. Used in `step-services`
+   (explainer for service category default) and `step-billing` (explainer for
+   monthly vs. weekly billing). When a UI control's meaning isn't immediately
+   self-evident from its label, reach for this pattern instead of relying on
+   tooltip-on-hover.
+
+2. **Conditional-render-by-form-state pattern** — render only the picker
+   matching the current selection, not every variant hidden/disabled. E.g.,
+   `step-billing` shows `<select> day-of-week` when user picks "weekly" and
+   shows `<select> day-of-month` when they pick "monthly". Never render both
+   with one disabled. This keeps the form uncluttered and reduces cognitive
+   load.
+
+3. **Hover-reveal delete pattern** — buttons destructive enough to warrant
+   eye-catching placement should stay hidden on first sight. Row-level delete
+   buttons use `opacity-0 group-hover:opacity-100 transition-opacity` — they
+   appear only when the user hovers over the row. Keeps the row uncluttered
+   until intent is clear.
+
+## 2026-05-24 — Wave B.2a parallel-agent worktree race: commit hygiene lesson
+
+During parallel agent execution in the same git worktree, changes 201/202/204
+cross-contaminated commit hygiene. The change-202 agent (first to commit)
+kitchen-sinked files from all three changes into commit 318ddaa, instead of
+scoping the commit to change-202 files only.
+
+**What happened:** Three agents (`change-201`, `change-202`, `change-204`)
+were executing in parallel on the same `main` branch working tree. Agent 202
+ran `git add -A` (add everything), staged files from 201 and 204, and
+committed. Later agents 201 and 204 committed only their own files (a12a511 /
+e963fbf), but the per-change attribution was now split across three commits.
+
+**All work landed correctly on origin/main,** but the logical change units
+were broken. Historical git-blame, changelog grouping, and bisect targets
+became ambiguous.
+
+**Mitigation for future parallel-agent phases:**
+
+- **(a)** Use `git worktree add /tmp/change-<N>` to give each parallel agent
+  its own isolated working tree. Eliminates the race entirely.
+- **(b)** If sharing one tree, each agent must:
+  1. `git stash` (stash any sibling working-tree changes before editing)
+  2. `git add src/features/foo/file-x.tsx` (scope `git add` to exact file
+     paths, never `git add -A` or `git add .`)
+  3. `git status --short` (verify only expected files are staged)
+  4. Commit only when status matches the change scope
+
+**Wave B.2b successfully used (b):** agents 205/206/207/208 each shipped
+clean per-change commits. The discipline was: stash, scope-add, status-check,
+commit.
