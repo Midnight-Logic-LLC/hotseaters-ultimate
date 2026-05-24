@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useClientAddresses } from '@/features/clients/hooks/use-client-addresses';
 import { useClientAddressCrud } from '@/features/clients/hooks/use-client-address-crud';
-import { ClientAddressFormSheet } from './ClientAddressFormSheet';
+import { ClientAddressFormSheet } from './client-address-form-sheet';
 import { Button } from '@/components/ui/button';
 import { Pencil, Trash2, Plus, MapPin, Star } from 'lucide-react';
 import type { ClientAddressRow } from '@/features/clients/stores/clients-store';

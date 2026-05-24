@@ -38,15 +38,6 @@ const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+)+$/;
  * entry from this list. NEVER add new entries.
  */
 const KNOWN_VIOLATIONS = new Set([
-  'src/features/clients/components/ClientAddressFormSheet.tsx',
-  'src/features/clients/components/ClientAddressList.tsx',
-  'src/features/clients/components/ClientFormSheet.tsx',
-  'src/features/clients/components/ClientServiceOverridePanel.tsx',
-  'src/features/clients/components/ClientTierPicker.tsx',
-  'src/features/clients/components/ClientTypePicker.tsx',
-  'src/features/clients/pages/ClientCreatePage.tsx',
-  'src/features/clients/pages/ClientDetailPage.tsx',
-  'src/features/clients/pages/ClientsListPage.tsx',
   'src/features/company/pages/CompanySettingsPage.tsx',
   'src/features/company/pages/TeamPage.tsx',
   'src/features/dashboard/components/EmptyDashboard.tsx',

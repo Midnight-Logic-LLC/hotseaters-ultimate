@@ -30,7 +30,7 @@ import {
   useClientTiers,
 } from '@/features/clients/hooks/use-client-metadata';
 import { useClientAddresses } from '@/features/clients/hooks/use-client-addresses';
-import { ClientFormSheet } from '@/features/clients/components/ClientFormSheet';
+import { ClientFormSheet } from '@/features/clients/components/client-form-sheet';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClientFormSheet } from '@/features/clients/components/ClientFormSheet';
+import { ClientFormSheet } from '@/features/clients/components/client-form-sheet';
 
 export function ClientCreatePage() {
   const navigate = useNavigate();

@@ -29,9 +29,9 @@ import {
   cleanClientWebsite,
 } from '@/features/clients/business-rules/clean-client-website';
 import { formatPhoneNumber } from '@/features/clients/business-rules/clean-phone-number';
-import { ClientAddressList } from '@/features/clients/components/ClientAddressList';
-import { ClientServiceOverridePanel } from '@/features/clients/components/ClientServiceOverridePanel';
-import { ClientFormSheet } from '@/features/clients/components/ClientFormSheet';
+import { ClientAddressList } from '@/features/clients/components/client-address-list';
+import { ClientServiceOverridePanel } from '@/features/clients/components/client-service-override-panel';
+import { ClientFormSheet } from '@/features/clients/components/client-form-sheet';
 
 export function ClientDetailPage() {
   const navigate = useNavigate();
