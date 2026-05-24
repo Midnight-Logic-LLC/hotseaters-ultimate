@@ -80,13 +80,27 @@ jobs:
             ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
             ${{ secrets.ENTITY_MGMT_DEPLOY_KEY }}
 
-      - name: Checkout latest-data (for entity-mgmt submodule)
+      - name: Checkout latest-data (without submodules)
         uses: actions/checkout@v4
         with:
           repository: ${{ env.LATEST_DATA_REPO }}
           ssh-key: ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
           path: latest-data-source
-          submodules: recursive
+          submodules: false
+
+      # The submodule's `.gitmodules` URL is https://github.com/... which
+      # bypasses our ssh-agent. Rewrite to SSH so the clone authenticates
+      # via the ENTITY_MGMT_DEPLOY_KEY identity loaded in ssh-agent.
+      - name: Init entity-mgmt submodule via SSH
+        working-directory: latest-data-source
+        run: |
+          set -euo pipefail
+          git submodule sync --recursive
+          git config submodule.packages/prometheus-entity-management.url \
+            git@github.com:Prometheus-AGS/prometheus-entity-management.git
+          git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" \
+            submodule update --init --force --depth=1 \
+            packages/prometheus-entity-management
 
       - name: Setup pnpm + Node
         uses: pnpm/action-setup@v4

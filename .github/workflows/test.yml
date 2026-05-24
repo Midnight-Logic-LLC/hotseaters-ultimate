@@ -67,32 +67,28 @@ jobs:
       # prometheus-entity-management submodule so we can rebuild + re-vendor
       # the entity-mgmt library in the next step — fully automatic, no
       # human re-vendoring needed.
-      - name: Checkout latest-data (in-workspace) + submodules
+      - name: Checkout latest-data (in-workspace, without submodules)
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/hotseaters-data-migration-system
           ssh-key: ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
           path: latest-data
-          submodules: recursive
+          submodules: false
 
-      # Rebuild + re-vendor the entity-mgmt library from latest-data's
-      # submodule source on every CI run. This replaces whatever
-      # vendor/prometheus-entity-management/dist was committed in this
-      # repo's HEAD with the freshly-built upstream. Eliminates the
-      # human-in-the-loop re-vendoring step.
-      - name: Rebuild + re-vendor @prometheus-ags/prometheus-entity-management
+      # The submodule's `.gitmodules` URL is https://github.com/... which
+      # bypasses our ssh-agent. Rewrite to SSH so the clone authenticates
+      # via the ENTITY_MGMT_DEPLOY_KEY identity loaded in ssh-agent.
+      - name: Init entity-mgmt submodule via SSH
+        working-directory: latest-data
         run: |
           set -euo pipefail
-          pushd latest-data
-          # The submodule was registered + cloned by actions/checkout above;
-          # build with the workspace pnpm we'll install in the next step.
-          # Skip if package.json is missing (defensive — should never happen).
-          if [[ ! -f packages/prometheus-entity-management/package.json ]]; then
-            echo "::error::Submodule packages/prometheus-entity-management missing." >&2
-            exit 1
-          fi
-          popd
-          echo "Submodule present; will build after pnpm install."
+          git submodule sync --recursive
+          git config submodule.packages/prometheus-entity-management.url \
+            git@github.com:Prometheus-AGS/prometheus-entity-management.git
+          git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" \
+            submodule update --init --force --depth=1 \
+            packages/prometheus-entity-management
+          ls -la packages/prometheus-entity-management/ | head -5
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
