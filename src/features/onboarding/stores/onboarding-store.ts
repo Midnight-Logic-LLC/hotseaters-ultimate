@@ -69,11 +69,12 @@ export interface TimeSettings {
   clock_out_rounding: 'nearest' | 'up' | 'down';
   hide_deals_from_time_clock: boolean;
 }
+export type BillingFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual';
 export interface BillingSettings {
   default_daily_minimum_hours: number;
   default_tax_rate: string;
   invoice_due_days: number;
-  invoice_period: 'weekly' | 'biweekly' | 'monthly';
+  invoice_period: BillingFrequency;
   weekly_billing_day: string;
   monthly_billing_date: number;
   sender_email: string;
@@ -81,6 +82,10 @@ export interface BillingSettings {
   invoice_number_start: number;
   job_number_format: string;
   job_number_start: number;
+  /** Prorate the first invoice for a partial billing period (bible default true). */
+  prorate_first_invoice: boolean;
+  /** Auto-send invoices when they are generated (bible default false). */
+  auto_send_invoice_on_generation: boolean;
 }
 export interface RetainerSettings {
   retainer_minimum: number;
@@ -239,6 +244,8 @@ const DEFAULT_BILLING: BillingSettings = {
   invoice_number_start: 1,
   job_number_format: 'JOB-0000',
   job_number_start: 1,
+  prorate_first_invoice: true,
+  auto_send_invoice_on_generation: false,
 };
 const DEFAULT_RETAINER: RetainerSettings = {
   retainer_minimum: 1000,
