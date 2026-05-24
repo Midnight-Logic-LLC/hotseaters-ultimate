@@ -1,31 +1,39 @@
 /**
- * LoginPage — Google OAuth + magic-link sign-in.
+ * LoginPage — auth entry screen.
  *
- * MVP-faithful copy and behavior. Two CTAs:
- *   1. "Continue with Google" → supabase.auth.signInWithOAuth (via hook)
- *   2. "Email me a magic link" → supabase.auth.signInWithOtp (via hook)
+ * Honors the bible's `AuthOptionsDialog.jsx` user-facing promise:
+ * "sign in with your Google or Microsoft account, or create a new
+ * account with email/password." The bible itself outsources auth to
+ * base44's hosted screen; self-hosted GoTrue has no hosted screen, so
+ * this page IS the screen the bible's dialog promises.
+ *
+ * Layout (matches user-supplied mockup):
+ *   - Chameleon logo (80×80)
+ *   - "Welcome to HotSeaters" / "Sign in to continue"
+ *   - Continue with Google button
+ *   - Continue with Microsoft button (disabled until Azure OAuth is
+ *     provisioned — see microsoft-sign-in-button.tsx for the wire-up
+ *     checklist)
+ *   - OR divider
+ *   - Email + Password form (SignInForm)
+ *   - Forgot password? + Sign up links
  *
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
 
-import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { AuthCard } from '@/features/auth/components/auth-card';
 import { GoogleSignInButton } from '@/features/auth/components/google-sign-in-button';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { MicrosoftSignInButton } from '@/features/auth/components/microsoft-sign-in-button';
+import { SignInForm } from '@/features/auth/components/sign-in-form';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
 export function LoginPage() {
-  const navigate = useNavigate();
-  const { signInWithGoogle, signInWithMagicLink } = useAuth();
-  const [email, setEmail] = useState('');
-  const [submittingMagicLink, setSubmittingMagicLink] = useState(false);
+  const { signInWithGoogle } = useAuth();
   const [submittingGoogle, setSubmittingGoogle] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleGoogle = async () => {
+  async function handleGoogle() {
     setError(null);
     setSubmittingGoogle(true);
     try {
@@ -34,45 +42,16 @@ export function LoginPage() {
       setError(err instanceof Error ? err.message : 'Sign-in failed');
       setSubmittingGoogle(false);
     }
-  };
-
-  const handleMagicLink = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError(null);
-    if (!email.trim()) {
-      setError('Enter your email to receive a magic link.');
-      return;
-    }
-    setSubmittingMagicLink(true);
-    try {
-      await signInWithMagicLink(email.trim());
-      navigate('/magic-link-sent', { state: { email: email.trim() } });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send magic link');
-    } finally {
-      setSubmittingMagicLink(false);
-    }
-  };
+  }
 
   return (
     <AuthCard
-      title="Sign in to HotSeaters"
-      subtitle="Trial Tech Toolkit — your trial services platform"
-      footer={
-        <span>
-          Self-hosted Supabase only. By signing in you accept our{' '}
-          <a
-            href="/manual/terms"
-            style={{ color: 'var(--theme-brand-primary)', textDecoration: 'underline' }}
-          >
-            terms
-          </a>
-          .
-        </span>
-      }
+      title="Welcome to HotSeaters"
+      subtitle="Sign in to continue"
     >
       <div className="flex flex-col gap-4">
         <GoogleSignInButton onClick={handleGoogle} loading={submittingGoogle} />
+        <MicrosoftSignInButton />
 
         <div
           className="relative flex items-center"
@@ -80,39 +59,19 @@ export function LoginPage() {
           aria-hidden
         >
           <div style={{ flex: 1, height: 1, backgroundColor: 'var(--theme-stone-200)' }} />
-          <span style={{ color: 'var(--theme-stone-500)', fontSize: 'var(--theme-text-caption)' }}>
-            or
+          <span
+            style={{
+              color: 'var(--theme-stone-500)',
+              fontSize: 'var(--theme-text-caption)',
+              letterSpacing: '0.08em',
+            }}
+          >
+            OR
           </span>
           <div style={{ flex: 1, height: 1, backgroundColor: 'var(--theme-stone-200)' }} />
         </div>
 
-        <form onSubmit={handleMagicLink} className="flex flex-col gap-3" noValidate>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@firm.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={submittingMagicLink}
-            />
-          </div>
-          <Button
-            type="submit"
-            disabled={submittingMagicLink || !email}
-            className="h-11 w-full justify-center"
-            style={{
-              borderRadius: 'var(--theme-button-radius)',
-              backgroundColor: 'var(--theme-brand-primary)',
-              color: '#fff',
-            }}
-          >
-            {submittingMagicLink ? 'Sending link…' : 'Email me a magic link'}
-          </Button>
-        </form>
+        <SignInForm />
 
         {error && (
           <div

@@ -13,6 +13,8 @@ import { TrialEditPage } from '@/features/trials/pages/trial-edit-page';
 import { registerTrialsFeatureEntities } from '@/features/trials/stores/trials-store';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { LoginPage } from '@/features/auth/pages/login-page';
+import { RegisterPage } from '@/features/auth/pages/register-page';
+import { ForgotPasswordPage } from '@/features/auth/pages/forgot-password-page';
 import { MagicLinkSentPage } from '@/features/auth/pages/magic-link-sent-page';
 import { AuthCallbackPage } from '@/features/auth/pages/auth-callback-page';
 import { AcceptInvitePage } from '@/features/auth/pages/accept-invite-page';
@@ -64,7 +66,7 @@ function RoutePlaceholder({ name }: { name: string }) {
 }
 
 function AuthGate() {
-  const { isAuthenticated, companyId, isLoading } = useAuth();
+  const { isAuthenticated, hasCompany, isLoading } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -79,7 +81,7 @@ function AuthGate() {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  if (!companyId) {
+  if (!hasCompany) {
     return <Navigate to="/onboarding" replace />;
   }
 
@@ -105,6 +107,8 @@ export function AppRouter() {
 
         <Route path="/ui-sandbox" element={<UiSandbox />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/magic-link-sent" element={<MagicLinkSentPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/accept-invite" element={<AcceptInvitePage />} />

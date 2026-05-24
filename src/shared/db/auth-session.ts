@@ -12,7 +12,13 @@ import { supabase } from './supabase-client';
  *   - `session`            current Supabase session
  *   - `user`               session.user (convenience)
  *   - `companyId`          resolved from `user_info.auth_user_id = auth.uid()`
- *   - `isAuthenticated`    session !== null && companyId !== null
+ *   - `isAuthenticated`    session !== null (i.e. SDK believes the user is
+ *                          signed in). NOT conflated with onboarding state —
+ *                          that's what `hasCompany` is for.
+ *   - `hasCompany`         companyId !== null (i.e. the signed-in user has
+ *                          completed Owner onboarding and is bonded to a
+ *                          `user_info` row). Used by route guards to decide
+ *                          between `/onboarding` and `/Dashboard`.
  *   - `isLoading`          true until the initial getSession() + companyId
  *                          query settle
  *
@@ -28,7 +34,11 @@ export interface AuthSessionState {
   session: Session | null;
   user: User | null;
   companyId: string | null;
+  /** True when the Supabase SDK has an active session. Does NOT imply
+   *  the user has completed onboarding — see `hasCompany` for that. */
   isAuthenticated: boolean;
+  /** True when the signed-in user has a `user_info` row (post-onboarding). */
+  hasCompany: boolean;
   isLoading: boolean;
 
   signInWithOAuth: (provider: Provider) => Promise<void>;
@@ -56,6 +66,7 @@ export const useAuthSession = create<AuthSessionState>((set, get) => ({
   user: null,
   companyId: null,
   isAuthenticated: false,
+  hasCompany: false,
   isLoading: true,
 
   async signInWithOAuth(provider) {
@@ -83,19 +94,23 @@ export const useAuthSession = create<AuthSessionState>((set, get) => ({
       user: null,
       companyId: null,
       isAuthenticated: false,
+      hasCompany: false,
     });
   },
 
   async refreshClaims() {
-    const { user } = get();
+    const { user, session } = get();
     if (!user) {
-      set({ companyId: null, isAuthenticated: false });
+      set({ companyId: null, hasCompany: false, isAuthenticated: !!session });
       return;
     }
     const companyId = await fetchCompanyId(user.id);
     set({
       companyId,
-      isAuthenticated: companyId !== null,
+      hasCompany: companyId !== null,
+      // isAuthenticated is solely driven by session presence — keep it true
+      // even when the user has not yet completed onboarding.
+      isAuthenticated: !!session,
     });
   },
 }));
@@ -111,7 +126,8 @@ void (async () => {
       session,
       user,
       companyId,
-      isAuthenticated: !!session && companyId !== null,
+      isAuthenticated: !!session,
+      hasCompany: companyId !== null,
       isLoading: false,
     });
   } catch {
@@ -127,7 +143,8 @@ supabase.auth.onAuthStateChange((_event, session) => {
       session,
       user,
       companyId,
-      isAuthenticated: !!session && companyId !== null,
+      isAuthenticated: !!session,
+      hasCompany: companyId !== null,
       isLoading: false,
     });
   })();

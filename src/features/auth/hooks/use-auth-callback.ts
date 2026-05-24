@@ -22,8 +22,8 @@ export interface UseAuthCallbackResult {
 
 export function useAuthCallback(): UseAuthCallbackResult {
   const isAuthenticated = useAuthSession((s) => s.isAuthenticated);
+  const hasCompany = useAuthSession((s) => s.hasCompany);
   const isLoading = useAuthSession((s) => s.isLoading);
-  const companyId = useAuthSession((s) => s.companyId);
 
   const [state, setState] = useState<CallbackState>('exchanging');
   const [error, setError] = useState<string | null>(null);
@@ -71,15 +71,17 @@ export function useAuthCallback(): UseAuthCallbackResult {
   useEffect(() => {
     if (state !== 'done' || isLoading) return;
     if (!isAuthenticated) {
+      // No session at all — OAuth exchange genuinely failed. Send to /login.
       setRedirectTo('/login');
       return;
     }
-    if (!companyId) {
+    if (!hasCompany) {
+      // Session exists but no user_info row → first-time user. Onboard.
       setRedirectTo('/onboarding');
       return;
     }
     if (!redirectTo) setRedirectTo('/Dashboard');
-  }, [state, isLoading, isAuthenticated, companyId, redirectTo]);
+  }, [state, isLoading, isAuthenticated, hasCompany, redirectTo]);
 
   return { state, error, redirectTo };
 }

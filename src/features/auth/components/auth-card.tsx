@@ -11,9 +11,21 @@ export interface AuthCardProps extends PropsWithChildren {
   title: string;
   subtitle?: ReactNode;
   footer?: ReactNode;
+  /**
+   * Optional icon override. Defaults to the chameleon brand mark,
+   * which mirrors the bible's landing-page header and the onboarding
+   * wizard chrome. Pass a different node only when an auth-related
+   * surface genuinely needs a different mark (rare).
+   */
+  icon?: ReactNode;
+  /**
+   * Hide the icon entirely. Used by `/register` and `/forgot-password`
+   * per the bible-aligned mockups (no brand chameleon on those forms).
+   */
+  hideIcon?: boolean;
 }
 
-export function AuthCard({ title, subtitle, footer, children }: AuthCardProps) {
+export function AuthCard({ title, subtitle, footer, icon, hideIcon, children }: AuthCardProps) {
   return (
     <div
       className="flex min-h-[100dvh] items-center justify-center safe-top safe-bottom"
@@ -23,7 +35,7 @@ export function AuthCard({ title, subtitle, footer, children }: AuthCardProps) {
       }}
     >
       <div
-        className="w-full max-w-md"
+        className="w-full max-w-md relative"
         style={{
           backgroundColor: 'var(--theme-cards-background, #fff)',
           borderRadius: 'var(--theme-card-radius, 12px)',
@@ -33,19 +45,16 @@ export function AuthCard({ title, subtitle, footer, children }: AuthCardProps) {
         }}
       >
         <div className="flex flex-col items-center gap-3" style={{ marginBottom: '1.5rem' }}>
-          <div
-            className="flex h-12 w-12 items-center justify-center rounded-md"
-            style={{
-              backgroundColor: 'var(--theme-brand-primary)',
-              color: '#fff',
-              fontFamily: 'var(--theme-font-brand-title)',
-              fontSize: '1.125rem',
-              fontWeight: 700,
-            }}
-            aria-hidden
-          >
-            HS
-          </div>
+          {!hideIcon &&
+            (icon ?? (
+              <img
+                src="/brand/chameleon-logo.png"
+                alt="HotSeaters"
+                className="h-20 w-20 object-contain"
+                loading="eager"
+                decoding="async"
+              />
+            ))}
           <div className="text-center">
             <h1
               style={{

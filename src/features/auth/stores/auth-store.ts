@@ -70,10 +70,51 @@ export function consumeOAuthIntent(): OAuthIntent | null {
   }
 }
 
+// ─── Email + password sign-in / sign-up / reset ──────────────────────────
+// Honors the bible's AuthOptionsDialog promise of email/password support.
+// Bridges to GoTrue via the Supabase SDK; the onAuthStateChange subscriber
+// in auth-session.ts propagates the resulting session into the store.
+
+export async function signInWithPassword(email: string, password: string): Promise<void> {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  await useAuthSession.getState().refreshClaims();
+}
+
+export async function signUpWithPassword(email: string, password: string): Promise<void> {
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+  });
+  if (error) throw error;
+  // No refreshClaims() — sign-up returns no session until email is confirmed.
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/auth/reset-password`,
+  });
+  if (error) throw error;
+}
+
 // ─── OAuth code exchange (SPA flow per plan §0.9 / risk row) ───────────────
 export async function exchangeOAuthCode(code: string): Promise<void> {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error) throw error;
+  if (error) {
+    // PKCE race: `detectSessionInUrl: true` in the Supabase client means the
+    // SDK may have already consumed the `?code` query param and stored the
+    // session before this explicit exchange call runs. In that case the
+    // exchange fails with "both auth code and code verifier should be
+    // non-empty" because the code verifier has already been wiped. The
+    // session is still valid — just fall through to refreshClaims.
+    const msg = error.message.toLowerCase();
+    const raced =
+      msg.includes('code verifier') ||
+      msg.includes('both auth code') ||
+      msg.includes('invalid request');
+    if (!raced) throw error;
+  }
   await useAuthSession.getState().refreshClaims();
 }
 
