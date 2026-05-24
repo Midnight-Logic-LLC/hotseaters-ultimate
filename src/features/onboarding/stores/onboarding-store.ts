@@ -53,6 +53,8 @@ export interface ProfileForm {
   lastName: string;
   phone: string;
   title: string;
+  /** Free-text fallback when title === 'Other'. */
+  title_other: string;
 }
 export interface CompanyForm {
   companyName: string;
@@ -62,6 +64,8 @@ export interface CompanyForm {
   zip: string;
   phone: string;
   website: string;
+  /** Brand color hex (e.g. `#7c3aed`). Drives invoice/document accents. */
+  brandColor: string;
 }
 export interface TimeSettings {
   time_rounding_minutes: number;
