@@ -64,6 +64,14 @@ export default defineConfig(({ mode }) => {
           // shell; never cache /rest/* or /auth/* responses.
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/auth/, /^\/rest/, /^\/storage/, /^\/realtime/, /^\/functions/],
+          // Raise the precache size limit. The default 2 MiB is sized for
+          // a marketing site; this is a full SPA with PGlite (WASM), Electric
+          // sync, dnd-kit, lucide, etc. Code-splitting via manualChunks below
+          // keeps individual chunks small in normal operation, but vendor
+          // chunks (React + PGlite + Electric) can legitimately approach this
+          // ceiling. 6 MiB is generous headroom; we still want CI to fail if
+          // we ever go past that (something is wrong if main bundle is 6+ MiB).
+          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         },
       }),
     ],
@@ -97,6 +105,33 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       // PGlite ships its own WASM; pre-bundling breaks asset URL resolution.
       exclude: ['@electric-sql/pglite'],
+    },
+    build: {
+      // Code-split heavy dependencies into named vendor chunks so the main
+      // entry stays small. Without this, every dep ends up in `index-<hash>.js`
+      // and we hit workbox's 2 MiB precache limit (see workbox config above).
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('@electric-sql/pglite')) return 'vendor-pglite';
+            if (id.includes('@electric-sql')) return 'vendor-electric';
+            if (id.includes('react-router')) return 'vendor-router';
+            if (id.includes('react-dom') || /\/react\//.test(id)) return 'vendor-react';
+            if (id.includes('@dnd-kit')) return 'vendor-dnd';
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('@base-ui-components')) return 'vendor-base-ui';
+            if (id.includes('@supabase')) return 'vendor-supabase';
+            if (id.includes('zustand')) return 'vendor-zustand';
+            // Everything else from node_modules → generic vendor chunk.
+            return 'vendor';
+          },
+        },
+      },
+      // Raise the chunk-size warning threshold (default 500 KB) so vendor
+      // chunks for PGlite/Electric don't spam the build log. The workbox
+      // limit above is the real ceiling.
+      chunkSizeWarningLimit: 1500,
     },
     worker: {
       format: 'es',
