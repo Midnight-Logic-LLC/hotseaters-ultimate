@@ -127,12 +127,32 @@ export interface ConsultantTierDraft {
   multiplier: number;
   is_active: boolean;
 }
+/**
+ * Auto-move trigger enum — the four discriminator values the server-side
+ * pipeline automation accepts. `none` means no automation for this stage.
+ * Bible stores per-event keys (auto_move_on_document_*); the wizard UI
+ * collapses those into a single trigger select, then expands back to the
+ * legacy keys at finalize time.
+ */
+export type PipelineAutoMoveTrigger =
+  | 'signed_deal'
+  | 'invoice_paid'
+  | 'trial_completed'
+  | 'none';
+
 export interface PipelineStageDraft {
+  /** Stable UI id for dnd-kit. Mirrors `name` slug if not supplied. */
+  id: string;
   name: string;
   type: string;
   color: string;
+  /** Bible field. Kept for finalize payload + sorting. */
   order: number;
+  /** UI-facing monotonic display order (0..N-1) after drag-reorder. */
+  display_order: number;
   revenue_probability: number;
+  /** UI-facing collapsed enum (drives the select). */
+  auto_move_trigger: PipelineAutoMoveTrigger;
   auto_move_on_document_sent_key: string | null;
   auto_move_on_document_signed_key: string | null;
   auto_move_on_earliest_task_start: boolean;
@@ -149,6 +169,19 @@ export interface InvitationDraft {
 }
 
 export type FinalizingPhase = 'company' | 'services' | 'pipeline' | 'theme' | 'invitations' | 'done';
+
+/**
+ * Bible's six default pipeline stages — used by step-pipeline-tiers "Reset
+ * to defaults". Order + colors mirror StepPipelineTiers.jsx / seed snapshot.
+ */
+export const DEFAULT_PIPELINE_STAGES: PipelineStageDraft[] = [
+  { id: 'stage-0-lead', name: 'Lead', type: 'sales', color: '#94a3b8', order: 0, display_order: 0, revenue_probability: 0.1, auto_move_trigger: 'none', auto_move_on_document_sent_key: null, auto_move_on_document_signed_key: null, auto_move_on_earliest_task_start: false, auto_move_on_trial_start: false },
+  { id: 'stage-1-qualified', name: 'Qualified', type: 'sales', color: '#0891b2', order: 1, display_order: 1, revenue_probability: 0.25, auto_move_trigger: 'none', auto_move_on_document_sent_key: null, auto_move_on_document_signed_key: null, auto_move_on_earliest_task_start: false, auto_move_on_trial_start: false },
+  { id: 'stage-2-proposal', name: 'Proposal Sent', type: 'sales', color: '#6366f1', order: 2, display_order: 2, revenue_probability: 0.5, auto_move_trigger: 'none', auto_move_on_document_sent_key: 'proposal', auto_move_on_document_signed_key: null, auto_move_on_earliest_task_start: false, auto_move_on_trial_start: false },
+  { id: 'stage-3-signed', name: 'Signed Deal', type: 'sales', color: '#10b981', order: 3, display_order: 3, revenue_probability: 0.9, auto_move_trigger: 'signed_deal', auto_move_on_document_sent_key: null, auto_move_on_document_signed_key: 'engagement', auto_move_on_earliest_task_start: false, auto_move_on_trial_start: false },
+  { id: 'stage-4-won', name: 'Won', type: 'sales', color: '#059669', order: 4, display_order: 4, revenue_probability: 1.0, auto_move_trigger: 'trial_completed', auto_move_on_document_sent_key: null, auto_move_on_document_signed_key: null, auto_move_on_earliest_task_start: false, auto_move_on_trial_start: true },
+  { id: 'stage-5-lost', name: 'Lost', type: 'sales', color: '#ef4444', order: 5, display_order: 5, revenue_probability: 0, auto_move_trigger: 'none', auto_move_on_document_sent_key: null, auto_move_on_document_signed_key: null, auto_move_on_earliest_task_start: false, auto_move_on_trial_start: false },
+];
 
 // ─── Step index (12 — bible STEPS[] verbatim) ─────────────────────────────
 export const ONBOARDING_STEPS = [
@@ -349,17 +382,32 @@ export const useOnboardingStore = create<OnboardingState>()(
               multiplier: t.multiplier ?? 1.0,
               is_active: t.is_active !== false,
             })),
-            pipelineStages: (d.pipeline_stages ?? []).map((s) => ({
-              name: s.name,
-              type: s.type,
-              color: s.color ?? '#9ca3af',
-              order: s.order ?? 0,
-              revenue_probability: s.revenue_probability ?? 1.0,
-              auto_move_on_document_sent_key: s.auto_move_on_document_sent_key ?? null,
-              auto_move_on_document_signed_key: s.auto_move_on_document_signed_key ?? null,
-              auto_move_on_earliest_task_start: !!s.auto_move_on_earliest_task_start,
-              auto_move_on_trial_start: !!s.auto_move_on_trial_start,
-            })),
+            pipelineStages: (d.pipeline_stages ?? []).map((s, i) => {
+              const signed = s.auto_move_on_document_signed_key ?? null;
+              const sent = s.auto_move_on_document_sent_key ?? null;
+              // Collapse bible's per-event keys into the UI enum.
+              const trigger: PipelineAutoMoveTrigger = signed
+                ? 'signed_deal'
+                : sent === 'invoice'
+                  ? 'invoice_paid'
+                  : s.auto_move_on_trial_start
+                    ? 'trial_completed'
+                    : 'none';
+              return {
+                id: `stage-${i}-${(s.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                name: s.name,
+                type: s.type,
+                color: s.color ?? '#9ca3af',
+                order: s.order ?? i,
+                display_order: s.order ?? i,
+                revenue_probability: s.revenue_probability ?? 1.0,
+                auto_move_trigger: trigger,
+                auto_move_on_document_sent_key: sent,
+                auto_move_on_document_signed_key: signed,
+                auto_move_on_earliest_task_start: !!s.auto_move_on_earliest_task_start,
+                auto_move_on_trial_start: !!s.auto_move_on_trial_start,
+              };
+            }),
             isBooting: false,
           });
         } catch (err: unknown) {
