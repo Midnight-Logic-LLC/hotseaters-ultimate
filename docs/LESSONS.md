@@ -41,6 +41,27 @@ brief "why" referencing the original mistake.
   unless explicitly requested. The CI workflow auto-deploys on push to
   `main`.
 
+## 2026-05-24 — auth-registration-onboarding-parity phase ship notes
+
+**What shipped:** end-to-end signup + onboarding + invitation +
+approval flow across both repos.
+
+| Wave | Outcome |
+|---|---|
+| A — Schema + Edge Functions | 5 server contracts live in prod (`seed_snapshot` table, `get-seed-defaults`, `finalize-owner-onboarding`, `accept-invitation`, `company.approval_required` column). Atomic finalize SQL function wraps ~14 inserts in one transaction. |
+| 007a — Edge Functions deploy pipeline | `hotseaters-functions` Docker image baked + pushed; k8s overlay restructured to use the image instead of per-function configmap mounts; production ArgoCD synced. Local docker-compose now mounts `supabase/functions` directly. Previously 7 of the 9 functions were never served. |
+| B — Owner wizard | 12-step Zustand-persistent wizard (`features/onboarding/`) replaces the 191-LOC single-form placeholder. All bible business rules preserved (snapshot-version-pin, no-fallback boot, force_onboarding reactivation, pending_referral_token handoff). |
+| C — Invitee wizard | 5-step NewMember micro-wizard + Google-photo auto-hydration + AcceptInvite state-machine refactor. |
+| D — Approval flow | `features/approvals/` with Owner/Admin queue page; wired to existing `approve-sub-user` / `reject-sub-user` Edge Functions. Default `company.approval_required=FALSE` per Q3. |
+| F — Verification | All prod Edge Functions return correct responses (`get-seed-defaults` → snapshot, others → unauthorized). SPA Landing serves 200. CI auto-deploys on push. |
+
+**The big lesson** (separate from the RULE A one below): assessment
+phase missed that `supabase/functions/` was never wired to either
+runtime. The fix (change-007a) was a foundational deploy-pipeline
+change that should have been caught in /kbd-assess. Going forward,
+**runtime-reachability of every server-side contract is part of
+assessment**, not an implementation surprise.
+
 ## 2026-05-24 — I broke RULE A (kebab-case filenames) during the onboarding wave
 
 **What happened.** During Wave B/C of the
