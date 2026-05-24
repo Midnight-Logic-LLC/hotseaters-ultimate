@@ -64,7 +64,11 @@ jobs:
           repository: ${{ github.repository_owner }}/hotseaters-data-migration-system
           ssh-key: ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
           path: latest-data
-          submodules: recursive
+          # Do NOT fetch submodules — latest-data has a submodule pointing
+          # at a private Prometheus-AGS repo this workflow cannot read.
+          # The test job only needs supabase/migrations/*.sql from
+          # latest-data; the submodule (entity-mgmt source) is irrelevant.
+          submodules: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
