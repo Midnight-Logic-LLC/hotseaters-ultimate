@@ -49,24 +49,17 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      # Load BOTH deploy keys into ssh-agent so the latest-data checkout
-      # AND its prometheus-entity-management submodule can both be cloned.
-      # actions/checkout's `ssh-key:` parameter only supports one key; for
-      # cross-repo submodule auth we have to use ssh-agent + `ssh: true`
-      # mode on the checkout, which then picks up any loaded identity.
-      - name: Load SSH deploy keys (latest-data + entity-mgmt submodule)
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
-            ${{ secrets.ENTITY_MGMT_DEPLOY_KEY }}
+      # Stage the entity-mgmt deploy key on disk with restrictive perms.
+      # The submodule will be cloned using this key explicitly via
+      # core.sshCommand + IdentitiesOnly=yes (no ssh-agent URL magic).
+      - name: Stage entity-mgmt deploy key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.ENTITY_MGMT_DEPLOY_KEY }}" > ~/.ssh/entity_mgmt_key
+          chmod 600 ~/.ssh/entity_mgmt_key
+          ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
 
-      # Checkout latest-data into a subdirectory of the workspace (NOT `../`,
-      # which actions/checkout rejects for security). The migrations step
-      # below references it via the in-workspace path. Includes the
-      # prometheus-entity-management submodule so we can rebuild + re-vendor
-      # the entity-mgmt library in the next step — fully automatic, no
-      # human re-vendoring needed.
       - name: Checkout latest-data (in-workspace, without submodules)
         uses: actions/checkout@v4
         with:
@@ -75,17 +68,17 @@ jobs:
           path: latest-data
           submodules: false
 
-      # The submodule's `.gitmodules` URL is https://github.com/... which
-      # bypasses our ssh-agent. Rewrite to SSH so the clone authenticates
-      # via the ENTITY_MGMT_DEPLOY_KEY identity loaded in ssh-agent.
-      - name: Init entity-mgmt submodule via SSH
+      # Rewrite submodule URL to SSH and clone with explicit IdentityFile.
+      # IdentitiesOnly=yes prevents ssh from trying any ssh-agent identity
+      # before our key (which would hit rate limits / wrong-repo errors).
+      - name: Init entity-mgmt submodule via dedicated deploy key
         working-directory: latest-data
         run: |
           set -euo pipefail
           git submodule sync --recursive
           git config submodule.packages/prometheus-entity-management.url \
             git@github.com:Prometheus-AGS/prometheus-entity-management.git
-          git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" \
+          git -c core.sshCommand="ssh -i $HOME/.ssh/entity_mgmt_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
             submodule update --init --force --depth=1 \
             packages/prometheus-entity-management
           ls -la packages/prometheus-entity-management/ | head -5

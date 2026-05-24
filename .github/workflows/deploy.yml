@@ -73,12 +73,16 @@ jobs:
       # a human re-running `pnpm build` + copying dist/ on every upstream
       # change, CI rebuilds from latest-data's submodule on every deploy.
       # The committed vendor/ is overwritten before docker build.
-      - name: Load SSH deploy keys (latest-data + entity-mgmt)
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
-            ${{ secrets.ENTITY_MGMT_DEPLOY_KEY }}
+      # Stage the entity-mgmt deploy key on disk with restrictive perms.
+      # We use this key explicitly via core.sshCommand when cloning the
+      # submodule — bypassing ssh-agent's URL-routing magic entirely.
+      - name: Stage entity-mgmt deploy key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.ENTITY_MGMT_DEPLOY_KEY }}" > ~/.ssh/entity_mgmt_key
+          chmod 600 ~/.ssh/entity_mgmt_key
+          ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Checkout latest-data (without submodules)
         uses: actions/checkout@v4
@@ -88,19 +92,20 @@ jobs:
           path: latest-data-source
           submodules: false
 
-      # The submodule's `.gitmodules` URL is https://github.com/... which
-      # bypasses our ssh-agent. Rewrite to SSH so the clone authenticates
-      # via the ENTITY_MGMT_DEPLOY_KEY identity loaded in ssh-agent.
-      - name: Init entity-mgmt submodule via SSH
+      # Rewrite submodule URL to SSH form and clone with explicit IdentityFile.
+      # IdentitiesOnly=yes prevents ssh from trying any other agent-loaded
+      # keys first (which would hit rate limits / wrong-repo errors).
+      - name: Init entity-mgmt submodule via dedicated deploy key
         working-directory: latest-data-source
         run: |
           set -euo pipefail
           git submodule sync --recursive
           git config submodule.packages/prometheus-entity-management.url \
             git@github.com:Prometheus-AGS/prometheus-entity-management.git
-          git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" \
+          git -c core.sshCommand="ssh -i ~/.ssh/entity_mgmt_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
             submodule update --init --force --depth=1 \
             packages/prometheus-entity-management
+          ls -la packages/prometheus-entity-management/ | head -5
 
       - name: Setup pnpm + Node
         uses: pnpm/action-setup@v4
