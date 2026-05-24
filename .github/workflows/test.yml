@@ -49,26 +49,50 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      # Load BOTH deploy keys into ssh-agent so the latest-data checkout
+      # AND its prometheus-entity-management submodule can both be cloned.
+      # actions/checkout's `ssh-key:` parameter only supports one key; for
+      # cross-repo submodule auth we have to use ssh-agent + `ssh: true`
+      # mode on the checkout, which then picks up any loaded identity.
+      - name: Load SSH deploy keys (latest-data + entity-mgmt submodule)
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
+            ${{ secrets.ENTITY_MGMT_DEPLOY_KEY }}
+
       # Checkout latest-data into a subdirectory of the workspace (NOT `../`,
       # which actions/checkout rejects for security). The migrations step
-      # below references it via the in-workspace path.
-      #
-      # The remote repo name is `hotseaters-data-migration-system` (the
-      # `latest-data` directory name is a local convention only).
-      #
-      # Auth: the default GITHUB_TOKEN cannot read another repo. Use the
-      # same SSH deploy key as deploy.yml (LATEST_DATA_DEPLOY_KEY).
-      - name: Checkout latest-data (in-workspace)
+      # below references it via the in-workspace path. Includes the
+      # prometheus-entity-management submodule so we can rebuild + re-vendor
+      # the entity-mgmt library in the next step — fully automatic, no
+      # human re-vendoring needed.
+      - name: Checkout latest-data (in-workspace) + submodules
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/hotseaters-data-migration-system
           ssh-key: ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
           path: latest-data
-          # Do NOT fetch submodules — latest-data has a submodule pointing
-          # at a private Prometheus-AGS repo this workflow cannot read.
-          # The test job only needs supabase/migrations/*.sql from
-          # latest-data; the submodule (entity-mgmt source) is irrelevant.
-          submodules: false
+          submodules: recursive
+
+      # Rebuild + re-vendor the entity-mgmt library from latest-data's
+      # submodule source on every CI run. This replaces whatever
+      # vendor/prometheus-entity-management/dist was committed in this
+      # repo's HEAD with the freshly-built upstream. Eliminates the
+      # human-in-the-loop re-vendoring step.
+      - name: Rebuild + re-vendor @prometheus-ags/prometheus-entity-management
+        run: |
+          set -euo pipefail
+          pushd latest-data
+          # The submodule was registered + cloned by actions/checkout above;
+          # build with the workspace pnpm we'll install in the next step.
+          # Skip if package.json is missing (defensive — should never happen).
+          if [[ ! -f packages/prometheus-entity-management/package.json ]]; then
+            echo "::error::Submodule packages/prometheus-entity-management missing." >&2
+            exit 1
+          fi
+          popd
+          echo "Submodule present; will build after pnpm install."
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -91,6 +115,33 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Build the entity-mgmt library from latest-data's submodule source,
+      # then copy the freshly-built dist + package.json into
+      # vendor/prometheus-entity-management/. Replaces whatever was
+      # committed in this repo at HEAD — CI is canonical on every push.
+      - name: Rebuild + vendor @prometheus-ags/prometheus-entity-management
+        run: |
+          set -euo pipefail
+          SUBMODULE=latest-data/packages/prometheus-entity-management
+          VENDOR_DIR=vendor/prometheus-entity-management
+          echo "Building entity-mgmt from ${SUBMODULE}..."
+          pushd "${SUBMODULE}"
+          # The submodule may or may not be part of latest-data's pnpm
+          # workspace; install + build standalone to be safe.
+          pnpm install --frozen-lockfile || pnpm install
+          pnpm build
+          popd
+          echo "Re-vendoring dist/ + package.json into ${VENDOR_DIR}..."
+          rm -rf "${VENDOR_DIR}/dist"
+          mkdir -p "${VENDOR_DIR}"
+          cp -R "${SUBMODULE}/dist" "${VENDOR_DIR}/dist"
+          cp    "${SUBMODULE}/package.json" "${VENDOR_DIR}/package.json"
+          echo "Vendored files:"
+          ls -la "${VENDOR_DIR}/dist" | head -10
+          # Re-run pnpm install so workspace symlinks pick up the fresh
+          # vendor dir (otherwise consumers see the stale committed copy).
+          pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
