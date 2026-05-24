@@ -119,6 +119,8 @@ export interface ClientTierDraft {
   id: string;
   name: string;
   multiplier: number;
+  /** UI-facing monotonic display order (0..N-1) after drag-reorder. */
+  display_order: number;
 }
 export interface ConsultantTierDraft {
   id: string;
@@ -126,6 +128,8 @@ export interface ConsultantTierDraft {
   name: string;
   multiplier: number;
   is_active: boolean;
+  /** UI-facing monotonic display order (0..N-1) after drag-reorder. */
+  display_order: number;
 }
 /**
  * Auto-move trigger enum — the four discriminator values the server-side
@@ -374,6 +378,7 @@ export const useOnboardingStore = create<OnboardingState>()(
               id: `ct-${i}`,
               name: t.name,
               multiplier: t.multiplier ?? 1.0,
+              display_order: i,
             })),
             consultantTiers: (d.consultant_tiers ?? []).map((t, i) => ({
               id: `cot-${i}`,
@@ -381,6 +386,7 @@ export const useOnboardingStore = create<OnboardingState>()(
               name: t.name,
               multiplier: t.multiplier ?? 1.0,
               is_active: t.is_active !== false,
+              display_order: i,
             })),
             pipelineStages: (d.pipeline_stages ?? []).map((s, i) => {
               const signed = s.auto_move_on_document_signed_key ?? null;
