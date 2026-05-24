@@ -107,30 +107,33 @@ export default defineConfig(({ mode }) => {
       exclude: ['@electric-sql/pglite'],
     },
     build: {
-      // Code-split heavy dependencies into named vendor chunks so the main
-      // entry stays small. Without this, every dep ends up in `index-<hash>.js`
-      // and we hit workbox's 2 MiB precache limit (see workbox config above).
+      // Code-split ONLY the truly large, leaf-position deps into their own
+      // chunks (PGlite WASM, Electric sync). For everything else we let
+      // Rollup's automatic splitting do its thing — manualChunks that
+      // forces React + React's transitive deps into separate buckets
+      // creates cross-chunk circular references that blow up at runtime
+      // with "Cannot access 'X' before initialization" (TDZ).
+      //
+      // Trade-off: the auto-split vendor chunk(s) may be larger than the
+      // old hand-named ones, but we already raised workbox's precache
+      // limit to 6 MiB, so this is fine. The main entry chunk stays
+      // under workbox's previous 2 MiB ceiling because PGlite + Electric
+      // (the worst offenders) are still split out by name below.
       rollupOptions: {
         output: {
           manualChunks: (id) => {
             if (!id.includes('node_modules')) return undefined;
+            // PGlite ships its own WASM blob and is independent of React;
+            // safe to split into its own chunk.
             if (id.includes('@electric-sql/pglite')) return 'vendor-pglite';
             if (id.includes('@electric-sql')) return 'vendor-electric';
-            if (id.includes('react-router')) return 'vendor-router';
-            if (id.includes('react-dom') || /\/react\//.test(id)) return 'vendor-react';
-            if (id.includes('@dnd-kit')) return 'vendor-dnd';
-            if (id.includes('lucide-react')) return 'vendor-icons';
-            if (id.includes('@base-ui-components')) return 'vendor-base-ui';
-            if (id.includes('@supabase')) return 'vendor-supabase';
-            if (id.includes('zustand')) return 'vendor-zustand';
-            // Everything else from node_modules → generic vendor chunk.
-            return 'vendor';
+            // Everything else: let Rollup decide. Returning undefined here
+            // means Rollup applies its default per-import-graph splitting,
+            // which keeps cyclic module groups in the same chunk.
+            return undefined;
           },
         },
       },
-      // Raise the chunk-size warning threshold (default 500 KB) so vendor
-      // chunks for PGlite/Electric don't spam the build log. The workbox
-      // limit above is the real ceiling.
       chunkSizeWarningLimit: 1500,
     },
     worker: {
