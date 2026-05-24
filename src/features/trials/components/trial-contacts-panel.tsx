@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Plus, Trash2 } from 'lucide-react';
 import { useTrialContacts } from '@/features/trials/hooks/use-trial-contacts';
 import { useTrialContactCRUD } from '@/features/trials/hooks/use-trial-contact-crud';
-import { TrialContactFormSheet } from './TrialContactFormSheet';
+import { TrialContactFormSheet } from './trial-contact-form-sheet';
 
 export interface TrialContactsPanelProps {
   trialId: string;

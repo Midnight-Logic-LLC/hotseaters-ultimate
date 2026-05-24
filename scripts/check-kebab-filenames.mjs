@@ -50,17 +50,6 @@ const KNOWN_VIOLATIONS = new Set([
   'src/features/dashboard/components/StatCard.tsx',
   'src/features/dashboard/components/StubCard.tsx',
   'src/features/dashboard/pages/DashboardPage.tsx',
-  'src/features/trials/components/TrialContactFormSheet.tsx',
-  'src/features/trials/components/TrialContactsPanel.tsx',
-  'src/features/trials/components/TrialMap.tsx',
-  'src/features/trials/components/TrialSegmentFormSheet.tsx',
-  'src/features/trials/components/TrialSegmentsPanel.tsx',
-  'src/features/trials/components/TrialServiceAssignmentMatrix.tsx',
-  'src/features/trials/components/TrialServiceFormSheet.tsx',
-  'src/features/trials/components/TrialServicesPanel.tsx',
-  'src/features/trials/pages/TrialDetailPage.tsx',
-  'src/features/trials/pages/TrialEditPage.tsx',
-  'src/features/trials/pages/TrialsListPage.tsx',
 ]);
 
 /** Walk every file under dir. */

@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { useTrialServices } from '@/features/trials/hooks/use-trial-services';
 import { useTrialServiceCRUD } from '@/features/trials/hooks/use-trial-service-crud';
-import { TrialServiceFormSheet } from './TrialServiceFormSheet';
+import { TrialServiceFormSheet } from './trial-service-form-sheet';
 import type { TrialService } from '@/features/trials/entities';
 
 export interface TrialServicesPanelProps {

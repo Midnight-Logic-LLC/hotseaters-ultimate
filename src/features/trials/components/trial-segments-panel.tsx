@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { useTrialSegments } from '@/features/trials/hooks/use-trial-segments';
 import { useTrialSegmentCRUD } from '@/features/trials/hooks/use-trial-segment-crud';
-import { TrialSegmentFormSheet } from './TrialSegmentFormSheet';
+import { TrialSegmentFormSheet } from './trial-segment-form-sheet';
 import {
   getTotalActiveTrialDays,
   hasMultipleSegments,

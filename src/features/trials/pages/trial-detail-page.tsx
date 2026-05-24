@@ -11,11 +11,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useTier1 } from '@/app/tier1-provider';
 import { useTrialWithChildren } from '@/features/trials/hooks/use-trial-with-children';
-import { TrialServicesPanel } from '@/features/trials/components/TrialServicesPanel';
-import { TrialContactsPanel } from '@/features/trials/components/TrialContactsPanel';
-import { TrialSegmentsPanel } from '@/features/trials/components/TrialSegmentsPanel';
-import { TrialServiceAssignmentMatrix } from '@/features/trials/components/TrialServiceAssignmentMatrix';
-import { TrialMap } from '@/features/trials/components/TrialMap';
+import { TrialServicesPanel } from '@/features/trials/components/trial-services-panel';
+import { TrialContactsPanel } from '@/features/trials/components/trial-contacts-panel';
+import { TrialSegmentsPanel } from '@/features/trials/components/trial-segments-panel';
+import { TrialServiceAssignmentMatrix } from '@/features/trials/components/trial-service-assignment-matrix';
+import { TrialMap } from '@/features/trials/components/trial-map';
 import { Pencil } from 'lucide-react';
 
 const fmtMoney = (n: number | null | undefined) =>
