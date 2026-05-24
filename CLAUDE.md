@@ -313,6 +313,29 @@ import path mismatch.
 > editing.'" — me, when the user caught it. RULE A applies every time
 > you touch a file, not only on creation.
 
+### RULE 0.4 — Debug visual defects from the resolved computed value, not the source CSS
+
+When something looks wrong visually, the first diagnostic is NEVER "what
+does the source CSS say." It is **`getComputedStyle(element)` on the
+actual rendered DOM**, including every CSS variable the element's style
+declarations reference. Source CSS can be 100% correct and still be
+overridden at runtime by:
+
+- `document.documentElement.style.setProperty(...)` from any code path
+  that runs at mount (theme application, dark-mode toggles, A/B testers)
+- `<style>` tags injected into the DOM later in the render order
+- Inline `style={}` props on ancestor elements
+- Specificity collisions between equal-specificity selectors
+
+**Inline element style always wins over `:root` selectors.** If a CSS
+variable resolves to the wrong value, grep for `setProperty` and
+inline-style assignments BEFORE assuming the bug is in the source CSS or
+the cascade.
+
+A Playwright `getComputedStyle()` spec is the fastest way to pin a font
+or color defect. See `tests/visual-parity/specs/font-diagnostic.spec.ts`
+for a template.
+
 ### RULE B — Components → hooks only
 
 A React component MUST NOT import from `stores/*` or call a Zustand

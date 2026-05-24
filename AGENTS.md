@@ -46,6 +46,13 @@ in CLAUDE.md applies to every agent.
 - **I.** Mobile-first, PWA-capable, Tauri-WebView-compatible at 375px+.
 - **J.** Preserve every business rule + calculation when porting a bible page.
 
+### RULE 0.4 — Debug visual defects from computed style
+
+Before assuming source CSS is wrong, run `getComputedStyle(element)` on
+the actual DOM. Inline `style.setProperty()` calls (e.g., `applyThemeVars`)
+ALWAYS win over `:root` selectors. The `tests/visual-parity/specs/font-diagnostic.spec.ts`
+spec is a template for this kind of investigation.
+
 ### Process discipline (Karpathy + Cherny)
 
 - Think before coding — surface tradeoffs, don't pick silently.

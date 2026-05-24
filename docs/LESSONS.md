@@ -41,6 +41,67 @@ brief "why" referencing the original mistake.
   unless explicitly requested. The CI workflow auto-deploys on push to
   `main`.
 
+## 2026-05-24 — Font defect: theme injection was being overridden by inline-style mount-time call
+
+**Symptom:** Body + button text rendered in `system-ui, -apple-system,
+sans-serif` instead of Montserrat in production, despite:
+- `index.css @theme { --font-sans: 'Montserrat', system-ui, sans-serif }` ✓
+- `index.css :root { --theme-font-body: 'Montserrat', system-ui, … }` ✓
+- Tailwind v4 auto-deriving `--default-font-family: var(--font-sans)` ✓
+- Landing's `<style>{generateThemeCSS(MARKETING_THEME)}</style>` JSX
+  injection ✓
+
+A headless Playwright spec confirmed via `getComputedStyle()`:
+```
+rootFontSans:           "Montserrat", system-ui, sans-serif       ✓
+rootDefaultFontFamily:  "Montserrat", system-ui, sans-serif       ✓
+rootThemeFontBody:      system-ui, -apple-system, sans-serif      ✗ wrong
+```
+
+**Root cause:** `src/app/app-providers.tsx` calls
+`applyThemeVars(DEFAULT_THEME)` on every mount, which writes
+`element.style.setProperty('--theme-font-body', '…')` directly on
+`<html>`. **Inline element style beats every `:root` selector** in CSS
+specificity — so the static `:root` rule AND Landing's per-page
+`<style>{generateThemeCSS(MARKETING_THEME)}</style>` both lost to the
+inline override.
+
+`DEFAULT_THEME.typography.bodyFont` was `'system-ui, …'` (mirroring
+the bible's `DEFAULT_THEME`). The bible got away with this because
+its in-app pages also inject per-company-theme CSS that overwrites
+the default. Our port doesn't have per-company-theme resolution yet,
+so the default sticks.
+
+**Fix:** changed `DEFAULT_THEME.typography.bodyFont` to
+`'Montserrat, system-ui, -apple-system, sans-serif'`. Now even when
+`applyThemeVars(DEFAULT_THEME)` runs at mount, it applies Montserrat.
+Also fixed `sidebarFont` to `'Syncopate, …'`.
+
+**The Tailwind-v4 inheritance theory was a red herring.** The
+preflight does change `button { font: inherit }` semantics, but the
+font cascade was correctly going html → body → button. The issue was
+*upstream* — `--theme-font-body` itself was set to the wrong value via
+inline style. Lesson:
+
+> Before assuming Tailwind v4 stripped inheritance, check whether a
+> `documentElement.style.setProperty(...)` call is overwriting your
+> CSS variables with the wrong value. Inline element style ALWAYS
+> beats `:root` selectors — so a single mount-time `applyThemeVars`
+> call can invalidate every static CSS-variable definition.
+
+**Diagnostic that pinned it:** the same Playwright spec now lives at
+`tests/visual-parity/specs/font-diagnostic.spec.ts` as a regression
+guard — it asserts `Montserrat` on body + buttons across `/`,
+`/login`, `/Approvals`.
+
+**Related rule:** added **RULE 0.4** to CLAUDE.md/AGENTS.md:
+
+> When debugging visual defects, first check `getComputedStyle()` on
+> the actual element to read the resolved value of every relevant
+> CSS variable. If a variable resolves to an unexpected value,
+> grep for `setProperty` and `applyThemeVars` calls that may be
+> overriding the static CSS. Inline element style wins over `:root`.
+
 ## 2026-05-24 — auth-registration-onboarding-parity phase ship notes
 
 **What shipped:** end-to-end signup + onboarding + invitation +

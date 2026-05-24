@@ -19,8 +19,8 @@ import { AcceptInvitePage } from '@/features/auth/pages/accept-invite-page';
 import { OnboardingPage } from '@/features/onboarding/pages/onboarding-page';
 import { PendingApprovalPage } from '@/features/auth/pages/pending-approval-page';
 import { AccountRejectedPage } from '@/features/auth/pages/account-rejected-page';
-import { CompanySettingsPage } from '@/features/company/pages/CompanySettingsPage';
-import { TeamPage } from '@/features/company/pages/TeamPage';
+import { CompanySettingsPage } from '@/features/company/pages/company-settings-page';
+import { TeamPage } from '@/features/company/pages/team-page';
 import { LandingPage } from '@/features/landing/pages/landing-page';
 import { ApprovalsPage } from '@/features/approvals/pages/approvals-page';
 

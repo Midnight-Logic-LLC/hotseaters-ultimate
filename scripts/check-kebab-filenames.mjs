@@ -38,8 +38,6 @@ const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+)+$/;
  * entry from this list. NEVER add new entries.
  */
 const KNOWN_VIOLATIONS = new Set([
-  'src/features/company/pages/CompanySettingsPage.tsx',
-  'src/features/company/pages/TeamPage.tsx',
 ]);
 
 /** Walk every file under dir. */
