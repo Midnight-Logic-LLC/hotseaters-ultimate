@@ -143,12 +143,24 @@ jobs:
       # Pattern mirrors latest-data's own bump-and-push step, but here we
       # clone latest-data, edit the overlay, and push back. ArgoCD's
       # auto-sync on latest-data then rolls the cluster.
+      #
+      # AUTHENTICATION (no PAT): we authenticate via a per-repo SSH
+      # deploy key registered on latest-data with write access. Stored
+      # as `LATEST_DATA_DEPLOY_KEY` (private key) in this repo's secrets.
+      # This avoids PAT-scope hell (fine-grained PATs needing org admin
+      # approval per repo) and limits blast radius to a single repo.
+      - name: Set up SSH deploy key for latest-data
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
+
       - name: Checkout latest-data
         uses: actions/checkout@v4
         with:
           repository: ${{ env.LATEST_DATA_REPO }}
-          token: ${{ secrets.LATEST_DATA_PUSH_TOKEN }}
+          ssh-key: ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
           path: latest-data
+          persist-credentials: true
 
       - name: Bump hotseaters-ultimate tag in latest-data overlay
         working-directory: latest-data
