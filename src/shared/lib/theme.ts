@@ -202,8 +202,17 @@ export const DEFAULT_THEME: Required<
   typography: {
     brandTitleFont: 'Zen Dots',
     brandSubtitleFont: 'Michroma',
-    bodyFont: 'system-ui, -apple-system, sans-serif',
-    sidebarFont: 'system-ui, -apple-system, sans-serif',
+    // Bible-parity (visual-parity-and-rule-a-paydown phase, 2026-05-24):
+    // the bible's DEFAULT_THEME.bodyFont was 'system-ui, …', but its UI
+    // surfaces inject MARKETING_THEME on marketing pages and the
+    // company-theme on in-app pages. Our port has no per-company theme
+    // injection yet, AND `applyThemeVars(DEFAULT_THEME)` runs in
+    // app-providers.tsx — which sets `--theme-font-body` inline on
+    // <html>, OVERRIDING per-page <style>{generateThemeCSS(MARKETING_THEME)}</style>
+    // injection from Landing/Login. Fix: until per-company theme
+    // resolution lands, the default body font matches the marketing font.
+    bodyFont: 'Montserrat, system-ui, -apple-system, sans-serif',
+    sidebarFont: 'Syncopate, system-ui, -apple-system, sans-serif',
     pageTitleSize: '1.875rem',
     sectionTitleSize: '1.25rem',
     cardTitleSize: '1.125rem',
