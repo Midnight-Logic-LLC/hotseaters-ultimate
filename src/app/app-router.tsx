@@ -16,7 +16,7 @@ import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { MagicLinkSentPage } from '@/features/auth/pages/MagicLinkSentPage';
 import { AuthCallbackPage } from '@/features/auth/pages/AuthCallbackPage';
 import { AcceptInvitePage } from '@/features/auth/pages/AcceptInvitePage';
-import { OnboardingPage } from '@/features/auth/pages/OnboardingPage';
+import { OnboardingPage } from '@/features/onboarding/pages/onboarding-page';
 import { PendingApprovalPage } from '@/features/auth/pages/PendingApprovalPage';
 import { AccountRejectedPage } from '@/features/auth/pages/AccountRejectedPage';
 import { CompanySettingsPage } from '@/features/company/pages/CompanySettingsPage';
