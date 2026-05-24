@@ -22,6 +22,7 @@ import { AccountRejectedPage } from '@/features/auth/pages/account-rejected-page
 import { CompanySettingsPage } from '@/features/company/pages/CompanySettingsPage';
 import { TeamPage } from '@/features/company/pages/TeamPage';
 import { LandingPage } from '@/features/landing/pages/landing-page';
+import { ApprovalsPage } from '@/features/approvals/pages/approvals-page';
 
 // Register feature entity schemas at module load — idempotent.
 registerClientEntities();
@@ -176,7 +177,7 @@ export function AppRouter() {
               path="Approvals"
               element={
                 <RoleGuard roles={OWNER_ADMIN}>
-                  <RoutePlaceholder name="Approvals" />
+                  <ApprovalsPage />
                 </RoleGuard>
               }
             />
