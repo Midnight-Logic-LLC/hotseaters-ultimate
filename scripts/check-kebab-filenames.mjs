@@ -40,16 +40,6 @@ const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+)+$/;
 const KNOWN_VIOLATIONS = new Set([
   'src/features/company/pages/CompanySettingsPage.tsx',
   'src/features/company/pages/TeamPage.tsx',
-  'src/features/dashboard/components/EmptyDashboard.tsx',
-  'src/features/dashboard/components/PipelineCard.tsx',
-  'src/features/dashboard/components/QuickActionsCard.tsx',
-  'src/features/dashboard/components/QuickStatsCard.tsx',
-  'src/features/dashboard/components/RecentActivityCard.tsx',
-  'src/features/dashboard/components/RecentClientsCard.tsx',
-  'src/features/dashboard/components/RecentTrialsCard.tsx',
-  'src/features/dashboard/components/StatCard.tsx',
-  'src/features/dashboard/components/StubCard.tsx',
-  'src/features/dashboard/pages/DashboardPage.tsx',
 ]);
 
 /** Walk every file under dir. */

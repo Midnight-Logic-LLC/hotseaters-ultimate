@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AppShell } from '@/app/app-shell';
 import { UiSandbox } from '@/app/ui-sandbox';
-import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
+import { DashboardPage } from '@/features/dashboard/pages/dashboard-page';
 import { RoleGuard } from '@/app/role-guard';
 import { ClientsListPage } from '@/features/clients/pages/clients-list-page';
 import { ClientDetailPage } from '@/features/clients/pages/client-detail-page';

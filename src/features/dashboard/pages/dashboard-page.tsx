@@ -28,15 +28,15 @@ import {
 import { useTier1 } from '@/app/tier1-provider';
 import { useDashboardStats } from '@/features/dashboard/hooks/use-dashboard-stats';
 import { useDashboardEmpty } from '@/features/dashboard/hooks/use-dashboard-card-data';
-import { StatCard } from '@/features/dashboard/components/StatCard';
-import { StubCard } from '@/features/dashboard/components/StubCard';
-import { PipelineCard } from '@/features/dashboard/components/PipelineCard';
-import { QuickStatsCard } from '@/features/dashboard/components/QuickStatsCard';
-import { RecentActivityCard } from '@/features/dashboard/components/RecentActivityCard';
-import { RecentTrialsCard } from '@/features/dashboard/components/RecentTrialsCard';
-import { RecentClientsCard } from '@/features/dashboard/components/RecentClientsCard';
-import { QuickActionsCard } from '@/features/dashboard/components/QuickActionsCard';
-import { EmptyDashboard } from '@/features/dashboard/components/EmptyDashboard';
+import { StatCard } from '@/features/dashboard/components/stat-card';
+import { StubCard } from '@/features/dashboard/components/stub-card';
+import { PipelineCard } from '@/features/dashboard/components/pipeline-card';
+import { QuickStatsCard } from '@/features/dashboard/components/quick-stats-card';
+import { RecentActivityCard } from '@/features/dashboard/components/recent-activity-card';
+import { RecentTrialsCard } from '@/features/dashboard/components/recent-trials-card';
+import { RecentClientsCard } from '@/features/dashboard/components/recent-clients-card';
+import { QuickActionsCard } from '@/features/dashboard/components/quick-actions-card';
+import { EmptyDashboard } from '@/features/dashboard/components/empty-dashboard';
 
 export function DashboardPage() {
   const navigate = useNavigate();
