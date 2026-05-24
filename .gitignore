@@ -21,6 +21,8 @@ coverage
 test-results
 playwright-report
 playwright/.cache
+tests/visual-parity/.artifacts
+tests/visual-parity/.report
 
 # Tauri
 src-tauri/target
