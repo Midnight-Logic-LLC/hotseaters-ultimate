@@ -373,6 +373,114 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm test:e2e
 
 ---
 
+## Iterating on `@prometheus-ags/prometheus-entity-management`
+
+The library is a git submodule at
+[`packages/prometheus-entity-management`](../packages/prometheus-entity-management/),
+linked into the app via `pnpm-workspace.yaml`'s `workspace:*` protocol.
+Editing the library source is the fast loop — the app picks up changes
+without `pnpm install`.
+
+### Why this is the right loop (and not a vendor directory)
+
+The submodule's remote is the canonical
+`git@github.com:Prometheus-AGS/prometheus-entity-management.git` repo,
+so any fix landed here is one push away from being upstream. Edits to
+this directory ARE edits to the library. There is no separate
+"vendor copy" to keep in sync — that confusion caused a real
+regression in May 2026 where an earlier round's `useEntityList` memo
+fix landed in a sibling clone at `latest-data/packages/...` instead
+of this submodule; the warning reappeared because the app's
+workspace link resolves to THIS path, not that one. (Confirmed via
+`pnpm ls --filter hotseaters-ultimate @prometheus-ags/prometheus-entity-management`
+showing `link:packages/prometheus-entity-management`.)
+
+Rule: **the fix lives where the workspace link points**. Read
+`pnpm-workspace.yaml` if ever in doubt.
+
+### Land a fix
+
+```bash
+# 1. Edit the source in the submodule
+$EDITOR packages/prometheus-entity-management/src/<file>.ts
+
+# 2. Typecheck + test inside the submodule
+cd packages/prometheus-entity-management
+pnpm typecheck
+pnpm test
+
+# 3. Rebuild (consumers don't need this for the workspace link path,
+#    but npm publish does — and it's cheap)
+pnpm build
+
+# 4. App-side smoke: from the superproject root
+cd -                              # back to hotseaters-ultimate root
+pnpm typecheck && pnpm test       # must stay 298/298 green
+pnpm dev                          # manually verify in browser
+```
+
+The app picks up the source change instantly through the `workspace:*`
+link — no `pnpm install` needed.
+
+### Publish a new version
+
+```bash
+cd packages/prometheus-entity-management
+
+# 1. Bump version in package.json (semver)
+$EDITOR package.json              # version: "1.3.0" → "1.3.1"
+
+# 2. Add a CHANGELOG.md entry under "## [<new-version>] — <YYYY-MM-DD>"
+$EDITOR CHANGELOG.md
+
+# 3. Commit inside the submodule
+git add package.json CHANGELOG.md src/<file>.ts
+git commit -m "fix(...): <one-line summary>"
+git push origin main
+
+# 4. Publish (pnpm or npm — package CLAUDE.md says pnpm, but either works)
+pnpm publish                      # uses publishConfig.access: "public"
+# or: npm publish (after `npm login` if not authenticated)
+
+# 5. Confirm the new version is live
+npm view @prometheus-ags/prometheus-entity-management versions
+```
+
+### Bump the submodule pointer in the superproject
+
+After committing inside the submodule, the superproject sees the
+submodule directory as "modified" because its SHA pointer is now
+stale. Stage + commit the bump so CI installs the new SHA:
+
+```bash
+# From hotseaters-ultimate root
+git add packages/prometheus-entity-management
+git commit -m "chore(submodule): bump entity-mgmt to <version> (<short reason>)"
+git push
+```
+
+If you skip this step, the app keeps working locally (workspace link
+is live), but CI and fresh clones will install the old submodule SHA
+and the bug will reappear. **Always commit the SHA bump.**
+
+### When npm publish is deferred
+
+Sometimes the fix is too small to publish immediately, or the
+release window is wrong. In that case:
+
+- Land the source + commit + push to the submodule's `main`.
+- Commit the submodule SHA bump in the superproject.
+- Leave the published version unchanged on npm; downstream consumers
+  not using the workspace link will keep getting the older version
+  until you publish.
+- Track the deferral by leaving the bumped version in
+  `packages/prometheus-entity-management/package.json` but noting in
+  CHANGELOG that publishing is pending. The next change can pick it
+  up by simply running `pnpm publish` (no version-bump needed if the
+  version was already advanced).
+
+---
+
 ## Updating the recharts fork
 
 We don't depend on the npm-published `recharts`; we depend on
