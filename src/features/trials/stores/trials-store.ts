@@ -137,6 +137,21 @@ export async function fetchTrialServices(
     'display_order ASC NULLS LAST, created_at ASC',
   );
 }
+/**
+ * Company-scoped variant — used by dashboard widgets that need the full
+ * trial_service inventory across all trials (revenue projections,
+ * trial-stats). Reads from the same PGlite view; Electric keeps the
+ * tenant slice fresh.
+ */
+export async function fetchTrialServicesForCompany(
+  companyId: string,
+): Promise<TrialService[]> {
+  return selectAll<TrialService>(
+    'trial_service',
+    { company_id: companyId },
+    'created_at ASC',
+  );
+}
 export async function createTrialService(
   input: Partial<TrialService>,
 ): Promise<TrialService> {

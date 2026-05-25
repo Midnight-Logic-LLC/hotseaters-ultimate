@@ -69,6 +69,19 @@ export interface Tier1Company extends CompanyFlags {
   /** ISO date string: when the company record was created (trial start). */
   created_date?: string | null;
   created_at?: string | null;
+  // ── Billing config (bible Dashboard.jsx lines 330–333 reads these) ────
+  /** Billing cadence — drives projected-invoice bucketing. */
+  invoice_period?: 'weekly' | 'monthly' | 'per_trial' | null;
+  /** Day of week to bill on for `invoice_period = 'weekly'`. */
+  weekly_billing_day?: string | null;
+  /** Day of month to bill on for `invoice_period = 'monthly'` (1..31). */
+  monthly_billing_date?: number | null;
+  /** Days after a task end_date to bill for `invoice_period = 'per_trial'`. */
+  per_trial_billing_days_after_end?: number | null;
+  /** Bible-required fiscal-year start (1..12). Defaults to 1 (Jan). */
+  fiscal_year_start_month?: number | null;
+  /** Annual revenue target — drives the RevenueTrend goal line. */
+  annual_revenue_target?: number | null;
 }
 
 export interface Tier1Value {
@@ -89,6 +102,44 @@ export interface Tier1Value {
 }
 
 const Tier1Context = createContext<Tier1Value | null>(null);
+
+/**
+ * Project the live company row (typed loosely via `CompanyRecord extends
+ * Record<string, unknown>`) into the strict Tier1Company shape, lifting
+ * the bible's billing fields onto top-level keys so consumers (e.g.
+ * dashboard widgets) don't reach into `unknown`.
+ */
+function buildTier1Company(
+  company: { id: string; name: string } & Record<string, unknown>,
+): Tier1Company {
+  const out: Tier1Company = {
+    id: company.id,
+    name: company.name,
+    theme: company.theme,
+    marketplace_fill_jobs: (company.marketplace_fill_jobs as boolean | undefined) ?? false,
+    marketplace_post_jobs: (company.marketplace_post_jobs as boolean | undefined) ?? false,
+  };
+  const ip = company.invoice_period;
+  if (ip === 'weekly' || ip === 'monthly' || ip === 'per_trial') {
+    out.invoice_period = ip;
+  }
+  if (typeof company.weekly_billing_day === 'string') {
+    out.weekly_billing_day = company.weekly_billing_day;
+  }
+  if (typeof company.monthly_billing_date === 'number') {
+    out.monthly_billing_date = company.monthly_billing_date;
+  }
+  if (typeof company.per_trial_billing_days_after_end === 'number') {
+    out.per_trial_billing_days_after_end = company.per_trial_billing_days_after_end;
+  }
+  if (typeof company.fiscal_year_start_month === 'number') {
+    out.fiscal_year_start_month = company.fiscal_year_start_month;
+  }
+  if (typeof company.annual_revenue_target === 'number') {
+    out.annual_revenue_target = company.annual_revenue_target;
+  }
+  return out;
+}
 
 export function Tier1Provider({ children }: PropsWithChildren) {
   const { user, isLoading: authLoading } = useAuth();
@@ -157,13 +208,7 @@ export function Tier1Provider({ children }: PropsWithChildren) {
       : null;
 
     const t1Company: Tier1Company | null = company
-      ? {
-          id: company.id,
-          name: company.name,
-          theme: company.theme,
-          marketplace_fill_jobs: company.marketplace_fill_jobs ?? false,
-          marketplace_post_jobs: company.marketplace_post_jobs ?? false,
-        }
+      ? buildTier1Company(company)
       : null;
 
     return {
