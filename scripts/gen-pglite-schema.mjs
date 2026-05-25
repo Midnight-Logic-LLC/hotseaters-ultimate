@@ -27,10 +27,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const CONFIG_PATH = join(REPO_ROOT, 'src/shared/db/sync-config.ts');
 const OUT_PATH = join(REPO_ROOT, 'src/shared/db/local-schema.sql');
-const MIGRATIONS_DIR = resolve(
-  REPO_ROOT,
-  '../latest-data/supabase/migrations'
-);
+// Resolve migrations dir — check CI layout (./latest-data inside repo) first,
+// then fall back to local dev layout (../latest-data as sibling).
+function findMigrationsDir(repoRoot) {
+  const candidates = [
+    resolve(repoRoot, 'latest-data/supabase/migrations'),   // CI: checked out inside repo
+    resolve(repoRoot, '../latest-data/supabase/migrations'), // local dev: sibling
+    resolve(repoRoot, '../../latest-data/supabase/migrations'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return candidates[0]; // let the later check produce the friendly error
+}
+const MIGRATIONS_DIR = findMigrationsDir(REPO_ROOT);
 
 // ── server type → PGlite column type ───────────────────────────────────────
 const TYPE_MAP = {
