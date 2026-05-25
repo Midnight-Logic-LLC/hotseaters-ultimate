@@ -373,6 +373,76 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm test:e2e
 
 ---
 
+## Updating the recharts fork
+
+We don't depend on the npm-published `recharts`; we depend on
+[`GQAdonis/recharts`](https://github.com/GQAdonis/recharts.git) via
+`"recharts": "github:GQAdonis/recharts#release"` in `package.json`.
+This gives us a fast loop when a recharts bug surfaces (mostly React 19
+ResponsiveContainer / ChartDataContextProvider quirks): patch `src/` on
+the fork, rebuild, push to `release`, `pnpm update recharts` in the app.
+
+### Branch layout
+
+- `main` — tracks upstream `recharts/recharts` main + our own commits.
+  Only `src/` is committed; build artifacts are gitignored exactly like
+  upstream.
+- `release` — snapshot branch. Force-pushed every time we want to
+  publish a new build. Carries `src/` PLUS `lib/`, `es6/`, `umd/`,
+  `types/` (the artifacts pnpm needs to install the package from git).
+
+### Publish a new release snapshot
+
+```bash
+cd /path/to/GQAdonis/recharts          # local clone of the fork
+
+# Land any source-level fix on main first, then:
+git checkout main
+git pull origin main
+npm install --no-audit --no-fund        # recharts ships npm scripts
+npm run build                           # cjs + es6 + umd + types
+
+# Move the build artifacts to the release branch
+git checkout -B release
+# Un-ignore the build dirs on this branch only:
+sed -i.bak -E '/^(umd|lib|es6|\/types)$/d' .gitignore && rm -f .gitignore.bak
+git add -f .gitignore lib es6 umd types
+git commit --no-verify -m "release: build artifacts from main @ $(git rev-parse --short main)"
+git push --no-verify -u origin release --force-with-lease
+```
+
+`--no-verify` bypasses the upstream husky `lint-staged` pre-commit /
+pre-push hooks, which would otherwise try to lint thousands of build
+artifacts and hang. The `release` branch is a snapshot, not history;
+force-push is the intended workflow.
+
+### Consume the new release in the app
+
+```bash
+cd /path/to/hotseaters-ultimate
+pnpm update recharts
+pnpm typecheck && pnpm test    # must stay green
+pnpm dev                       # smoke-test the dashboard
+```
+
+`pnpm-lock.yaml` records the exact commit SHA of the `release` branch
+tarball, so the install is reproducible across machines and CI.
+
+### Why a fork at all
+
+Upstream recharts has unfixed-on-npm bugs that bite us:
+
+- [#5489 — Infinite re-renders when container content changes (Alpha)](https://github.com/recharts/recharts/issues/5489)
+- [#6613 — `useActiveTooltipDataPoints` Maximum update depth (PR #6616 closed)](https://github.com/recharts/recharts/issues/6613)
+- [#6716 — ResponsiveContainer logs incorrect width(-1) warning](https://github.com/recharts/recharts/issues/6716)
+- [#5173 — ComposedChart + ResponsiveContainer minified React 19 displayName bug](https://github.com/recharts/recharts/issues/5173)
+
+When we hit one we either cherry-pick the merged-upstream fix onto
+`main` and re-publish, or land our own fix and (ideally) upstream it
+later.
+
+---
+
 ## Electric routing in dev + prod
 
 ### How shape streams reach Electric
