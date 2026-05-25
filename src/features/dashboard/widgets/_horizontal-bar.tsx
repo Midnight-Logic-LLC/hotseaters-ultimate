@@ -82,8 +82,8 @@ export function HorizontalBar<T extends HorizontalBarDatum>({
   height = '14rem',
 }: HorizontalBarProps<T>) {
   return (
-    <div style={{ width: '100%', height }}>
-      <ResponsiveContainer width="100%" height="100%">
+    <div style={{ width: '100%', height, minWidth: 0, minHeight: '14rem' }}>
+      <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
         <BarChart
           data={data}
           layout="vertical"

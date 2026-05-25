@@ -55,8 +55,8 @@ export function SalesPipelineChart() {
             No active sales deals
           </p>
         ) : (
-          <div style={{ width: '100%', height: '14rem' }}>
-            <ResponsiveContainer width="100%" height="100%">
+          <div style={{ width: '100%', height: '14rem', minWidth: 0, minHeight: '14rem' }}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
               <BarChart data={dealsByStage} margin={{ top: 16, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--theme-stone-200)" />
                 <XAxis

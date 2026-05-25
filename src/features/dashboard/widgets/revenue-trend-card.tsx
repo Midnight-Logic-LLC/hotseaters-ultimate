@@ -120,8 +120,8 @@ export function RevenueTrendCard() {
             style={{ height: '18rem', backgroundColor: 'var(--theme-stone-200)' }}
           />
         ) : (
-          <div style={{ width: '100%', height: '18rem' }}>
-            <ResponsiveContainer width="100%" height="100%">
+          <div style={{ width: '100%', height: '18rem', minWidth: 0, minHeight: '18rem' }}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
               <ComposedChart data={trend.data} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--theme-stone-200)" />
                 <XAxis
