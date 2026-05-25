@@ -25,6 +25,7 @@ import { CompanySettingsPage } from '@/features/company/pages/company-settings-p
 import { TeamPage } from '@/features/company/pages/team-page';
 import { LandingPage } from '@/features/landing/pages/landing-page';
 import { ApprovalsPage } from '@/features/approvals/pages/approvals-page';
+import { LastRouteTracker } from '@/app/last-route-tracker';
 
 // Register feature entity schemas at module load — idempotent.
 registerClientEntities();
@@ -85,7 +86,12 @@ function AuthGate() {
     return <Navigate to="/onboarding" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <LastRouteTracker />
+      <Outlet />
+    </>
+  );
 }
 
 export function AppRouter() {
@@ -122,6 +128,7 @@ export function AppRouter() {
         <Route element={<AppShell />}>
           <Route element={<AuthGate />}>
             <Route path="Dashboard" element={<DashboardPage />} />
+            <Route path="dashboard" element={<Navigate to="/Dashboard" replace />} />
 
             {/* Clients (Change 6) */}
             <Route

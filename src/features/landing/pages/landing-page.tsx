@@ -20,8 +20,8 @@
  *
  * HotSeatersMVP is the bible. Self-hosted Supabase only.
  */
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowDown,
@@ -52,6 +52,7 @@ import { Button } from '@/components/ui/button';
 import { AuthOptionsDialog } from '@/features/auth/components/auth-options-dialog';
 import { PolicyViewerModal } from '@/features/marketing/components/policy-viewer-modal';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
 import {
   buildGoogleFontsUrl,
   generateThemeCSS,
@@ -157,9 +158,87 @@ const RIPPLE_CSS = `
   }
 `;
 
+/**
+ * Auth skip-list — mirrors `<LastRouteTracker>` so a stale
+ * `preferences.lastViewedPage === 'Onboarding'` (or any other public page)
+ * does NOT route the user back into the public surface from Landing.
+ */
+const LAST_VIEWED_SKIP = new Set<string>([
+  'Landing',
+  'Onboarding',
+  'AcceptInvite',
+  'SignDocument',
+  'ViewDocument',
+  'PrivacyPolicy',
+  'TermsOfService',
+  'login',
+  'register',
+  'forgot-password',
+]);
+
+/**
+ * Bible branch table — `Layout.jsx:364-419`. Returns the destination path
+ * for an authenticated visitor on `/` or `/Landing`, or `null` if the
+ * visitor should remain on the marketing surface (still loading, etc.).
+ */
+function pickAuthedDestination(input: {
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  userInfo: { status: string | null; company_id: string | null; preferences: Record<string, unknown> | null } | null;
+  userInfoLoading: boolean;
+}): string | null {
+  if (input.isLoading) return null;
+  if (!input.isAuthenticated) return null;
+
+  // (1) Pending invitation token short-circuits every other branch.
+  let pendingToken: string | null = null;
+  try {
+    pendingToken = localStorage.getItem('pending_invitation_token');
+  } catch {
+    pendingToken = null;
+  }
+  if (pendingToken) {
+    try {
+      localStorage.removeItem('pending_invitation_token');
+    } catch {
+      /* private mode — non-fatal */
+    }
+    return `/AcceptInvite?token=${pendingToken}`;
+  }
+
+  // Wait for the userInfo row to resolve before evaluating the userInfo
+  // branches; otherwise we'd race the row in and bounce through /Onboarding.
+  if (input.userInfoLoading) return null;
+
+  // (2) No UserInfo row yet → Onboarding (will create it).
+  if (!input.userInfo) return '/Onboarding';
+
+  // (3) Inactive user — explicit account-rejected screen (do NOT silently
+  // reactivate; deactivation was a deliberate admin action).
+  if (input.userInfo.status === 'inactive') return '/account-rejected';
+
+  // (4) No company yet → Onboarding.
+  if (!input.userInfo.company_id) return '/Onboarding';
+
+  // (5) Last-viewed page restoration (skip the skip-list + Dashboard
+  // self-loop). Bible Layout.jsx:407-417.
+  const lastPage = input.userInfo.preferences?.['lastViewedPage'];
+  if (
+    typeof lastPage === 'string' &&
+    lastPage.length > 0 &&
+    lastPage !== 'Dashboard' &&
+    !LAST_VIEWED_SKIP.has(lastPage)
+  ) {
+    return `/${lastPage}`;
+  }
+
+  // (6) Default → /Dashboard.
+  return '/Dashboard';
+}
+
 export function LandingPage() {
-  const { isLoading, isAuthenticated, companyId } = useAuth();
-  const navigate = useNavigate();
+  const { isLoading, isAuthenticated } = useAuth();
+  const { userInfo, isLoading: userInfoLoading } = useCurrentUser();
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authDialogRedirect, setAuthDialogRedirect] = useState('/Dashboard');
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
@@ -168,29 +247,18 @@ export function LandingPage() {
     title: string;
   }>({ type: 'privacy', title: 'Privacy Policy' });
 
-  // Bible auth-aware redirect (Landing.jsx lines 26-44).
-  useEffect(() => {
-    if (isLoading) return;
-    if (!isAuthenticated) return;
-
-    let pendingToken: string | null = null;
-    try {
-      pendingToken = localStorage.getItem('pending_invitation_token');
-    } catch {
-      pendingToken = null;
-    }
-    if (pendingToken) {
-      navigate(`/AcceptInvite?token=${pendingToken}`, { replace: true });
-      return;
-    }
-
-    if (!companyId) {
-      navigate('/Onboarding', { replace: true });
-      return;
-    }
-
-    navigate('/Dashboard', { replace: true });
-  }, [isLoading, isAuthenticated, companyId, navigate]);
+  const destination = pickAuthedDestination({
+    isLoading,
+    isAuthenticated,
+    userInfo: userInfo
+      ? {
+          status: userInfo.status,
+          company_id: userInfo.company_id,
+          preferences: (userInfo.preferences as Record<string, unknown> | null) ?? null,
+        }
+      : null,
+    userInfoLoading,
+  });
 
   const handleLogin = () => {
     setAuthDialogRedirect('/Dashboard');
@@ -202,7 +270,12 @@ export function LandingPage() {
     setAuthDialogOpen(true);
   };
 
-  // Bible: authenticated branch returns null while redirect resolves.
+  if (destination) {
+    return <Navigate to={destination} replace />;
+  }
+
+  // Authenticated but waiting on userInfo — render nothing rather than
+  // flashing the marketing surface.
   if (isAuthenticated) return null;
 
   const googleFontsUrl = buildGoogleFontsUrl();
