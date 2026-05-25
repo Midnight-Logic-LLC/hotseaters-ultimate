@@ -1,11 +1,25 @@
 {
   "phase": "dashboard-and-data-architecture-parity",
   "project": "hotseaters-ultimate",
-  "status": "execution_complete",
+  "status": "complete",
   "assessment_complete": true,
   "plan_complete": true,
   "execution_complete": true,
-  "reflection_complete": false,
+  "reflection_complete": true,
+  "reflected_at": "2026-05-25",
+  "archived_changes": [
+    "openspec/changes/archive/2026-05-25-change-401-routing-redirect-last-route/",
+    "openspec/changes/archive/2026-05-25-change-402-app-shell-dashboard-parity/",
+    "openspec/changes/archive/2026-05-25-change-403-per-user-pglite-sync-policy/",
+    "openspec/changes/archive/2026-05-25-change-404-lookup-entities-wiring/"
+  ],
+  "created_specs": [
+    "openspec/specs/auth-routing/spec.md",
+    "openspec/specs/app-shell/spec.md",
+    "openspec/specs/dashboard/spec.md",
+    "openspec/specs/local-first-sync/spec.md",
+    "openspec/specs/lookups/spec.md"
+  ],
   "change_backend": "openspec",
   "assessment_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/assessment.md",
   "plan_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/plan.md",
