@@ -19,18 +19,19 @@
 import { openForUser, type LocalDB } from './pglite-client';
 
 const ELECTRIC_URL = import.meta.env.VITE_ELECTRIC_URL;
-const LOCAL_BROWSER_ORIGIN =
-  typeof window !== 'undefined' &&
-  import.meta.env.DEV &&
-  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(window.location.origin)
-    ? window.location.origin
-    : null;
+const ELECTRIC_SECRET = import.meta.env.VITE_ELECTRIC_SECRET;
 
 if (!ELECTRIC_URL) {
   throw new Error(
-    'Missing VITE_ELECTRIC_URL — set it to the local docker-compose Electric ' +
-      '(http://localhost:3133) or the self-hosted endpoint ' +
-      'https://electricsql.prometheusags.ai (RULE 1).',
+    'Missing VITE_ELECTRIC_URL — set it to the local docker-compose Envoy ' +
+      '(http://localhost:8000) or the self-hosted endpoint ' +
+      'https://hotbase.prometheusags.ai (RULE 1).',
+  );
+}
+
+if (!ELECTRIC_SECRET) {
+  throw new Error(
+    'Missing VITE_ELECTRIC_SECRET — see electric-sync.ts for the auth model.',
   );
 }
 
@@ -81,10 +82,11 @@ async function attachSystemShape(
 ): Promise<() => Promise<void> | void> {
   const sub = await db.electric.syncShapeToTable({
     shape: {
-      url: `${LOCAL_BROWSER_ORIGIN ?? ELECTRIC_URL}/v1/shape`,
+      url: `${ELECTRIC_URL}/v1/shape`,
       params: {
         table: tableName,
         where,
+        secret: ELECTRIC_SECRET,
       },
     },
     table: `${tableName}_synced`,

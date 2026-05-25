@@ -373,41 +373,67 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm test:e2e
 
 ---
 
-## Electric HTTP/1.1 connection limit in dev
+## Electric routing in dev + prod
 
-### Symptom
+### How shape streams reach Electric
 
-Browser console emits a warning like:
+Browser → Envoy → Electric. The browser hits
+`$VITE_ELECTRIC_URL/v1/shape` (which is the same Envoy host:port as
+`$VITE_SUPABASE_URL` — `http://localhost:8000` in dev,
+`https://hotbase.prometheusags.ai` in prod). Envoy has a dedicated route
+for `/v1/shape` that forwards to the Electric upstream (`electric:3000`
+inside the docker network) and inherits the host-level wide-open CORS
+block, so cross-origin XHRs from any dev origin work.
 
-```
-[Electric] Browser HTTP/1.1 connection cap reached — additional shape
-subscriptions will queue until existing ones close.
-```
+The Envoy route is configured in
+`latest-data/volumes/api/envoy/lds.template.yaml` (search for
+`electric-v1-shape`) plus the `electric` cluster in
+`latest-data/volumes/api/envoy/cds.yaml`. Both basic_auth and RBAC are
+explicitly disabled / set to ALLOW at the route level — Electric does
+its own auth.
 
-…once the dashboard mounts ~6 simultaneous shape subscriptions (one per
-synced entity per visible widget). Subsequent shapes still hydrate, but
-serialised behind the first six.
+### Auth
 
-### Cause
+Electric is gated by a shared API key sent as `?secret=…` on every
+shape request. The app reads it from `VITE_ELECTRIC_SECRET` (yes, the
+`VITE_` prefix is intentional — it ships in the browser bundle) and the
+key in `hotseaters-ultimate/.env` must equal `ELECTRIC_SECRET` in
+`latest-data/.env`.
 
-Browsers cap concurrent HTTP/1.1 connections at ~6 per origin. Plain-HTTP
-Electric (`http://localhost:13000`) can't multiplex shape streams across
-a single TCP connection — each shape needs its own. The dev docker-compose
-stack serves Electric over HTTP/1.1.
+### Threat model
 
-### Fix in production
+The shared secret only gates *shape access*; per-tenant scope is
+enforced independently by Postgres RLS at the upstream. A leaked
+client-side secret would let an attacker request shape streams, but
+RLS would still return only the rows the JWT identity is allowed to
+see — and unscoped shapes are refused at attach time by
+`createTenantScopedElectricAdapter` (RULE 5).
 
-Front Electric with an HTTPS-terminating proxy (Caddy / nginx / Envoy)
-that speaks HTTP/2 to the browser. HTTP/2 multiplexes any number of shape
-streams over a single connection. `https://electricsql.prometheusags.ai`
-already does this — no app-level change.
+### HTTP/1.1 connection cap (cosmetic warning)
 
-### Workaround in dev
+Browsers cap concurrent HTTP/1.1 connections at ~6 per origin. With
+~10+ shapes mounting at once on first dashboard load, the
+Electric-client logs a warning that excess shapes queue behind the
+first six. Hydration still completes within ~1s; visible to the user
+only as a brief flash of skeletons. Prod fix is HTTP/2 termination at
+the Envoy ingress (already in place on
+`hotbase.prometheusags.ai`); the local docker-compose stack is
+HTTP/1.1 and the warning is expected.
 
-None required. The warning is cosmetic; everything still hydrates in
-sequence within ~1 s of mount. If it ever feels slow in dev, run
-`docker compose up` with an HTTPS-terminating reverse proxy in front of
-Electric on the local stack.
+### Common failure modes
+
+- `401 Unauthorized` on every `/v1/shape` request → `VITE_ELECTRIC_SECRET`
+  doesn't match `ELECTRIC_SECRET` in `latest-data/.env`. Both must be
+  the *same string*; refresh dev after editing `.env`.
+- `CORS policy: No 'Access-Control-Allow-Origin' header` →
+  `VITE_ELECTRIC_URL` is pointing at the raw Electric port (e.g.
+  `http://localhost:13000`) instead of the Envoy gateway
+  (`http://localhost:8000`). Electric itself does NOT ship CORS
+  headers; Envoy does. Fix the env var, refresh.
+- `404 not found` on `/v1/shape` from Envoy → the
+  `electric-v1-shape` route or `electric` cluster is missing from
+  `lds.template.yaml` / `cds.yaml`. Restart with
+  `docker compose -f .../latest-data/docker-compose.yaml up -d --force-recreate api-gw`.
 
 ---
 

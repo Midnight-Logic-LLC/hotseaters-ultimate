@@ -24,6 +24,13 @@ import { SYNC_CONFIG } from './sync-config';
  * Self-hosted Supabase only. The module refuses to load against any URL
  * matching `*.supabase.co` (RULE 1).
  *
+ * Routing + auth: the browser hits `${VITE_ELECTRIC_URL}/v1/shape` which is
+ * the Envoy gateway (same host:port as `VITE_SUPABASE_URL`). Envoy forwards
+ * to the Electric upstream. Auth is a shared API key in the query string —
+ * `?secret=$VITE_ELECTRIC_SECRET` — that Electric validates on every shape
+ * request. Tenant scope is enforced separately by Postgres RLS, independent
+ * of the secret. See docs/RUNBOOKS.md "Electric routing in dev + prod".
+ *
  * Load-once-on-login: the first login for a tenant runs full hydration —
  * `startTenantSync` awaits every shape's `onInitialSync` before resolving and
  * the caller stamps `_sync_meta.hydrated_at`. Subsequent logins resume
@@ -31,13 +38,22 @@ import { SYNC_CONFIG } from './sync-config';
  */
 
 const ELECTRIC_URL = import.meta.env.VITE_ELECTRIC_URL;
+const ELECTRIC_SECRET = import.meta.env.VITE_ELECTRIC_SECRET;
 const INITIAL_SYNC_TIMEOUT_MS = 8_000;
 
 if (!ELECTRIC_URL) {
   throw new Error(
-    'Missing VITE_ELECTRIC_URL — set it to the local docker-compose Electric ' +
-      '(http://localhost:3133) or the self-hosted endpoint ' +
-      'https://electricsql.prometheusags.ai (RULE 1).',
+    'Missing VITE_ELECTRIC_URL — set it to the local docker-compose Envoy ' +
+      '(http://localhost:8000) or the self-hosted endpoint ' +
+      'https://hotbase.prometheusags.ai (RULE 1).',
+  );
+}
+
+if (!ELECTRIC_SECRET) {
+  throw new Error(
+    'Missing VITE_ELECTRIC_SECRET — must match ELECTRIC_SECRET in ' +
+      'latest-data/.env. The browser sends it as ?secret=… on every ' +
+      'shape request; Postgres RLS still enforces per-tenant scope.',
   );
 }
 
@@ -204,6 +220,9 @@ async function attachShape(
       params: {
         table: opts.tableName,
         where: opts.where,
+        // Shared API key — Electric validates this on every shape request.
+        // See file-header comment for the auth model.
+        secret: ELECTRIC_SECRET,
       },
     },
     table: opts.syncedTable,
