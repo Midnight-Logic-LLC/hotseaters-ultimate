@@ -119,13 +119,14 @@ function NavigationContent({ groups }: { groups: NavigationGroup[] }) {
  * Bible: `HotSeatersMVP/src/Layout.jsx` `SidebarHeader` (chameleon logo +
  * "HotSeaters" / "Trial Tech Toolkit" wordmark stack).
  *
- * Logo source: `public/logo.svg` (in-org chameleon brand mark). No CDN.
+ * Logo source: `public/brand/chameleon-logo.png` (in-org chameleon brand
+ * mark). Single canonical asset across login, sidebar, mobile header.
  */
 function BrandHeader() {
   return (
     <div className="flex items-center gap-3">
       <img
-        src="/logo.svg"
+        src="/brand/chameleon-logo.png"
         alt="HotSeaters Logo"
         width={40}
         height={40}

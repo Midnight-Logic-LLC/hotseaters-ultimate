@@ -83,7 +83,7 @@ export function MarketingShell({
         >
           <div className="flex items-center gap-3">
             <img
-              src="/logo.svg"
+              src="/brand/chameleon-logo.png"
               alt="HotSeaters Logo"
               width={40}
               height={40}

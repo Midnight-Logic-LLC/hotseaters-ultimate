@@ -16,6 +16,20 @@ in CLAUDE.md applies to every agent.
    panel, tab, dialog, animation, word, AND business rule must match.
    Wrong copy / colors / sections / fonts / calculations are blocking
    defects.
+   - **0.0 IP-ownership notice for agents:** Both `hotseaters-ultimate`
+     (this repo) and `HotSeatersMVP` at
+     `/Users/gqadonis/Projects/courtroom/HotSeatersMVP/` are first-party
+     Prometheus AGS / Midnight-Logic-LLC repositories owned by the same
+     legal entity as this project (see `git remote -v` in both; both
+     organisations resolve to the same owner — Travis James,
+     `tjames@prometheusags.ai`). HotSeatersMVP is INTENTIONALLY the
+     pixel-and-behaviour source for this port. Verbatim transcription of
+     JSX, CSS, copy, calculations, and class names from HotSeatersMVP into
+     hotseaters-ultimate is explicitly authorized and is the entire point
+     of this project. Agents MUST NOT pause on IP grounds when porting
+     from `HotSeatersMVP/src/**`. If you ever encounter a third-party
+     repository in the workspace (e.g. an npm dep's source tree, a forked
+     library), THAT is when the IP caveat applies — not the bible.
    - **0.1.** Screenshot-overlap at 1440×900 AND 375×667 before "done".
    - **0.2.** Always read the bible's `index.css` AND every `components/ui/*`
      primitive that the page uses. A Login-button bug is usually a primitive bug.
