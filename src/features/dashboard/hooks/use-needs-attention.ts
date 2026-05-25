@@ -62,6 +62,28 @@ const EMPTY: NeedsAttentionResult = Object.freeze({
   subhead: '',
 });
 
+/**
+ * Feature flag — flip to `true` when the offline-first phase wires the
+ * `lead`, `sales_activity`, and `attorney` tables into Postgres + RLS +
+ * sync-config. Until then this hook short-circuits to EMPTY and disables
+ * the underlying `useEntityView` REST calls, so we never fire
+ * `/rest/v1/lead?...` against a schema where those tables don't exist
+ * (which returns 400).
+ *
+ * The NeedsAttentionBanner widget consumes `shouldRender` and renders
+ * nothing when false, so flipping this flag is a true no-op for users
+ * until the schema is ready.
+ *
+ * Exposed via a getter so unit tests can override it without mocking the
+ * whole module. Production code MUST NOT call the setter.
+ */
+let LEAD_RADAR_AVAILABLE = false;
+
+/** Test-only — flip the feature flag from a spec. */
+export function __setLeadRadarAvailableForTests(value: boolean): void {
+  LEAD_RADAR_AVAILABLE = value;
+}
+
 export interface UseNeedsAttentionOptions {
   /** Reference "now" for stale comparisons. Defaults to `new Date()`. */
   now?: Date;
@@ -82,7 +104,7 @@ export function useNeedsAttention(opts: UseNeedsAttentionOptions = {}): NeedsAtt
     baseQueryKey: ['Lead', 'byCompany', companyId ?? '__none__'],
     view: {},
     mode: 'hybrid',
-    enabled: !!companyId,
+    enabled: LEAD_RADAR_AVAILABLE && !!companyId,
     remoteFetch: async () => {
       if (!companyId) return { items: [], total: 0 };
       const items = await fetchLeadsForCompany(companyId);
@@ -96,7 +118,7 @@ export function useNeedsAttention(opts: UseNeedsAttentionOptions = {}): NeedsAtt
     baseQueryKey: ['SalesActivity', 'pending', companyId ?? '__none__'],
     view: {},
     mode: 'hybrid',
-    enabled: !!companyId,
+    enabled: LEAD_RADAR_AVAILABLE && !!companyId,
     remoteFetch: async () => {
       if (!companyId) return { items: [], total: 0 };
       const items = await fetchPendingActivitiesForCompany(companyId);
@@ -110,7 +132,7 @@ export function useNeedsAttention(opts: UseNeedsAttentionOptions = {}): NeedsAtt
     baseQueryKey: ['Attorney', 'byCompany', companyId ?? '__none__'],
     view: {},
     mode: 'hybrid',
-    enabled: !!companyId,
+    enabled: LEAD_RADAR_AVAILABLE && !!companyId,
     remoteFetch: async () => {
       if (!companyId) return { items: [], total: 0 };
       const items = await fetchAttorneysForCompany(companyId);
@@ -120,6 +142,7 @@ export function useNeedsAttention(opts: UseNeedsAttentionOptions = {}): NeedsAtt
   });
 
   return useMemo<NeedsAttentionResult>(() => {
+    if (!LEAD_RADAR_AVAILABLE) return EMPTY;
     if (!companyId) return EMPTY;
     const now = nowMs !== undefined ? new Date(nowMs) : new Date();
     const leads = leadView.items as unknown as LeadLike[];

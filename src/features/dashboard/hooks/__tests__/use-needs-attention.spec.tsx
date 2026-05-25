@@ -24,7 +24,10 @@ vi.mock('@/features/lead-radar/stores/lead-radar-store', () => ({
   fetchAttorneysForCompany: (...args: unknown[]) => mockFetchAttorneys(...args),
 }));
 
-import { useNeedsAttention } from '../use-needs-attention';
+import {
+  useNeedsAttention,
+  __setLeadRadarAvailableForTests,
+} from '../use-needs-attention';
 
 function resetGraphStore(): void {
   useGraphStore.setState({ entities: {}, patches: {}, lists: {}, entityStates: {} });
@@ -35,6 +38,9 @@ const tier1 = { company: { id: 'co', name: 'Co' } };
 
 beforeEach(() => {
   resetGraphStore();
+  // Enable the lead-radar feature flag for the spec; production default is
+  // false until the `lead` / `sales_activity` / `attorney` tables exist.
+  __setLeadRadarAvailableForTests(true);
   mockUseTier1.mockImplementation(() => tier1);
   mockUseCurrentUser.mockReturnValue({
     userInfo: { id: 'me' },
