@@ -45,7 +45,7 @@ export type LocalDB = PGliteWorker &
  * stamps the latest supabase migration's timestamp prefix; whenever you
  * regenerate the SQL you also bump this constant.
  */
-export const BUNDLED_PGLITE_SCHEMA_VERSION = '20260523000018';
+export const BUNDLED_PGLITE_SCHEMA_VERSION = '20260525000004';
 
 export interface LocalDBBootResult {
   db: LocalDB;
@@ -126,9 +126,13 @@ async function createLocalDBForUser(userId: string): Promise<LocalDBBootResult> 
 
   if (previousVersion !== null && previousVersion !== BUNDLED_PGLITE_SCHEMA_VERSION) {
     await dropTierATables(db);
-    // Stamp the new version. Table definitions are already current because
-    // exec(schemaUserSql) above ran all `IF NOT EXISTS` clauses; the dropped
-    // data simply re-hydrates from Electric.
+    // Re-apply both schemas now that the old tables are gone. IF NOT EXISTS
+    // clauses make this idempotent for tables that survived (e.g. the version
+    // table itself). This recreates local_writes, *_synced, and *_local with
+    // the current column set before any Electric inserts can fire.
+    await db.exec(schemaCommonSql);
+    await db.exec(schemaUserSql);
+    // Stamp the new version.
     await db.query(
       `UPDATE _pglite_schema_version SET version = $1 WHERE id = 1`,
       [BUNDLED_PGLITE_SCHEMA_VERSION],
@@ -148,12 +152,18 @@ async function createLocalDBForUser(userId: string): Promise<LocalDBBootResult> 
   };
 }
 
-/** Drop synced + local rows for every Tier-A entity. */
+/** Drop and recreate synced + local tables for every Tier-A entity. */
 async function dropTierATables(db: LocalDB): Promise<void> {
   const syncedTables = EMIT_ORDER.map((e) => `${e}_synced`);
   const localTables = EMIT_ORDER.map((e) => `${e}_local`);
-  const all = [...syncedTables, ...localTables, 'local_writes'].join(', ');
-  await db.exec(`TRUNCATE ${all} RESTART IDENTITY;`);
+  // Drop in reverse FK order (local first, then synced, then local_writes).
+  // Use CASCADE to handle any view/trigger dependencies.
+  const dropStatements = [
+    ...localTables.map((t) => `DROP TABLE IF EXISTS ${t} CASCADE;`),
+    ...syncedTables.map((t) => `DROP TABLE IF EXISTS ${t} CASCADE;`),
+    `DROP TABLE IF EXISTS local_writes CASCADE;`,
+  ].join('\n');
+  await db.exec(dropStatements);
 }
 
 // ─── Backwards-compat alias ──────────────────────────────────────────────────

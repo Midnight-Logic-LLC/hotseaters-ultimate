@@ -186,7 +186,11 @@ CREATE TABLE IF NOT EXISTS user_info_synced (
   updated_at                   TEXT,
   is_sample                    TEXT,
   created_by_id                TEXT,
-  created_by                   TEXT
+  created_by                   TEXT,
+  auth_user_id                 TEXT,
+  email                        TEXT,
+  account_status               TEXT,
+  preferences                  JSONB
 );
 
 CREATE TABLE IF NOT EXISTS user_info_local (
@@ -215,6 +219,10 @@ CREATE TABLE IF NOT EXISTS user_info_local (
   is_sample                    TEXT,
   created_by_id                TEXT,
   created_by                   TEXT,
+  auth_user_id                 TEXT,
+  email                        TEXT,
+  account_status               TEXT,
+  preferences                  JSONB,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false
 );
 
@@ -222,14 +230,14 @@ CREATE OR REPLACE VIEW user_info AS
   SELECT s.* FROM user_info_synced s
   WHERE NOT EXISTS (SELECT 1 FROM user_info_local l WHERE l.id = s.id)
   UNION ALL
-  SELECT l.id, l.legacy_id, l.first_name, l.last_name, l.title, l.phone, l.profile_photo, l.signature_image, l.notes, l.company_id, l.company_role, l.user_id, l.status, l.consultant_tier_id, l.is_sales, l.hsh_location, l.hsh_rating, l.hsh_reviews_count, l.hsh_skills, l.hsh_profile_description, l.created_at, l.updated_at, l.is_sample, l.created_by_id, l.created_by
+  SELECT l.id, l.legacy_id, l.first_name, l.last_name, l.title, l.phone, l.profile_photo, l.signature_image, l.notes, l.company_id, l.company_role, l.user_id, l.status, l.consultant_tier_id, l.is_sales, l.hsh_location, l.hsh_rating, l.hsh_reviews_count, l.hsh_skills, l.hsh_profile_description, l.created_at, l.updated_at, l.is_sample, l.created_by_id, l.created_by, l.auth_user_id, l.email, l.account_status, l.preferences
   FROM user_info_local l
   WHERE NOT l.is_deleted;
 
 CREATE OR REPLACE FUNCTION user_info_insert() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO user_info_local (id, legacy_id, first_name, last_name, title, phone, profile_photo, signature_image, notes, company_id, company_role, user_id, status, consultant_tier_id, is_sales, hsh_location, hsh_rating, hsh_reviews_count, hsh_skills, hsh_profile_description, created_at, updated_at, is_sample, created_by_id, created_by)
-  VALUES (COALESCE(NEW.id, gen_random_uuid()::text), NEW.legacy_id, NEW.first_name, NEW.last_name, NEW.title, NEW.phone, NEW.profile_photo, NEW.signature_image, NEW.notes, NEW.company_id, NEW.company_role, NEW.user_id, NEW.status, NEW.consultant_tier_id, NEW.is_sales, NEW.hsh_location, NEW.hsh_rating, NEW.hsh_reviews_count, NEW.hsh_skills, NEW.hsh_profile_description, NEW.created_at, NEW.updated_at, NEW.is_sample, NEW.created_by_id, NEW.created_by);
+  INSERT INTO user_info_local (id, legacy_id, first_name, last_name, title, phone, profile_photo, signature_image, notes, company_id, company_role, user_id, status, consultant_tier_id, is_sales, hsh_location, hsh_rating, hsh_reviews_count, hsh_skills, hsh_profile_description, created_at, updated_at, is_sample, created_by_id, created_by, auth_user_id, email, account_status, preferences)
+  VALUES (COALESCE(NEW.id, gen_random_uuid()::text), NEW.legacy_id, NEW.first_name, NEW.last_name, NEW.title, NEW.phone, NEW.profile_photo, NEW.signature_image, NEW.notes, NEW.company_id, NEW.company_role, NEW.user_id, NEW.status, NEW.consultant_tier_id, NEW.is_sales, NEW.hsh_location, NEW.hsh_rating, NEW.hsh_reviews_count, NEW.hsh_skills, NEW.hsh_profile_description, NEW.created_at, NEW.updated_at, NEW.is_sample, NEW.created_by_id, NEW.created_by, NEW.auth_user_id, NEW.email, NEW.account_status, NEW.preferences);
   INSERT INTO local_writes (entity, operation, row_id, payload)
   VALUES ('user_info', 'insert', NEW.id, to_jsonb(NEW));
   PERFORM pg_notify('local_write', 'user_info');
@@ -239,8 +247,8 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION user_info_update() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO user_info_local (id, legacy_id, first_name, last_name, title, phone, profile_photo, signature_image, notes, company_id, company_role, user_id, status, consultant_tier_id, is_sales, hsh_location, hsh_rating, hsh_reviews_count, hsh_skills, hsh_profile_description, created_at, updated_at, is_sample, created_by_id, created_by)
-  VALUES (NEW.id, NEW.legacy_id, NEW.first_name, NEW.last_name, NEW.title, NEW.phone, NEW.profile_photo, NEW.signature_image, NEW.notes, NEW.company_id, NEW.company_role, NEW.user_id, NEW.status, NEW.consultant_tier_id, NEW.is_sales, NEW.hsh_location, NEW.hsh_rating, NEW.hsh_reviews_count, NEW.hsh_skills, NEW.hsh_profile_description, NEW.created_at, NEW.updated_at, NEW.is_sample, NEW.created_by_id, NEW.created_by)
+  INSERT INTO user_info_local (id, legacy_id, first_name, last_name, title, phone, profile_photo, signature_image, notes, company_id, company_role, user_id, status, consultant_tier_id, is_sales, hsh_location, hsh_rating, hsh_reviews_count, hsh_skills, hsh_profile_description, created_at, updated_at, is_sample, created_by_id, created_by, auth_user_id, email, account_status, preferences)
+  VALUES (NEW.id, NEW.legacy_id, NEW.first_name, NEW.last_name, NEW.title, NEW.phone, NEW.profile_photo, NEW.signature_image, NEW.notes, NEW.company_id, NEW.company_role, NEW.user_id, NEW.status, NEW.consultant_tier_id, NEW.is_sales, NEW.hsh_location, NEW.hsh_rating, NEW.hsh_reviews_count, NEW.hsh_skills, NEW.hsh_profile_description, NEW.created_at, NEW.updated_at, NEW.is_sample, NEW.created_by_id, NEW.created_by, NEW.auth_user_id, NEW.email, NEW.account_status, NEW.preferences)
   ON CONFLICT (id) DO UPDATE SET
     legacy_id = EXCLUDED.legacy_id,
     first_name = EXCLUDED.first_name,
@@ -265,6 +273,10 @@ BEGIN
     is_sample = EXCLUDED.is_sample,
     created_by_id = EXCLUDED.created_by_id,
     created_by = EXCLUDED.created_by,
+    auth_user_id = EXCLUDED.auth_user_id,
+    email = EXCLUDED.email,
+    account_status = EXCLUDED.account_status,
+    preferences = EXCLUDED.preferences,
     is_deleted = false;
   INSERT INTO local_writes (entity, operation, row_id, payload)
   VALUES ('user_info', 'update', NEW.id, to_jsonb(NEW));

@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS _pglite_schema_version (
 );
 
 INSERT INTO _pglite_schema_version (id, version)
-  VALUES (1, '20260523000019')
+  VALUES (1, '20260525000004')
   ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version;
 
 CREATE TABLE IF NOT EXISTS _sync_meta (
