@@ -2,6 +2,8 @@ import type { Provider, Session, User } from '@supabase/supabase-js';
 import { create } from 'zustand';
 
 import { supabase } from './supabase-client';
+import { closeForUser } from './pglite-client';
+import { resetGraph } from '../stores/graph-reset';
 
 /**
  * auth-session.ts — Zustand store wrapping `supabase.auth`.
@@ -86,8 +88,16 @@ export const useAuthSession = create<AuthSessionState>((set, get) => ({
   },
 
   async signOut() {
+    // Capture user id BEFORE clearing session so we can close their PGlite db.
+    const previousUserId = get().user?.id ?? null;
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    // Close the per-user PGlite instance and reset the entity graph so a
+    // new sign-in (potentially a different user) starts with a clean slate.
+    if (previousUserId) {
+      await closeForUser(previousUserId);
+    }
+    resetGraph();
     // onAuthStateChange will null-out session; we proactively reset state.
     set({
       session: null,

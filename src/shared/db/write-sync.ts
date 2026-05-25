@@ -1,4 +1,4 @@
-import { getLocalDB } from './pglite-client';
+import { openForUser } from './pglite-client';
 import { supabase } from './supabase-client';
 
 /**
@@ -29,9 +29,14 @@ interface PendingWrite {
 
 let started = false;
 
-/** Begin draining the local write log. Idempotent — safe to call once. */
-export async function startWriteSync(): Promise<() => Promise<void>> {
-  const db = await getLocalDB();
+/**
+ * Begin draining the local write log. Idempotent — safe to call once.
+ *
+ * @param userId the signed-in user's auth UUID, used to retrieve the
+ *   per-user PGlite instance (change-403: no global singleton).
+ */
+export async function startWriteSync(userId: string): Promise<() => Promise<void>> {
+  const { db } = await openForUser(userId);
 
   const drain = async (): Promise<void> => {
     const { rows } = await db.query<PendingWrite>(

@@ -24,6 +24,7 @@
 import { supabase } from '@/shared/db/supabase-client';
 import { useAuthSession } from '@/shared/db/auth-session';
 import { AUTH_FEATURE_ENTITY_SCHEMAS } from '@/features/auth/entities';
+import { openForUser } from '@/shared/db/pglite-client';
 
 import { registerEntityJsonSchema } from '@prometheus-ags/prometheus-entity-management';
 
@@ -76,9 +77,14 @@ export function consumeOAuthIntent(): OAuthIntent | null {
 // in auth-session.ts propagates the resulting session into the store.
 
 export async function signInWithPassword(email: string, password: string): Promise<void> {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error, data } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
   await useAuthSession.getState().refreshClaims();
+  // Boot (or return cached) per-user PGlite after successful sign-in so the
+  // local database is ready before the first sync gate render.
+  if (data.session?.user.id) {
+    void openForUser(data.session.user.id);
+  }
 }
 
 export async function signUpWithPassword(email: string, password: string): Promise<void> {
@@ -100,7 +106,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
 
 // ─── OAuth code exchange (SPA flow per plan §0.9 / risk row) ───────────────
 export async function exchangeOAuthCode(code: string): Promise<void> {
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { error, data } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     // PKCE race: `detectSessionInUrl: true` in the Supabase client means the
     // SDK may have already consumed the `?code` query param and stored the
@@ -116,6 +122,12 @@ export async function exchangeOAuthCode(code: string): Promise<void> {
     if (!raced) throw error;
   }
   await useAuthSession.getState().refreshClaims();
+  // Boot per-user PGlite after OAuth code exchange so the local database is
+  // ready before the first sync gate render.
+  const session = data?.session ?? (await supabase.auth.getSession()).data.session;
+  if (session?.user.id) {
+    void openForUser(session.user.id);
+  }
 }
 
 // ─── Invitation lookup ────────────────────────────────────────────────────

@@ -559,6 +559,7 @@ See `docs/FEATURE-TEMPLATE.md` (Change 12). In short:
 - **How do I rotate a key / regenerate types / debug sync?** → [`docs/RUNBOOKS.md`](./docs/RUNBOOKS.md)
 - **Where does X live in the tree?** → [`docs/CODEMAP.md`](./docs/CODEMAP.md)
 - **Should this UI / behavior look like this?** → the bible (HotSeatersMVP).
+- Sync domain split: see [docs/architecture/sync-policy.md](docs/architecture/sync-policy.md)
 
 ## Reference
 

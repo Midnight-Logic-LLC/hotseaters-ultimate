@@ -3,7 +3,7 @@ import {
   type TenantScopedTableConfig,
 } from '@prometheus-ags/prometheus-entity-management';
 
-import { getLocalDB, type LocalDB } from './pglite-client';
+import { openForUser, type LocalDB } from './pglite-client';
 import { SYNC_CONFIG } from './sync-config';
 
 /**
@@ -69,6 +69,8 @@ interface ShapeSubscription {
 /**
  * Start syncing all Tier-A shapes for one tenant.
  *
+ * @param userId   the signed-in user's auth UUID — used to obtain the per-user
+ *   PGlite instance (change-403: no global singleton).
  * @param companyId tenant scope from the signed-in user's JWT claims. Refused
  *   if empty/non-UUID — shapes must be tenant-scoped (RULE 5).
  * @param awaitInitialSync when true (first login), await every shape's first
@@ -76,16 +78,22 @@ interface ShapeSubscription {
  *   data" and then stamp `_sync_meta`.
  */
 export async function startTenantSync(
+  userId: string,
   companyId: string,
   awaitInitialSync: boolean,
 ): Promise<TenantSyncResult> {
+  if (!userId) {
+    throw new Error(
+      'startTenantSync requires a userId (change-403: per-user PGlite isolation).',
+    );
+  }
   if (!companyId) {
     throw new Error(
       'startTenantSync requires a companyId — shapes must be tenant-scoped (RULE 5).',
     );
   }
 
-  const db = await getLocalDB();
+  const { db } = await openForUser(userId);
 
   // ── Build TenantScopedTableConfig array ────────────────────────────────
   // The factory does the real work: it calls `syncShapeToTable` to land rows

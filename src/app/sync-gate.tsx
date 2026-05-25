@@ -16,7 +16,7 @@ import {
   type TenantSyncResult,
 } from '@/shared/db/electric-sync';
 import {
-  bootLocalDB,
+  openForUser,
   clearLocalTenantData,
   getSyncMeta,
   markHydrated,
@@ -28,7 +28,7 @@ import { startWriteSync } from '@/shared/db/write-sync';
  *
  * Lives at the app root (RULE 3 invariant 4). Composes:
  *
- *   1. The PGlite boot (`bootLocalDB`) — also surfaces `didMigrate`.
+ *   1. Per-user PGlite boot (`openForUser`) — also surfaces `didMigrate`.
  *   2. The Electric tenant sync (`startTenantSync`).
  *   3. The write-path drain (`startWriteSync`).
  *   4. The entity-graph local-first runtime (`bootstrapEntityGraph`).
@@ -49,6 +49,7 @@ import { startWriteSync } from '@/shared/db/write-sync';
  *
  * Sign-out:
  *   Stops sync, disposes the graph runtime, clears local data.
+ *   `closeForUser` + `resetGraph` are called by `auth-session.ts → signOut`.
  */
 
 type Phase = 'idle' | 'hydrating' | 'syncing' | 'ready' | 'error';
@@ -79,8 +80,10 @@ export function SyncGate({ children }: PropsWithChildren) {
   useEffect(() => {
     if (isLoading) return;
 
+    const userId = session?.user?.id;
+
     // Sign-out path: tear down anything that's running.
-    if (!session || !companyId) {
+    if (!session || !companyId || !userId) {
       void (async () => {
         const { tenantSync, graph, stopWriteSync, activeCompanyId } =
           handlesRef.current;
@@ -89,7 +92,9 @@ export function SyncGate({ children }: PropsWithChildren) {
             await tenantSync?.unsubscribe();
             await stopWriteSync?.();
             graph?.dispose();
-            await clearLocalTenantData();
+            // clearLocalTenantData is called by auth-session.ts → signOut
+            // (via closeForUser). Belt-and-suspenders: if userId was somehow
+            // lost, skip the PGlite call here.
           } catch (err) {
             // Best-effort cleanup; log and proceed.
             // eslint-disable-next-line no-console
@@ -111,12 +116,12 @@ export function SyncGate({ children }: PropsWithChildren) {
 
     void (async () => {
       try {
-        // ── Step 1: boot PGlite, capture didMigrate ──────────────────────
+        // ── Step 1: boot per-user PGlite, capture didMigrate ────────────────
         setBoot({ phase: 'hydrating', message: 'Opening local database…' });
-        const bootRes = await bootLocalDB();
+        const bootRes = await openForUser(userId);
         if (cancelled) return;
 
-        const meta = await getSyncMeta();
+        const meta = await getSyncMeta(userId);
         const isTenantSwitch =
           meta.tenantId !== null && meta.tenantId !== companyId;
         const isFirstLogin =
@@ -127,10 +132,10 @@ export function SyncGate({ children }: PropsWithChildren) {
             phase: 'hydrating',
             message: 'Switching workspace — clearing local cache…',
           });
-          await clearLocalTenantData();
+          await clearLocalTenantData(userId);
         }
 
-        // ── Step 2: Electric shapes ─────────────────────────────────────
+        // ── Step 2: Electric shapes ─────────────────────────────────────────
         setBoot({
           phase: isFirstLogin ? 'hydrating' : 'syncing',
           message: isFirstLogin
@@ -142,24 +147,24 @@ export function SyncGate({ children }: PropsWithChildren) {
           isFirstLogin,
         });
 
-        const tenantSync = await startTenantSync(companyId, isFirstLogin);
+        const tenantSync = await startTenantSync(userId, companyId, isFirstLogin);
         if (cancelled) {
           await tenantSync.unsubscribe();
           return;
         }
         if (tenantSync.didInitialHydration) {
-          await markHydrated(companyId);
+          await markHydrated(userId, companyId);
         }
 
-        // ── Step 3: write-sync drain ────────────────────────────────────
-        const stopWriteSync = await startWriteSync();
+        // ── Step 3: write-sync drain ────────────────────────────────────────
+        const stopWriteSync = await startWriteSync(userId);
         if (cancelled) {
           await tenantSync.unsubscribe();
           await stopWriteSync();
           return;
         }
 
-        // ── Step 4: entity-graph runtime ────────────────────────────────
+        // ── Step 4: entity-graph runtime ────────────────────────────────────
         const graph = await bootstrapEntityGraph({
           pglite: bootRes.db,
           companyId,
