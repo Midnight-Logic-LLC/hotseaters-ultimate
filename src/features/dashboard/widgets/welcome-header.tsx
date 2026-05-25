@@ -19,7 +19,7 @@ export function WelcomeHeader() {
           color: 'var(--theme-stone-900)',
         }}
       >
-        Welcome back{userInfo?.first_name ? `, ${userInfo.first_name}` : ''}
+        Welcome back, {userInfo?.first_name || 'User'}
       </h1>
       <p style={{ fontSize: 'var(--theme-text-body)', color: 'var(--theme-stone-600)' }}>
         Here&apos;s what&apos;s happening with your business
