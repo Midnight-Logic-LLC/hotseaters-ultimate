@@ -23,6 +23,7 @@ playwright-report
 playwright/.cache
 tests/visual-parity/.artifacts
 tests/visual-parity/.report
+tests/e2e/.artifacts
 
 # Tauri
 src-tauri/target

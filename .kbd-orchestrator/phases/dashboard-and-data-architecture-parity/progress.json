@@ -1,0 +1,53 @@
+{
+  "phase": "dashboard-and-data-architecture-parity",
+  "project": "hotseaters-ultimate",
+  "status": "executing",
+  "assessment_complete": true,
+  "plan_complete": true,
+  "execution_complete": false,
+  "reflection_complete": false,
+  "change_backend": "openspec",
+  "assessment_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/assessment.md",
+  "plan_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/plan.md",
+  "changes_total": 4,
+  "changes_completed": 1,
+  "changes": [
+    "change-401-routing-redirect-last-route",
+    "change-402-app-shell-dashboard-parity",
+    "change-403-per-user-pglite-sync-policy",
+    "change-404-lookup-entities-wiring"
+  ],
+  "change_state": {
+    "change-401-routing-redirect-last-route": "DONE",
+    "change-402-app-shell-dashboard-parity": "PENDING",
+    "change-403-per-user-pglite-sync-policy": "PENDING",
+    "change-404-lookup-entities-wiring": "PENDING"
+  },
+  "dependencies": {
+    "change-401-routing-redirect-last-route": [],
+    "change-402-app-shell-dashboard-parity": [
+      "change-401-routing-redirect-last-route"
+    ],
+    "change-403-per-user-pglite-sync-policy": [
+      "change-401-routing-redirect-last-route"
+    ],
+    "change-404-lookup-entities-wiring": [
+      "change-403-per-user-pglite-sync-policy"
+    ]
+  },
+  "parallelism": [
+    [
+      "change-401-routing-redirect-last-route"
+    ],
+    [
+      "change-402-app-shell-dashboard-parity",
+      "change-403-per-user-pglite-sync-policy"
+    ],
+    [
+      "change-404-lookup-entities-wiring"
+    ]
+  ],
+  "commits_landed_on_hotseaters_ultimate_main": {
+    "change-401": "56f9733"
+  }
+}

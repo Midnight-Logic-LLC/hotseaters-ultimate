@@ -1,0 +1,38 @@
+{
+  "phase": "dashboard-and-data-architecture-parity",
+  "project": "hotseaters-ultimate",
+  "status": "executing",
+  "assessment_complete": true,
+  "plan_complete": true,
+  "execution_complete": false,
+  "reflection_complete": false,
+  "change_backend": "openspec",
+  "assessment_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/assessment.md",
+  "plan_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/plan.md",
+  "progress_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/progress.json",
+  "next_step": "Wave 1 complete (commit 56f9733, push blocked on ssh key). Dispatch Wave 2: change-402 + change-403 in parallel once push is unblocked.",
+  "execution_order": [
+    [
+      "change-401-routing-redirect-last-route"
+    ],
+    [
+      "change-402-app-shell-dashboard-parity",
+      "change-403-per-user-pglite-sync-policy"
+    ],
+    [
+      "change-404-lookup-entities-wiring"
+    ]
+  ],
+  "definition_of_done_summary": [
+    "Real Google sign-in lands on /Dashboard or last-viewed.",
+    "/dashboard lowercase redirects to /Dashboard.",
+    "Dashboard renders every bible widget at <=5% visual drift.",
+    "Sidebar shows user footer with working sign-out.",
+    "Chameleon logo unified across login/sidebar/mobile.",
+    "Per-user PGlite isolation verified by cross-account test.",
+    "Realtime theme change reflects within 2s.",
+    "No hardcoded pipeline stage strings remain.",
+    "Bible-parity harness green on /Dashboard.",
+    "pnpm typecheck && pnpm test && pnpm test:e2e green."
+  ]
+}
