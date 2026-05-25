@@ -328,7 +328,7 @@ Local pre-commit (opt-in): `cp .githooks/pre-commit.example .git/hooks/pre-commi
      PGlite (synced/local/view trio) ← Electric ← Postgres (supabase)
 ```
 
-## Immutable code rules (RULES A–H)
+## Immutable code rules (RULES A–K)
 
 These hold across the entire `hotseaters-ultimate/` tree. They sit
 alongside RULE 0–9 above; violations are blocking.
@@ -461,6 +461,129 @@ to-end and identify every:
 
 Each of these must be reproduced in the port. A page is not done if a
 single bible calculation or rule is missing.
+
+### RULE K — Progress signaling (every phase and task announces its own boundaries)
+
+For ANY multi-step work — KBD phase execution, OpenSpec change
+delivery, multi-file refactor, TaskCreate-tracked work — the agent
+MUST emit explicit, parseable progress signals at the START and END
+of each phase, each change/task within a phase, and each non-trivial
+sub-step. This is binding on every agent that operates in this repo
+(Claude Code, Roo, Cursor, Cline, Codex). It is not optional.
+
+**Why.** The user cannot watch the agent's internal monologue. The
+only way they know "we're 3 of 7 changes through change-406" is if
+the agent says so out loud. Without these signals the user has to
+ask `/kbd-status` repeatedly to feel oriented. With them, the user
+sees progress live and only intervenes when something looks wrong.
+
+**Three required tiers of signal.** Emit each one as plain prose in
+the response (no tool call needed — these are status lines the user
+reads, not state writes).
+
+#### Tier 1 — Phase boundary
+
+At the start of any KBD phase (or a multi-change unit of work that
+maps to one):
+
+```
+Starting phase <N> of <total>: <phase-name>
+```
+
+At the end:
+
+```
+Completed phase <N> of <total>: <phase-name>
+```
+
+`<N>` and `<total>` come from `.kbd-orchestrator/current-waypoint.json`
+or the live phase's `progress.json` `changes_total` / `changes_completed`
+counters — never guessed. When the phase number is unknown (e.g.
+ad-hoc work that isn't a KBD phase), use `1 of 1`.
+
+#### Tier 2 — Change / task boundary
+
+For each OpenSpec change (or TaskCreate-tracked task) within a
+phase, at start:
+
+```
+Starting change <N> of <total>: <change-id>
+```
+
+At end:
+
+```
+Completed change <N> of <total>: <change-id>
+```
+
+`<N>` and `<total>` come from `progress.json` `changes_total` and the
+count of `changes` whose `change_state` is currently `DONE`. The
+counter advances on completion, not on dispatch. If multiple changes
+run in parallel, each emits its own pair — the user reads them in
+the order they finish, not the order they start.
+
+#### Tier 3 — Sub-step heartbeat
+
+For non-trivial sub-steps within a change (a wave of file edits, a
+test suite run, a Cypress dispatch, a long-running build), emit a
+single one-line status update so the user knows progress is being
+made between the change boundaries:
+
+```
+Working on <change-id>: <short imperative status, ≤80 chars>
+```
+
+Sub-step signals are advisory — they don't need to be paired. Emit
+one per meaningful unit of work (a file written, a test suite green,
+a checkpoint reached). Do NOT emit one per individual edit — that's
+noise. Aim for one heartbeat per 30–90 seconds of agent work.
+
+#### Format rules
+
+- Plain prose, no markdown decoration around the signal line.
+- The signal is the FIRST line of the response it appears in, so the
+  user's eye lands on it immediately.
+- One signal per response, unless multiple boundaries genuinely
+  cross in the same turn (e.g. last task of phase A + first task of
+  phase B → emit both).
+- Counts (`<N>`, `<total>`) MUST come from a real source (waypoint,
+  progress.json, the TaskList ledger) — never invented.
+- When boundaries are unclear or the work isn't phase-shaped, the
+  agent SHOULD still emit a `Working on X` heartbeat at the start of
+  any unit of work that will produce ≥3 file changes or take ≥30
+  seconds of agent time, so the user gets some baseline of "yes, I'm
+  doing something."
+
+#### Worked example
+
+```
+Starting phase 2 of 3: dashboard-bible-parity-build
+Starting change 1 of 5: change-405-lookup-selectors-tier1-extension
+Working on change-405: writing lookups-selectors.ts + 7-test spec
+Working on change-405: extending Tier1Provider with the 4 new arrays
+Working on change-405: 93/93 tests green; commit landed as 9485621
+Completed change 1 of 5: change-405-lookup-selectors-tier1-extension
+```
+
+#### Anti-patterns (none of these qualify as a signal)
+
+- "Let me start by reading the file…" (narration, no count, no boundary)
+- "Done! ✅" (no `<N> of <total>`, no change-id)
+- Embedding the progress in a paragraph of recap (the line must stand alone)
+- "I'm working on change 405 now and will probably finish 406 today"
+  (vague, no boundary signal, no count)
+- A boundary signal with guessed counts ("Phase 3 of 8" when
+  progress.json says total is 5)
+
+#### Enforcement
+
+- `kbd-execute`, `kbd-plan`, `kbd-reflect`, and the orchestrator skills
+  already specify these signals — this rule promotes the practice to a
+  repo-wide invariant binding on ALL multi-step work, not just KBD-
+  managed work.
+- A response that performs ≥3 file edits or takes ≥1 minute of agent
+  time without emitting at least one signal SHOULD be considered a
+  process defect. The agent self-corrects on the next response.
 
 ---
 

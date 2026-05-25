@@ -51,7 +51,7 @@ in CLAUDE.md applies to every agent.
 7. **Docs are content (MDX), not pages.**
 8. **No secrets in git.** `.env` is gitignored.
 
-### Immutable code rules (RULES A–J)
+### Immutable code rules (RULES A–K)
 
 - **A.** Kebab-case filenames everywhere (`landing-page.tsx`).
 - **B.** Components → hooks only (no store imports in components).
@@ -65,6 +65,15 @@ in CLAUDE.md applies to every agent.
 - **H.** Base UI v1 (`@base-ui-components/react`) instead of Radix.
 - **I.** Mobile-first, PWA-capable, Tauri-WebView-compatible at 375px+.
 - **J.** Preserve every business rule + calculation when porting a bible page.
+- **K.** **Progress signaling — binding on every agent (Claude, Roo,
+  Cursor, Cline, Codex).** Multi-step work MUST announce its phase and
+  change/task boundaries in plain prose so the user sees progress live:
+  - Phase boundary: `Starting/Completed phase <N> of <total>: <name>`
+  - Change/task boundary: `Starting/Completed change <N> of <total>: <id>`
+  - Sub-step heartbeat: `Working on <id>: <short status>` (≤80 chars)
+  Counts come from `.kbd-orchestrator/current-waypoint.json` and the
+  active phase's `progress.json` — never guessed. See CLAUDE.md
+  RULE K for the full spec, anti-patterns, and enforcement.
 
 ### RULE 0.4 — Debug visual defects from computed style
 
