@@ -26,6 +26,9 @@ const mockDb = {
   },
   query: vi.fn().mockResolvedValue({ rows: [] }),
   exec: vi.fn().mockResolvedValue(undefined),
+  // listen() is used by prometheus-entity-management v1.3+ for change
+  // notifications after sync. Return a no-op unsubscribe function.
+  listen: vi.fn().mockResolvedValue(() => Promise.resolve()),
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
