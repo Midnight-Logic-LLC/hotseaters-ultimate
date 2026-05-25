@@ -11,6 +11,7 @@ import { TrialsListPage } from '@/features/trials/pages/trials-list-page';
 import { TrialDetailPage } from '@/features/trials/pages/trial-detail-page';
 import { TrialEditPage } from '@/features/trials/pages/trial-edit-page';
 import { registerTrialsFeatureEntities } from '@/features/trials/stores/trials-store';
+import { registerLookupEntities } from '@/features/lookups/entities';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { LoginPage } from '@/features/auth/pages/login-page';
 import { RegisterPage } from '@/features/auth/pages/register-page';
@@ -30,6 +31,7 @@ import { LastRouteTracker } from '@/app/last-route-tracker';
 // Register feature entity schemas at module load — idempotent.
 registerClientEntities();
 registerTrialsFeatureEntities();
+registerLookupEntities();
 
 const CLIENTS_ROLES = ['Owner', 'Admin', 'Sales'] as const;
 const OWNER_ADMIN = ['Owner', 'Admin'] as const;
