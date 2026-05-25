@@ -28,8 +28,6 @@ const APP_PORT = 6173;
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const supabaseUrl = env.VITE_SUPABASE_URL ?? 'http://localhost:8000';
-  const electricUrl = env.VITE_ELECTRIC_URL ?? 'http://localhost:3133';
-  const electricSecret = env.ELECTRIC_SECRET ?? process.env.ELECTRIC_SECRET;
 
   // Guard rail: refuse to build against Supabase Cloud.
   if (/\.supabase\.co/i.test(supabaseUrl)) {
@@ -79,33 +77,20 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
+    // No `server.proxy` block on purpose. In dev the browser talks DIRECTLY
+    // to the upstream services — Envoy at VITE_SUPABASE_URL (defaults to
+    // http://localhost:8000) and Electric at VITE_ELECTRIC_URL — exactly as
+    // the production bundle will. CORS is configured wide-open on the
+    // self-hosted Envoy gateway (see latest-data/volumes/api/envoy/lds.template.yaml)
+    // so cross-origin XHRs from http://localhost:6173 are allowed.
+    //
+    // If you find yourself wanting to re-add a proxy, FIX the upstream CORS
+    // instead — keeping dev and prod request paths identical is worth more
+    // than the convenience of a single origin.
     server: {
       headers: crossOriginIsolation,
       port: APP_PORT,
       strictPort: true,
-      proxy: {
-        // Proxy Supabase paths to the configured upstream so the SPA stays on
-        // a single origin. The upstream is local docker-compose by default;
-        // override via VITE_SUPABASE_URL.
-        '/auth':      { target: supabaseUrl, changeOrigin: true, secure: true },
-        '/rest':      { target: supabaseUrl, changeOrigin: true, secure: true },
-        '/storage':   { target: supabaseUrl, changeOrigin: true, secure: true },
-        '/functions': { target: supabaseUrl, changeOrigin: true, secure: true },
-        '/realtime':  { target: supabaseUrl, changeOrigin: true, secure: true, ws: true },
-        '/v1': {
-          target: electricUrl,
-          changeOrigin: true,
-          secure: true,
-          configure: (proxy) => {
-            proxy.on('proxyReq', (proxyReq, req) => {
-              if (!electricSecret || !req.url?.startsWith('/v1/shape')) return;
-              const url = new URL(req.url, 'http://localhost');
-              url.searchParams.set('secret', electricSecret);
-              proxyReq.path = `${url.pathname}${url.search}`;
-            });
-          },
-        },
-      },
     },
     preview: {
       headers: crossOriginIsolation,

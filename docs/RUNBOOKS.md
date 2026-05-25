@@ -373,6 +373,44 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm test:e2e
 
 ---
 
+## Electric HTTP/1.1 connection limit in dev
+
+### Symptom
+
+Browser console emits a warning like:
+
+```
+[Electric] Browser HTTP/1.1 connection cap reached — additional shape
+subscriptions will queue until existing ones close.
+```
+
+…once the dashboard mounts ~6 simultaneous shape subscriptions (one per
+synced entity per visible widget). Subsequent shapes still hydrate, but
+serialised behind the first six.
+
+### Cause
+
+Browsers cap concurrent HTTP/1.1 connections at ~6 per origin. Plain-HTTP
+Electric (`http://localhost:13000`) can't multiplex shape streams across
+a single TCP connection — each shape needs its own. The dev docker-compose
+stack serves Electric over HTTP/1.1.
+
+### Fix in production
+
+Front Electric with an HTTPS-terminating proxy (Caddy / nginx / Envoy)
+that speaks HTTP/2 to the browser. HTTP/2 multiplexes any number of shape
+streams over a single connection. `https://electricsql.prometheusags.ai`
+already does this — no app-level change.
+
+### Workaround in dev
+
+None required. The warning is cosmetic; everything still hydrates in
+sequence within ~1 s of mount. If it ever feels slow in dev, run
+`docker compose up` with an HTTPS-terminating reverse proxy in front of
+Electric on the local stack.
+
+---
+
 ## See also
 
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md)

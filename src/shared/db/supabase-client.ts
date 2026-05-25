@@ -25,12 +25,6 @@ import {
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const LOCAL_BROWSER_ORIGIN =
-  typeof window !== 'undefined' &&
-  import.meta.env.DEV &&
-  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(window.location.origin)
-    ? window.location.origin
-    : null;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
@@ -48,8 +42,13 @@ if (/\.supabase\.co(\/|$)/i.test(SUPABASE_URL)) {
   );
 }
 
+// Always call the configured upstream directly — never proxy through the
+// dev server origin. The browser hits Envoy at VITE_SUPABASE_URL
+// (http://localhost:8000 in dev, https://hotbase.prometheusags.ai in prod)
+// using the same code path in both environments. CORS is wide-open on the
+// Envoy gateway (see latest-data/volumes/api/envoy/lds.template.yaml).
 export const supabase: SupabaseClient = createClient(
-  LOCAL_BROWSER_ORIGIN ?? SUPABASE_URL,
+  SUPABASE_URL,
   SUPABASE_ANON_KEY,
   {
     auth: {

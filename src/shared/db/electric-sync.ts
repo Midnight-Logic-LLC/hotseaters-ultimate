@@ -32,12 +32,6 @@ import { SYNC_CONFIG } from './sync-config';
 
 const ELECTRIC_URL = import.meta.env.VITE_ELECTRIC_URL;
 const INITIAL_SYNC_TIMEOUT_MS = 8_000;
-const LOCAL_BROWSER_ORIGIN =
-  typeof window !== 'undefined' &&
-  import.meta.env.DEV &&
-  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(window.location.origin)
-    ? window.location.origin
-    : null;
 
 if (!ELECTRIC_URL) {
   throw new Error(
@@ -206,7 +200,7 @@ async function attachShape(
 ): Promise<ShapeSubscription> {
   const sub = await db.electric.syncShapeToTable({
     shape: {
-      url: `${LOCAL_BROWSER_ORIGIN ?? ELECTRIC_URL}/v1/shape`,
+      url: `${ELECTRIC_URL}/v1/shape`,
       params: {
         table: opts.tableName,
         where: opts.where,
