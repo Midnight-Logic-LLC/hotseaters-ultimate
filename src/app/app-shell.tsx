@@ -14,6 +14,7 @@
  */
 
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import {
   Sidebar,
   SidebarContent,
@@ -37,6 +38,8 @@ import {
 } from '@/app/navigation';
 import { getPageMetadata } from '@/app/page-metadata';
 import { BottomTabBar } from '@/app/bottom-tab-bar';
+import { SidebarUserFooter } from '@/features/auth/components/sidebar-user-footer';
+import { TrialBanner } from '@/shared/components/trial-banner';
 
 function NavigationContent({ groups }: { groups: NavigationGroup[] }) {
   const location = useLocation();
@@ -170,6 +173,7 @@ export function AppShell() {
 
   return (
     <SidebarProvider defaultOpen>
+      <Toaster position="top-center" />
       <div className="flex w-full overflow-hidden" style={{ height: '100dvh' }}>
         <Sidebar
           collapsible="icon"
@@ -199,6 +203,8 @@ export function AppShell() {
           >
             <NavigationContent groups={groups} />
           </SidebarContent>
+
+          <SidebarUserFooter user={user} userInfo={userInfo} />
 
           <SidebarRail />
         </Sidebar>
@@ -248,6 +254,7 @@ export function AppShell() {
             className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden"
             style={{ backgroundColor: 'var(--theme-page-bg)' }}
           >
+            <TrialBanner company={company} />
             <Outlet />
           </main>
 
