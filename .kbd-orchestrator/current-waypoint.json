@@ -1,16 +1,16 @@
 {
   "phase": "dashboard-and-data-architecture-parity",
   "project": "hotseaters-ultimate",
-  "status": "executing",
+  "status": "execution_complete",
   "assessment_complete": true,
   "plan_complete": true,
-  "execution_complete": false,
+  "execution_complete": true,
   "reflection_complete": false,
   "change_backend": "openspec",
   "assessment_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/assessment.md",
   "plan_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/plan.md",
   "progress_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/progress.json",
-  "next_step": "Wave 2 dispatched: change-402 + change-403 (parallel background agents)",
+  "next_step": "Run /kbd-reflect dashboard-and-data-architecture-parity to verify + archive change-401..404, then promote the GATED phase pglite-schema-strategy-offline-first by copying .kbd-orchestrator/phases/pglite-schema-strategy-offline-first/waypoint.json over this file.",
   "execution_order": [
     [
       "change-401-routing-redirect-last-route"

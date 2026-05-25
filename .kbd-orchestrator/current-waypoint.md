@@ -1,17 +1,33 @@
 # Current waypoint — hotseaters-ultimate
 
 **Phase:** `dashboard-and-data-architecture-parity`
-**Status:** plan complete, ready to execute
+**Status:** execution_complete (reflect pending)
 **Change backend:** OpenSpec (`openspec/` at repo root)
 
 ## What just finished
-- Assessment: `.kbd-orchestrator/phases/dashboard-and-data-architecture-parity/assessment.md`
-- Plan: `.kbd-orchestrator/phases/dashboard-and-data-architecture-parity/plan.md`
-- OpenSpec proposals + tasks scaffolded for 4 changes under
-  `openspec/changes/change-401..404`.
+- All 4 changes landed on `main`:
+  - change-401-routing-redirect-last-route — `56f9733`
+  - change-402-app-shell-dashboard-parity — `19f435c`
+  - change-403-per-user-pglite-sync-policy — `217d516` + `cf2f2c6` (migration drop+recreate fix) + `93f4851` (single login surface)
+  - change-404-lookup-entities-wiring — `2985773`
+- Dashboard-rebuild Phase A also landed in `28808a7` (7 bible business-rule
+  modules + 7 spec files, 70 tests).
+- Offline-first follow-up phase scaffolded in `e4611d5` (docs + 9 OpenSpec
+  changes under change-410..418, gated).
+- Ledger reconciled 2026-05-25: progress.json was stale relative to repo state.
 
 ## Next step
-Run `/kbd-execute dashboard-and-data-architecture-parity` to dispatch.
+1. Run `/kbd-reflect dashboard-and-data-architecture-parity` to verify the
+   four changes via `/opsx:verify` and archive them under
+   `openspec/changes/archive/`.
+2. Then promote the GATED `pglite-schema-strategy-offline-first` phase:
+   copy `.kbd-orchestrator/phases/pglite-schema-strategy-offline-first/waypoint.json`
+   over `.kbd-orchestrator/current-waypoint.json` and re-run
+   `/kbd-execute pglite-schema-strategy-offline-first`.
+
+Alternatively, continue the dashboard-rebuild plan (Phase B–F per
+`.claude/plans/foamy-marinating-hollerith.md`) in parallel — it has
+minimal file overlap with the offline-first phase.
 
 ## Queued next phase (GATED)
 `pglite-schema-strategy-offline-first` is planned, scaffolded, and

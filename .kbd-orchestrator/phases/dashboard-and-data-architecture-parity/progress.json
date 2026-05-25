@@ -1,16 +1,16 @@
 {
   "phase": "dashboard-and-data-architecture-parity",
   "project": "hotseaters-ultimate",
-  "status": "executing",
+  "status": "execution_complete",
   "assessment_complete": true,
   "plan_complete": true,
-  "execution_complete": false,
+  "execution_complete": true,
   "reflection_complete": false,
   "change_backend": "openspec",
   "assessment_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/assessment.md",
   "plan_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/plan.md",
   "changes_total": 4,
-  "changes_completed": 1,
+  "changes_completed": 4,
   "changes": [
     "change-401-routing-redirect-last-route",
     "change-402-app-shell-dashboard-parity",
@@ -19,9 +19,9 @@
   ],
   "change_state": {
     "change-401-routing-redirect-last-route": "DONE",
-    "change-402-app-shell-dashboard-parity": "IN_PROGRESS",
-    "change-403-per-user-pglite-sync-policy": "IN_PROGRESS",
-    "change-404-lookup-entities-wiring": "PENDING"
+    "change-402-app-shell-dashboard-parity": "DONE",
+    "change-403-per-user-pglite-sync-policy": "DONE",
+    "change-404-lookup-entities-wiring": "DONE"
   },
   "dependencies": {
     "change-401-routing-redirect-last-route": [],
@@ -48,6 +48,14 @@
     ]
   ],
   "commits_landed_on_hotseaters_ultimate_main": {
-    "change-401": "56f9733"
-  }
+    "change-401": "56f9733",
+    "change-402": "19f435c",
+    "change-403": "217d516 (initial) + cf2f2c6 (migration drop+recreate fix) + 93f4851 (single login surface)",
+    "change-404": "2985773"
+  },
+  "notes": [
+    "Ledger reconciled 2026-05-25: changes 402/403/404 were already commit-landed but progress.json was stale. The 2026-05-25 session added two additional 403-scope commits (cf2f2c6 fixing the TRUNCATE-vs-CREATE-IF-NOT-EXISTS data-loss path that prevented user_info from gaining account_status/preferences columns; 93f4851 removing AuthOptionsDialog in favor of /login direct nav).",
+    "Definition-of-Done item 'Dashboard renders every bible widget at <=5% visual drift' is not fully met by this phase — change-402 ships the layout shell + KPI tiles, but Invoice/TimeEntry/Subcontract-backed widgets render stubs. Full bible-parity is the dashboard-rebuild plan (.claude/plans/foamy-marinating-hollerith.md), Phase A of which landed in commit 28808a7 alongside this reconcile.",
+    "reflection_complete remains false — formal /kbd-reflect run (openspec verify + archive) is the next step."
+  ]
 }
