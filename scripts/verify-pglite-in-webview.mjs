@@ -47,6 +47,7 @@ export async function verifyPGliteWebViewEnv() {
   const result = {
     sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
     crossOriginIsolated:
+      // eslint-disable-next-line no-undef
       typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated === true,
     indexedDB: typeof indexedDB !== 'undefined',
     pgliteOk: false,

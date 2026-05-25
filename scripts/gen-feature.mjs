@@ -220,7 +220,7 @@ describe('${featureName} / placeholder', () => {
 });
 `;
 
-const GITKEEP = '';
+const _GITKEEP = '';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // write

@@ -19,10 +19,42 @@ import hotseaters from './eslint-rules/index.js';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'dist-manual', 'node_modules', 'src-tauri', '*.tsbuildinfo', 'public'],
+    ignores: [
+      'dist',
+      'dist-manual',
+      'node_modules',
+      'src-tauri',
+      '*.tsbuildinfo',
+      'public',
+      '.claude/**',
+      'packages/**',
+      'vendor/**',
+      'latest-data/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  // ── Node.js scripts + ESLint rule helpers (module) ────────────────────────
+  {
+    files: ['scripts/**/*.{js,mjs}', 'eslint-rules/**/*.{js,mjs}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
+  // ── Node.js CommonJS scripts ──────────────────────────────────────────────
+  {
+    files: ['scripts/**/*.cjs', 'eslint-rules/**/*.cjs', 'tests/**/*.cjs', '*.cjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: { ...globals.node, ...globals.commonjs },
+    },
+  },
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
@@ -151,6 +183,13 @@ export default tseslint.config(
       // ─── TypeScript strictness ──────────────────────────────────────────
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/consistent-type-imports': 'error',
+    },
+  },
+  // ── Test files — relax React hooks rule (Playwright/Vitest fixtures, not React) ──
+  {
+    files: ['tests/**/*.{ts,tsx}', 'src/**/*.{spec,test}.{ts,tsx}', 'src/**/__tests__/**/*.{ts,tsx}'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
     },
   },
 );
