@@ -43,10 +43,10 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - name: Checkout (with submodules)
+      - name: Checkout (without submodules — entity-mgmt is vendored from latest-data below)
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           fetch-depth: 0
 
       # Stage the entity-mgmt deploy key on disk with restrictive perms.
