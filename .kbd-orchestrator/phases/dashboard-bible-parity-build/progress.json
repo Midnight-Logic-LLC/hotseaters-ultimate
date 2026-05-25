@@ -12,7 +12,7 @@
   "design_doc": ".claude/plans/foamy-marinating-hollerith.md",
   "prologue_commit": "28808a7",
   "changes_total": 5,
-  "changes_completed": 3,
+  "changes_completed": 4,
   "changes": [
     "change-405-lookup-selectors-tier1-extension",
     "change-406-dashboard-widget-data-hooks",
@@ -24,13 +24,14 @@
     "change-405-lookup-selectors-tier1-extension": "DONE",
     "change-406-dashboard-widget-data-hooks": "DONE",
     "change-407-dashboard-widget-components": "DONE",
-    "change-408-dashboard-page-shell-and-registry": "PENDING",
+    "change-408-dashboard-page-shell-and-registry": "DONE",
     "change-409-dashboard-verification": "PENDING"
   },
   "commits_landed_on_hotseaters_ultimate_main": {
     "change-405": "9485621",
     "change-406": "228d9b8 (1/3 Tier-A) + f4f53ca (2/3 projections+REST) + 03f9770 (3/3 hybrid REST)",
-    "change-407": "e3dc1f1"
+    "change-407": "e3dc1f1",
+    "change-408": "f8af764"
   },
   "dependencies": {
     "change-405-lookup-selectors-tier1-extension": [],
