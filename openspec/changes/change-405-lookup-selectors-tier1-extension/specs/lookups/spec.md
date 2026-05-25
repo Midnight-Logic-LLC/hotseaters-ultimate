@@ -1,19 +1,23 @@
 ## ADDED Requirements
 
-### Requirement: Lookup selectors project entity_metadata into typed arrays
-The system SHALL ship `src/shared/db/lookups-selectors.ts` exporting pure `selectGraph` projections — `selectPipelineStages`, `selectServiceCategories`, `selectConsultantTiers`, `selectClientTypes` — that join `entity_metadata` rows to their `metadata_type` parent by `metadata_type_id`, scope-filter by the matching scope string, and tenant-filter so only system-wide rows (`company_id IS NULL`) and rows belonging to the active `companyId` are included.
+### Requirement: Lookup selectors project MetadataType by scope into typed arrays
+The system SHALL ship `src/shared/db/lookups-selectors.ts` exporting pure projections — `selectPipelineStages`, `selectServiceCategories`, `selectConsultantTiers`, `selectClientTypes` — over the `MetadataType` slice of the entity-graph store. Each selector scope-filters by the matching string (`pipeline_stage` / `service_category` / `consultant_tier` / `client_type`), tenant-filters so only system-wide rows (`company_id IS NULL`) and rows belonging to the active `companyId` are admitted, lifts well-known fields out of `extra_schema` (e.g. `type`, `revenue_probability`), and sorts the result.
 
-#### Scenario: selectPipelineStages joins scope=pipeline_stage
-- **WHEN** the graph contains a `metadata_type` row with `scope = "pipeline_stage"` and three `entity_metadata` children with that `metadata_type_id`, all `company_id = current` or `null`
-- **THEN** `selectPipelineStages(graph, currentCompanyId)` returns three rows sorted by `(type, sort_order, name)` with `revenue_probability`, `is_active`, and `name` projected from each row's `extra`
+#### Scenario: selectPipelineStages filters by scope and tenant
+- **WHEN** the graph contains four `MetadataType` rows: row A `scope=pipeline_stage company_id=current`, row B `scope=pipeline_stage company_id=null`, row C `scope=pipeline_stage company_id=other`, row D `scope=service_category company_id=current`
+- **THEN** `selectPipelineStages(entities, currentCompanyId)` returns exactly rows A and B in order `[order ASC, name ASC]`, and row D is absent
 
-#### Scenario: selectPipelineStages excludes other-tenant rows
-- **WHEN** the graph also contains an `entity_metadata` row with `company_id = "other-company"`
-- **THEN** that row does NOT appear in `selectPipelineStages(graph, currentCompanyId)`'s output
+#### Scenario: selectPipelineStages lifts revenue_probability out of extra_schema
+- **WHEN** a `MetadataType` row has `extra_schema = { type: 'sales', revenue_probability: 0.7 }`
+- **THEN** the selector projection for that row exposes `type: 'sales'` and `revenue_probability: 0.7` as top-level fields on the returned record
 
 ### Requirement: Tier1Provider surfaces lookup arrays as live context
-`Tier1Provider` SHALL expose `pipelineStages`, `serviceCategories`, `consultantTiers`, `clientTypes` on the `Tier1Value` shape. Each is derived from the live entity-graph store via the corresponding selector with memoization so referential identity stays stable across unrelated graph changes.
+`Tier1Provider` SHALL expose `pipelineStages`, `serviceCategories`, `consultantTiers`, `clientTypes` on the `Tier1Value` shape. Each is derived from the live entity-graph store via the corresponding selector with memoization so referential identity stays stable when unrelated graph entities update.
 
 #### Scenario: Tier1 consumer sees live lookup updates
-- **WHEN** a component reads `useTier1().pipelineStages` and an `entity_metadata` row is upserted into the graph store
-- **THEN** the consumer re-renders with the updated array within one React tick — without any explicit refetch
+- **WHEN** a component reads `useTier1().pipelineStages` and a `MetadataType` row with `scope=pipeline_stage` is upserted into the graph store
+- **THEN** the consumer re-renders with the updated array within one React tick — no explicit refetch
+
+#### Scenario: Referential stability for unrelated changes
+- **WHEN** an `EntityMetadata` row (different entity type) is upserted into the graph
+- **THEN** `useTier1().pipelineStages` returns the same array reference as the prior render — it does NOT re-create the array
