@@ -45,12 +45,21 @@ import {
 
 export interface NeedsAttentionResult extends StaleLeadsCounts {
   isLoading: boolean;
+  /** True when the banner has anything worth showing for the current user. */
+  shouldRender: boolean;
+  /** Bible-correct primary copy (varies by owner vs. sales view). */
+  headline: string;
+  /** Bible-correct secondary copy. */
+  subhead: string;
 }
 
 const EMPTY: NeedsAttentionResult = Object.freeze({
   myCount: 0,
   totalCount: 0,
   isLoading: false,
+  shouldRender: false,
+  headline: '',
+  subhead: '',
 });
 
 export interface UseNeedsAttentionOptions {
@@ -59,8 +68,9 @@ export interface UseNeedsAttentionOptions {
 }
 
 export function useNeedsAttention(opts: UseNeedsAttentionOptions = {}): NeedsAttentionResult {
-  const { company } = useTier1();
+  const { company, role } = useTier1();
   const companyId = company?.id ?? null;
+  const isOwnerView = role === 'owner';
   const { userInfo } = useCurrentUser();
   const myUserInfoId = userInfo?.id ?? null;
   const nowMs = opts.now?.getTime();
@@ -127,17 +137,33 @@ export function useNeedsAttention(opts: UseNeedsAttentionOptions = {}): NeedsAtt
       myUserInfoId,
       now,
     });
+    const isLoading =
+      clientsLoading ||
+      leadView.isLoading ||
+      activityView.isLoading ||
+      attorneyView.isLoading;
+    // Bible copy: owners see "X of yours / Y total need attention" with
+    // owner-specific subhead; non-owners (sales) see plural-aware copy.
+    const headline = isOwnerView
+      ? `${counts.myCount} of yours / ${counts.totalCount} total need attention`
+      : `${counts.myCount} ${counts.myCount === 1 ? 'lead needs' : 'leads need'} attention`;
+    const subhead = isOwnerView
+      ? 'Overdue or missing a next step — open Lead Radar to follow up.'
+      : 'Overdue or no next step scheduled — open Lead Radar to follow up.';
+    // Banner hides when nothing to say: zero mine AND (not owner OR zero total).
+    const shouldRender =
+      !isLoading && (counts.myCount > 0 || (isOwnerView && counts.totalCount > 0));
     return {
       myCount: counts.myCount,
       totalCount: counts.totalCount,
-      isLoading:
-        clientsLoading ||
-        leadView.isLoading ||
-        activityView.isLoading ||
-        attorneyView.isLoading,
+      isLoading,
+      shouldRender,
+      headline,
+      subhead,
     };
   }, [
     companyId,
+    isOwnerView,
     leadView.items,
     leadView.isLoading,
     activityView.items,

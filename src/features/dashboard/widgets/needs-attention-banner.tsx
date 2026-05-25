@@ -1,34 +1,22 @@
 /**
  * NeedsAttentionBanner — bible Dashboard.jsx lines 711–755.
  *
- * Renders nothing when:
- *   • staleMyCount === 0 AND (not owner OR staleTotalCount === 0).
+ * Visibility decisions:
+ *   • Role-level gate (owner / sales / is_sales) → widget registry.
+ *   • Per-data gate ("nothing to say") → useNeedsAttention.shouldRender.
  *
- * Role-gating to show the banner at all (owner / sales / is_sales) lives
- * in the widget registry (change-408). This component just hides on
- * "nothing to say".
+ * Copy variants come pre-baked from useNeedsAttention.{headline,subhead}
+ * so this component contains no role-string literal in its JSX.
  */
 
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useTier1 } from '@/app/tier1-provider';
 import { useNeedsAttention } from '@/features/dashboard/hooks/use-needs-attention';
 
 export function NeedsAttentionBanner() {
   const navigate = useNavigate();
-  const { role } = useTier1();
-  const { myCount, totalCount, isLoading } = useNeedsAttention();
-  const isOwner = role === 'owner';
-  if (isLoading) return null;
-  if (myCount === 0 && !(isOwner && totalCount > 0)) return null;
-
-  const headline = isOwner
-    ? `${myCount} of yours / ${totalCount} total need attention`
-    : `${myCount} ${myCount === 1 ? 'lead needs' : 'leads need'} attention`;
-
-  const subhead = isOwner
-    ? 'Overdue or missing a next step — open Lead Radar to follow up.'
-    : 'Overdue or no next step scheduled — open Lead Radar to follow up.';
+  const { shouldRender, headline, subhead } = useNeedsAttention();
+  if (!shouldRender) return null;
 
   return (
     <button

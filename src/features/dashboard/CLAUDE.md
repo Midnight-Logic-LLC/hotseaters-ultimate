@@ -1,111 +1,212 @@
 # Dashboard feature — CLAUDE.md
 
-Change 8 of the `hotseaters-pglite-port` phase. Read-only aggregate surface
-that lives on top of the Tier-A entity graph populated by the clients/trials
-features (Changes 5–7).
+The `/Dashboard` route is the **reference implementation** every other
+feature page in the app should follow. Rebuilt under the
+`dashboard-bible-parity-build` KBD phase (change-405..409). Bible:
+`HotSeatersMVP/src/pages/Dashboard.jsx` (1440 LOC).
 
-## Hard Constraints (links to `latest-data/.kbd-orchestrator/constraints.md`)
+## Hard Constraints
 
-- **RULE 1 — Self-hosted Supabase only.** No `*.supabase.co` URLs. Local dev
-  goes through the docker-compose stack at `http://localhost:8000`; hosted is
-  `https://hotbase.prometheusags.ai`.
-- **RULE 2 — HotSeatersMVP is the BIBLE.** Card order, copy, icons, and roles
-  follow `/Users/gqadonis/Projects/courtroom/HotSeatersMVP/src/pages/Dashboard.jsx`.
-  When MVP and the Next.js port disagree, **MVP wins**.
-- **RULE 3 — Architectural invariants.**
-  1. Components in `pages/` and `components/` import only `hooks/*` (and
-     UI primitives from `@/components/ui/*`).
-  2. Hooks read from the entity-graph store (`useGraphStore` from
-     `@prometheus-ags/prometheus-entity-management`) and from the Tier1
-     context. No `fetch`, no Supabase, no PGlite.
-  3. No CRUD. Mutations happen in the destination feature pages.
+- **RULE 1** — Self-hosted Supabase only. Local `http://localhost:8000`
+  or hosted `https://hotbase.prometheusags.ai`. Never `*.supabase.co`.
+- **RULE 2** — HotSeatersMVP is the bible. Copy, icons, role gating,
+  color tokens, layout all come from the bible.
+- **RULE 3 / RULE B / RULE F** — strict layering:
+  - `pages/dashboard-page.tsx` is a thin composition shell. It reads
+    the registry + the empty-state selector. **No business logic.**
+  - `widgets/<name>.tsx` import only their data hook + UI primitives.
+    **No `useGraphStore`, no PGlite, no supabase client, no role
+    string literals.**
+  - `hooks/<name>.ts` compose other hooks (e.g. `useTrialsList`,
+    `useEntityView`) + pure rules from `business-rules/`. **No
+    `fetch`, no PGlite reach-in.**
+  - `business-rules/<name>.ts` are pure functions. Take all inputs +
+    `now`; return values. **No I/O, no React.**
+- **RULE K** — Multi-step work emits progress signals at every
+  phase + change boundary.
 
 ## Architecture
 
 ```
-pages/DashboardPage.tsx
-   ↓ uses
-hooks/use-dashboard-stats.ts        — composite (active trials, clients...)
-hooks/use-recent-trials.ts          — recent 5
-hooks/use-recent-clients.ts         — recent 5
-hooks/use-dashboard-card-data.ts    — per-card derived selectors
-   ↓ read from
-useGraphStore (read-only) + useTier1() (current company/role)
+pages/dashboard-page.tsx           ← thin shell; reads registry + empty selector
+       │
+       ▼
+hooks/use-dashboard-widgets.ts     ← role-aware WidgetSpec[] registry
+       │
+       ▼
+widgets/<name>.tsx                 ← bible-correct rendered UI
+       │
+       ▼
+hooks/use-*.ts                     ← data hooks (Tier-A graph OR hybrid REST)
+       │
+       ▼
+business-rules/*.ts                ← pure functions, unit-tested per bible
 ```
 
-The entity-graph is fed by the clients/trials stores (Changes 5–7). The
-dashboard is **purely a consumer** — when an entity changes anywhere in the
-app, the graph fires and the dashboard re-renders. No fetch logic here.
+Cross-cutting:
+- `useTier1()` (`src/app/tier1-provider.tsx`) → current user, company,
+  role, plus 4 lookup arrays (pipelineStages, serviceCategories,
+  consultantTiers, clientTypes) projected via change-405's selectors.
+- `useDashboardEmpty()` → `isEmpty` predicate over Tier-A entity counts.
+- `useDashboardPreferences()` → read/write `user_info.preferences`
+  (RevenueTrend toggles persist).
 
-## v0.1 portability scope
+## Folder layout
 
-The legacy `Dashboard.jsx` displays cards backed by entities not yet synced
-in v0.1 (`SYNC_CONFIG` in `src/shared/db/sync-config.ts`):
+```
+src/features/dashboard/
+├── pages/
+│   └── dashboard-page.tsx          ← thin shell (~130 LOC)
+├── widgets/                        ← 17 widgets, one file each
+│   ├── welcome-header.tsx
+│   ├── needs-attention-banner.tsx
+│   ├── kpi-tile.tsx                ← shared primitive
+│   ├── kpi-revenue-ytd.tsx
+│   ├── kpi-pipeline-value.tsx
+│   ├── kpi-outstanding.tsx
+│   ├── kpi-active-trials.tsx
+│   ├── kpi-trials-ytd.tsx
+│   ├── kpi-revenue-per-trial-ytd.tsx
+│   ├── sales-pipeline-chart.tsx
+│   ├── quick-stats-card.tsx
+│   ├── recent-activity-card.tsx
+│   ├── weekly-team-performance.tsx
+│   ├── monthly-team-performance.tsx
+│   ├── active-trial-performance.tsx
+│   ├── upcoming-trials-card.tsx
+│   ├── revenue-trend-card.tsx
+│   ├── quick-actions-bar.tsx
+│   ├── _styles.ts                  ← internal: card / header / kpi padding
+│   ├── _horizontal-bar.tsx         ← internal: shared recharts wrapper
+│   └── __tests__/                  ← 13 spec files
+├── hooks/
+│   ├── use-dashboard-widgets.ts    ← registry + role filter
+│   ├── use-dashboard-empty.ts      ← isEmpty selector
+│   ├── use-dashboard-preferences.ts
+│   ├── use-pipeline-stages.ts      ← thin wrapper over Tier1
+│   ├── use-pipeline-summary.ts
+│   ├── use-upcoming-trials.ts
+│   ├── use-recent-activity.ts      ← hybrid REST (invoice)
+│   ├── use-active-trial-stats.ts   ← hybrid REST (time_entry)
+│   ├── use-team-week.ts            ← hybrid REST
+│   ├── use-team-month.ts           ← hybrid REST
+│   ├── use-quick-stats.ts          ← hybrid REST (5 sources)
+│   ├── use-needs-attention.ts      ← hybrid REST (lead-radar)
+│   ├── use-revenue-trend.ts        ← hybrid REST + trial-projections
+│   ├── use-trial-projections.ts    ← Tier-A (TrialService)
+│   ├── use-quick-actions.ts
+│   └── __tests__/                  ← spec per hook
+├── business-rules/                 ← Phase A — landed in commit 28808a7
+│   ├── revenue-aggregation.ts
+│   ├── pipeline-aggregation.ts
+│   ├── trial-projections.ts
+│   ├── revenue-trend.ts
+│   ├── team-performance.ts
+│   ├── stale-leads.ts
+│   ├── quick-action-policy.ts
+│   └── __tests__/                  ← 70 tests covering bible parity
+├── components/
+│   ├── empty-dashboard.tsx         ← KEEP — onboarding splash
+│   └── stub-card.tsx               ← KEEP — placeholder for future "Coming in vN"
+└── CLAUDE.md                       ← this file
+```
 
-| MVP card | Backing entity | v0.1 status |
+## The widget registry
+
+`use-dashboard-widgets.ts` is the **single source of truth** for:
+- Which widgets render (per role + company flag).
+- Which grid slot they go into (`header | banner | kpi | main-1 |
+  main-2 | main-3 | wide | footer`).
+- Render order.
+
+Adding a widget = three things:
+1. New widget file in `widgets/`.
+2. New data hook in `hooks/` (or reuse).
+3. One row in `REGISTRY` in `use-dashboard-widgets.ts`.
+
+**No edits to `dashboard-page.tsx`** — the shell is closed.
+
+CI grep gate: `git grep -nE "role === '|company_role === '" src/features/dashboard/widgets/`
+must return zero matches. Role gating happens in the registry's
+`enabledFor` callback, not in widget JSX.
+
+## Data tiers
+
+| Entity | Tier | How widgets read it |
 |---|---|---|
-| Revenue YTD | `invoice` | Tier C — **stub: "Coming in v0.2"** |
-| Pipeline Value | `trial` + `metadata_type[pipeline]` | ✅ ported |
-| Outstanding Invoices | `invoice` | Tier C — **stub** |
-| Active Trials | `trial` | ✅ ported |
-| Trials YTD | `trial.won_date` | ✅ ported |
-| Revenue/Trial YTD | `invoice` | Tier C — **stub** |
-| Active Clients | `client` | ✅ ported |
-| Team Members | `user_info` | ✅ ported |
-| Recent Wins | `trial.won_date` | ✅ ported |
-| Recent Invoices | `invoice` | Tier C — **stub** |
-| Team Performance (weekly/monthly hours) | `time_entry` | Tier C — **stub** |
-| HSH Posts / Gigs | `subcontract_*` | Tier C — **stub** |
-| Sales Pipeline chart | `trial` + `metadata_type` | ✅ ported |
-| Time by Category | `time_entry` + `metadata_type` | Tier C — **stub** |
+| Trial | A (synced) | `useTrialsList` → graph |
+| TrialService | A (synced) | `useEntityList<TrialService>` company-scoped |
+| Client, ClientAddress | A (synced) | `useClientsList` |
+| MetadataType | A (synced) | `useTier1().pipelineStages` etc. (selectors) |
+| user_info | A (synced) | `useCurrentUser` + `useTeam` |
+| Invoice | NOT synced | Hybrid `useEntityView` → `invoices-store` REST |
+| TimeEntry | NOT synced | Hybrid → `time-entries-store` REST |
+| SubcontractAssignment, SubcontractRequest | NOT synced | Hybrid → `subcontracts-store` REST |
+| Lead, SalesActivity, Attorney | NOT synced | Hybrid → `lead-radar-store` REST |
 
-The "stub" cards render the MVP layout with a "Coming in v0.2" footnote so
-that visual parity is recognisable. When the missing entities sync (Tier-B
-expansion or a v0.2 Tier-A addition) the cards activate without layout drift.
-
-## Files
-
-```
-hooks/
-  use-dashboard-stats.ts          composite stats; render-stable
-  use-recent-trials.ts            top-5 trials by updated_at desc
-  use-recent-clients.ts           top-5 clients by updated_at desc
-  use-dashboard-card-data.ts      per-card derived selectors
-pages/
-  DashboardPage.tsx               route entry; ports MVP layout
-components/
-  StatCard.tsx                    icon + value + delta tile
-  RecentTrialsCard.tsx
-  RecentClientsCard.tsx
-  QuickActionsCard.tsx            CTAs → /Clients, /Trials
-  EmptyDashboard.tsx              empty state for freshly-onboarded company
-  PipelineCard.tsx                Sales Pipeline by stage
-  RecentActivityCard.tsx          Recent Wins + (stubbed) Recent Invoices
-  QuickStatsCard.tsx              compact list of secondary stats
-  StubCard.tsx                    "Coming in v0.2" placeholder
-```
-
-## Mobile
-
-`< md`: card stack, vertical scroll. Charts (PipelineCard) hide on small
-viewports — replaced with the same data rendered as compact list rows.
-Touch targets ≥ 44pt on every interactive card.
+**When the offline-first phase later wires these into `SYNC_CONFIG`**
+(via change-415's per-feature `entities.ts`), widget hooks auto-flip
+from `mode: 'hybrid'` REST to local-only completeness. Zero widget
+code change required. This is the principal architectural payoff of
+the registry + hybrid pattern.
 
 ## Routes
 
 - `/` → redirect to `/Dashboard`
 - `/Dashboard` → `<DashboardPage />`
+- `/dashboard` (lowercase) → 301 to `/Dashboard`
 
-All roles (`owner`, `admin`, `sales`, `trial_consultant`) can read. The
-internal cards respect role gating from the MVP (trial_consultant sees a
-narrower subset). Role logic lives in the hooks, not in components.
+All roles can read; the registry decides what each role sees. Bible
+role matrix:
 
-## Acceptance gates
+| Widget | Owner | Admin | Sales | Trial Consultant |
+|---|---|---|---|---|
+| Welcome header | ✓ | ✓ | ✓ | ✓ |
+| Needs Attention banner | ✓ | — | ✓ | — |
+| Revenue YTD / Pipeline / Outstanding / Rev-per-Trial | ✓ | ✓ | ✓ | — |
+| Active Trials / Trials YTD | ✓ | ✓ | ✓ | ✓ |
+| Sales Pipeline chart | ✓ | ✓ | ✓ | — |
+| Quick Stats | ✓ | ✓ | ✓ | — |
+| Recent Activity | ✓ | ✓ | ✓ | ✓ |
+| Weekly / Monthly Team Performance | ✓ | ✓ | ✓ | — |
+| Active Trial Performance / Upcoming Trials | ✓ | ✓ | ✓ | ✓ |
+| Revenue Trend | ✓ | ✓ | ✓ | — |
+| Quick Actions | ✓ (5–6) | ✓ (5–6) | ✓ (5–6) | ✓ (4) |
 
-1. Empty company → `EmptyDashboard` renders with "create your first client / trial" CTAs.
-2. Populated graph → cards reflect entity counts; updating a client elsewhere
-   updates the Active Clients count without a manual refresh.
-3. Mobile viewport: card stack, no horizontal scroll, all CTAs ≥ 44pt.
-4. No imports outside the allowed boundary (eslint-plugin-boundaries).
+## Mobile
+
+`< md`: card stack, vertical scroll. KPI row collapses to 2-col.
+Charts shrink with responsive containers (recharts
+`ResponsiveContainer`). Touch targets ≥ 44pt on every interactive
+card. The QuickActionsBar adapts: trial-consultant gets a fixed
+4-col grid; everyone else gets `grid-cols-2 sm:grid-cols-3 lg:grid-cols-6`.
+
+## Acceptance gates (Definition of Done)
+
+1. **Visual parity** — pixel-overlap ≤5% drift at 1440×900 and
+   375×667 vs the bible (asserted by change-409 Playwright harness).
+2. **Composition discipline** — adding a widget never touches
+   `dashboard-page.tsx`. Verified by code review.
+3. **No role literals in widgets** — CI grep gate clean.
+4. **Hooks compose, never re-implement** — every numeric output
+   flows through a `business-rules/*` function. Phase A guarantees
+   bible-parity at the arithmetic layer; widgets just shape the
+   rendering.
+5. **Realtime** — entity update anywhere → widget re-renders within
+   ~50ms (Realtime Manager 16ms coalescing + graph selector tick).
+6. **Offline graceful degrade** — hybrid widgets render skeleton +
+   "loading" instead of an error when REST fails.
+7. **`pnpm typecheck && pnpm lint && pnpm test`** green.
+
+## See also
+
+- `.claude/plans/foamy-marinating-hollerith.md` — full architectural
+  rationale + sequencing.
+- `.kbd-orchestrator/phases/dashboard-bible-parity-build/` — phase
+  ledger + plan + execution.
+- `openspec/changes/change-405..409` — per-change proposals + tasks +
+  spec deltas.
+- `business-rules/__tests__/` — 70 tests that lock bible parity at
+  the calculation layer.
 
 Self-hosted Supabase only. HotSeatersMVP is the bible.
