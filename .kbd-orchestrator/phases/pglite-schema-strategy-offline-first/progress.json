@@ -1,0 +1,75 @@
+{
+  "phase": "pglite-schema-strategy-offline-first",
+  "project": "hotseaters-ultimate",
+  "status": "gated",
+  "gate_reason": "Active phase 'dashboard-and-data-architecture-parity' has changes 402/403/404 still IN_PROGRESS/PENDING that modify the same files. Per user decision 2026-05-25, finish dashboard phase first.",
+  "gate_release_when": [
+    "dashboard-and-data-architecture-parity/progress.json has execution_complete=true AND reflection_complete=true",
+    "change-402, change-403, change-404 all DONE",
+    "Session-made schema fixes (account_status, preferences, drop+recreate migration) committed on main",
+    "pnpm typecheck && pnpm test && pnpm test:e2e green on main"
+  ],
+  "assessment_complete": true,
+  "plan_complete": true,
+  "execution_complete": false,
+  "reflection_complete": false,
+  "change_backend": "openspec",
+  "assessment_path": ".kbd-orchestrator/phases/pglite-schema-strategy-offline-first/assessment.md",
+  "plan_path": ".kbd-orchestrator/phases/pglite-schema-strategy-offline-first/plan.md",
+  "execution_path": ".kbd-orchestrator/phases/pglite-schema-strategy-offline-first/execution.md",
+  "design_doc": "docs/architecture/pglite-schema-strategy.md",
+  "changes_total": 9,
+  "changes_completed": 0,
+  "changes": [
+    "change-410-bible-business-rules-inventory",
+    "change-411-schema-stop-the-bleeding",
+    "change-412-per-table-fingerprint-migrator",
+    "change-413-offline-write-queue-and-reconciler",
+    "change-414-pending-sync-ux-surface",
+    "change-415-schema-registry-upstream",
+    "change-416-lookup-cache-tier",
+    "change-417-hlc-origin-and-plugin-model",
+    "change-418-business-rule-rehoming-and-offline-coverage"
+  ],
+  "change_state": {
+    "change-410-bible-business-rules-inventory": "GATED",
+    "change-411-schema-stop-the-bleeding": "GATED",
+    "change-412-per-table-fingerprint-migrator": "GATED",
+    "change-413-offline-write-queue-and-reconciler": "GATED",
+    "change-414-pending-sync-ux-surface": "GATED",
+    "change-415-schema-registry-upstream": "GATED",
+    "change-416-lookup-cache-tier": "GATED",
+    "change-417-hlc-origin-and-plugin-model": "GATED",
+    "change-418-business-rule-rehoming-and-offline-coverage": "GATED"
+  },
+  "dependencies": {
+    "change-410-bible-business-rules-inventory": [],
+    "change-411-schema-stop-the-bleeding": [],
+    "change-412-per-table-fingerprint-migrator": ["change-411-schema-stop-the-bleeding"],
+    "change-413-offline-write-queue-and-reconciler": ["change-412-per-table-fingerprint-migrator"],
+    "change-414-pending-sync-ux-surface": ["change-413-offline-write-queue-and-reconciler"],
+    "change-415-schema-registry-upstream": ["change-412-per-table-fingerprint-migrator"],
+    "change-416-lookup-cache-tier": ["change-415-schema-registry-upstream"],
+    "change-417-hlc-origin-and-plugin-model": ["change-415-schema-registry-upstream"],
+    "change-418-business-rule-rehoming-and-offline-coverage": [
+      "change-410-bible-business-rules-inventory",
+      "change-413-offline-write-queue-and-reconciler",
+      "change-417-hlc-origin-and-plugin-model"
+    ]
+  },
+  "parallelism": [
+    ["change-410-bible-business-rules-inventory", "change-411-schema-stop-the-bleeding"],
+    ["change-412-per-table-fingerprint-migrator"],
+    ["change-413-offline-write-queue-and-reconciler", "change-414-pending-sync-ux-surface"],
+    ["change-415-schema-registry-upstream"],
+    ["change-416-lookup-cache-tier", "change-417-hlc-origin-and-plugin-model"],
+    ["change-418-business-rule-rehoming-and-offline-coverage"]
+  ],
+  "qa_gate": {
+    "tool": "artifact-refiner",
+    "command": "/refine-validate \"<change-id>\"",
+    "skip_for": [
+      "change-410-bible-business-rules-inventory (docs-only)"
+    ]
+  }
+}

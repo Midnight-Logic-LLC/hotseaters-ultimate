@@ -13,6 +13,32 @@
 ## Next step
 Run `/kbd-execute dashboard-and-data-architecture-parity` to dispatch.
 
+## Queued next phase (GATED)
+`pglite-schema-strategy-offline-first` is planned, scaffolded, and
+**explicitly gated** behind this phase. 9 OpenSpec changes (410–418),
+5 waves. Gate condition lives in
+`.kbd-orchestrator/phases/pglite-schema-strategy-offline-first/execution.md`.
+`progress.json` for that phase marks every change as `GATED` to make
+the hold visible to any tool that reads it.
+
+**Why gated:** changes 411 / 412 / 413 / 415 / 416 / 417 modify the
+same files that change-402 / 403 / 404 are still editing
+(pglite-client.ts, sync-config.ts, local-schema-*.sql, electric-sync.ts).
+Dispatching now would overwrite in-flight work — including the
+account_status / preferences / drop+recreate fixes from the most recent
+session.
+
+**Promotion path (when this phase reflects complete):**
+1. `/kbd-reflect dashboard-and-data-architecture-parity`, archive changes.
+2. Copy
+   `.kbd-orchestrator/phases/pglite-schema-strategy-offline-first/waypoint.json`
+   over `.kbd-orchestrator/current-waypoint.json`.
+3. Re-run `/kbd-execute pglite-schema-strategy-offline-first` — it will
+   detect the gate is open and emit a live dispatch contract.
+
+Design doc:
+[docs/architecture/pglite-schema-strategy.md](../docs/architecture/pglite-schema-strategy.md).
+
 Dependency-respecting execution order (parallelism shown by row):
 
 | Wave | Changes |

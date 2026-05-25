@@ -1,0 +1,39 @@
+{
+  "phase": "pglite-schema-strategy-offline-first",
+  "project": "hotseaters-ultimate",
+  "status": "planned-queued",
+  "queued_behind": "dashboard-and-data-architecture-parity",
+  "assessment_complete": true,
+  "plan_complete": true,
+  "execution_complete": false,
+  "reflection_complete": false,
+  "change_backend": "openspec",
+  "assessment_path": ".kbd-orchestrator/phases/pglite-schema-strategy-offline-first/assessment.md",
+  "plan_path": ".kbd-orchestrator/phases/pglite-schema-strategy-offline-first/plan.md",
+  "design_doc": "docs/architecture/pglite-schema-strategy.md",
+  "next_step_when_active": "W0: dispatch change-410 (Explore agent, read-only bible inventory) + change-411 (build-error-resolver, in-repo stop-the-bleeding) in parallel.",
+  "execution_order": [
+    ["change-410-bible-business-rules-inventory", "change-411-schema-stop-the-bleeding"],
+    ["change-412-per-table-fingerprint-migrator"],
+    ["change-413-offline-write-queue-and-reconciler", "change-414-pending-sync-ux-surface"],
+    ["change-415-schema-registry-upstream"],
+    ["change-416-lookup-cache-tier", "change-417-hlc-origin-and-plugin-model"],
+    ["change-418-business-rule-rehoming-and-offline-coverage"]
+  ],
+  "definition_of_done_summary": [
+    "Per-table fingerprint ledger replaces BUNDLED_PGLITE_SCHEMA_VERSION.",
+    "Additive server schema changes apply via ALTER TABLE; destructive affects at most one table.",
+    "_extra JSONB sidecar absorbs unknown columns on every *_synced / *_local.",
+    "_hlc + _origin on every Tier-A row (substrate for WebRTC future).",
+    "Offline writes accumulate in local_writes; reconnect drains with LWW conflict surface.",
+    "Global header chip shows N pending - Online/Offline with click-through panel.",
+    "Side-effects (e-sign, Stripe, email, Slack) queue + replay via local_writes operation=side_effect.",
+    "Server-required actions block offline with explanatory toast.",
+    "prometheus-entity-management owns SchemaRegistry, SchemaMigrator, LookupCache, definePlugin.",
+    "Lookup tier (metadata_type, country, state) refreshes via ETag, not Electric.",
+    "docs/BIBLE-BUSINESS-RULES.md enumerates every bible rule, classified.",
+    "scripts/bible-rules-coverage.mjs --strict gates CI; every rule has a port + test.",
+    "Cypress: chaos mid-migration test, offline-write test, conflict test, pending-sync chip test all pass.",
+    "pnpm typecheck && pnpm test && pnpm test:e2e green."
+  ]
+}
