@@ -1,7 +1,7 @@
 {
   "phase": "dashboard-bible-parity-build",
   "project": "hotseaters-ultimate",
-  "status": "planned",
+  "status": "executing",
   "assessment_complete": true,
   "plan_complete": true,
   "execution_complete": false,
@@ -12,7 +12,7 @@
   "design_doc": ".claude/plans/foamy-marinating-hollerith.md",
   "prologue_commit": "28808a7",
   "changes_total": 5,
-  "changes_completed": 0,
+  "changes_completed": 1,
   "changes": [
     "change-405-lookup-selectors-tier1-extension",
     "change-406-dashboard-widget-data-hooks",
@@ -21,11 +21,14 @@
     "change-409-dashboard-verification"
   ],
   "change_state": {
-    "change-405-lookup-selectors-tier1-extension": "PENDING",
+    "change-405-lookup-selectors-tier1-extension": "DONE",
     "change-406-dashboard-widget-data-hooks": "PENDING",
     "change-407-dashboard-widget-components": "PENDING",
     "change-408-dashboard-page-shell-and-registry": "PENDING",
     "change-409-dashboard-verification": "PENDING"
+  },
+  "commits_landed_on_hotseaters_ultimate_main": {
+    "change-405": "9485621"
   },
   "dependencies": {
     "change-405-lookup-selectors-tier1-extension": [],
