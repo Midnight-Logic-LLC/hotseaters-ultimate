@@ -7,6 +7,7 @@
  * the only PGlite seam — so we never violate the layering rule.
  */
 
+import { useMemo } from 'react';
 import { useEntityList } from '@prometheus-ags/prometheus-entity-management';
 import { useTier1 } from '@/app/tier1-provider';
 import * as clientsStore from '@/features/clients/stores/clients-store';
@@ -35,10 +36,16 @@ export function useClientsList(): UseClientsListResult {
     enabled: !!companyId,
   });
 
-  return {
-    clients: list.items,
-    isLoading: list.isLoading,
-    error: list.error,
-    refetch: list.refetch,
-  };
+  // Pin identity so consumers don't trip React 19's "getSnapshot should be
+  // cached to avoid an infinite loop" warning. The library returns a fresh
+  // object per render; this useMemo keeps the destructure stable.
+  return useMemo(
+    () => ({
+      clients: list.items,
+      isLoading: list.isLoading,
+      error: list.error,
+      refetch: list.refetch,
+    }),
+    [list.items, list.isLoading, list.error, list.refetch],
+  );
 }

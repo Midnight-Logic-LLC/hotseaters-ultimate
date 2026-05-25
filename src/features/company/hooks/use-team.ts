@@ -12,7 +12,7 @@ import {
   updateUserInfo,
   type SendInvitationPayload,
 } from '@/features/company/stores/company-store';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 export interface TeamMember extends Record<string, unknown> {
   id: string;
@@ -36,7 +36,7 @@ export interface UseTeamResult {
 }
 
 export function useTeam(companyId: string | null): UseTeamResult {
-  const { items, isLoading, total, refetch } = useEntityList<TeamMember, TeamMember>({
+  const list = useEntityList<TeamMember, TeamMember>({
     type: 'UserInfo',
     queryKey: ['team', companyId ?? 'none'],
     enabled: !!companyId,
@@ -50,6 +50,20 @@ export function useTeam(companyId: string | null): UseTeamResult {
     },
     normalize: (raw) => ({ id: String(raw.id), data: raw }),
   });
+  // Stabilize the destructured shape so consumers of useTeam (which is read
+  // through useSyncExternalStore-backed selectors downstream) don't trigger
+  // React 19's "getSnapshot should be cached to avoid an infinite loop"
+  // warning. The underlying library currently returns a fresh result object
+  // per render; memoising the destructure pins the identity.
+  const { items, isLoading, total, refetch } = useMemo(
+    () => ({
+      items: list.items,
+      isLoading: list.isLoading,
+      total: list.total,
+      refetch: list.refetch,
+    }),
+    [list.items, list.isLoading, list.total, list.refetch],
+  );
 
   const [invitePending, setInvitePending] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
