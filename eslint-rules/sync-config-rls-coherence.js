@@ -30,6 +30,9 @@ const _RULE_NAME = 'sync-config-rls-coherence';
  */
 function findRlsMigrations(repoRoot) {
   const candidates = [
+    // CI layout: latest-data is checked out INSIDE the repo at ./latest-data/
+    path.resolve(repoRoot, 'latest-data/supabase/migrations'),
+    // Local dev layout: latest-data is a sibling of the repo root
     path.resolve(repoRoot, '../latest-data/supabase/migrations'),
     path.resolve(repoRoot, '../../latest-data/supabase/migrations'),
   ];
@@ -122,7 +125,8 @@ export default {
         'the server-side policy is the only gate. Add policies in ' +
         'latest-data/supabase/migrations/<ts>_rls_policies.sql before syncing this entity.',
       missingRlsFile:
-        "Could not locate any *_rls_policies*.sql under ../latest-data/supabase/migrations. " +
+        "Could not locate any *_rls_policies*.sql under latest-data/supabase/migrations " +
+        "(checked ./latest-data/, ../latest-data/, ../../latest-data/). " +
         'Sync↔RLS coherence cannot be verified.',
     },
   },
