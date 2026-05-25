@@ -1,89 +1,51 @@
 # Current waypoint — hotseaters-ultimate
 
-**Phase:** `dashboard-and-data-architecture-parity`
-**Status:** execution_complete (reflect pending)
+**Phase:** `dashboard-bible-parity-build`
+**Status:** planned (ready to execute)
 **Change backend:** OpenSpec (`openspec/` at repo root)
+**Design doc:** [.claude/plans/foamy-marinating-hollerith.md](../.claude/plans/foamy-marinating-hollerith.md)
 
 ## What just finished
-- All 4 changes landed on `main`:
-  - change-401-routing-redirect-last-route — `56f9733`
-  - change-402-app-shell-dashboard-parity — `19f435c`
-  - change-403-per-user-pglite-sync-policy — `217d516` + `cf2f2c6` (migration drop+recreate fix) + `93f4851` (single login surface)
-  - change-404-lookup-entities-wiring — `2985773`
-- Dashboard-rebuild Phase A also landed in `28808a7` (7 bible business-rule
-  modules + 7 spec files, 70 tests).
-- Offline-first follow-up phase scaffolded in `e4611d5` (docs + 9 OpenSpec
-  changes under change-410..418, gated).
-- Ledger reconciled 2026-05-25: progress.json was stale relative to repo state.
+- `dashboard-and-data-architecture-parity` reflected and archived 2026-05-25.
+  All 4 changes (401–404) moved to `openspec/changes/archive/` and 5 spec
+  capabilities created under `openspec/specs/` (auth-routing, app-shell,
+  dashboard, local-first-sync, lookups).
+- Dashboard-rebuild Phase A (bible business rules) committed in `28808a7`
+  — 7 modules + 70 tests, the foundation every subsequent widget hook
+  composes.
+
+## Phase scope
+**Build the actual bible-parity dashboard surface** as the reference
+implementation every other feature page will follow. 5 sequential
+OpenSpec changes (405–409), Phases B–F of the dashboard rebuild plan.
+
+| Wave | Change | Deliverable |
+|---|---|---|
+| W1 | 405 | Lookup selectors + Tier1 extension |
+| W2 | 406 | 14 widget data hooks (`useEntityView` hybrid mode) |
+| W3 | 407 | 17 widget components (bible visual parity) |
+| W4 | 408 | Thin page shell + role-aware widget registry + cleanup |
+| W5 | 409 | Verification — Cypress role permutations + offline-fallback + realtime + visual harness + Lighthouse a11y |
 
 ## Next step
-1. Run `/kbd-reflect dashboard-and-data-architecture-parity` to verify the
-   four changes via `/opsx:verify` and archive them under
-   `openspec/changes/archive/`.
-2. Then promote the GATED `pglite-schema-strategy-offline-first` phase:
-   copy `.kbd-orchestrator/phases/pglite-schema-strategy-offline-first/waypoint.json`
-   over `.kbd-orchestrator/current-waypoint.json` and re-run
-   `/kbd-execute pglite-schema-strategy-offline-first`.
-
-Alternatively, continue the dashboard-rebuild plan (Phase B–F per
-`.claude/plans/foamy-marinating-hollerith.md`) in parallel — it has
-minimal file overlap with the offline-first phase.
+Run `/kbd-execute dashboard-bible-parity-build` to dispatch W1
+(change-405). Each subsequent wave waits on the prior one's contracts
+— strictly sequential.
 
 ## Queued next phase (GATED)
-`pglite-schema-strategy-offline-first` is planned, scaffolded, and
-**explicitly gated** behind this phase. 9 OpenSpec changes (410–418),
-5 waves. Gate condition lives in
-`.kbd-orchestrator/phases/pglite-schema-strategy-offline-first/execution.md`.
-`progress.json` for that phase marks every change as `GATED` to make
-the hold visible to any tool that reads it.
+`pglite-schema-strategy-offline-first` remains GATED — 9 changes
+(410–418) across 5 waves. Gate releases when change-409 lands. Once
+that phase ships, the dashboard's hybrid-mode widgets backed by
+un-synced entities (`invoice`, `time_entry`, `subcontract_*`)
+auto-promote to local-first via change-415's per-feature `entities.ts`
+wiring. **Zero widget code changes required for the promotion.**
 
-**Why gated:** changes 411 / 412 / 413 / 415 / 416 / 417 modify the
-same files that change-402 / 403 / 404 are still editing
-(pglite-client.ts, sync-config.ts, local-schema-*.sql, electric-sync.ts).
-Dispatching now would overwrite in-flight work — including the
-account_status / preferences / drop+recreate fixes from the most recent
-session.
-
-**Promotion path (when this phase reflects complete):**
-1. `/kbd-reflect dashboard-and-data-architecture-parity`, archive changes.
-2. Copy
+## Promotion path
+1. Dispatch `/kbd-execute dashboard-bible-parity-build` (W1).
+2. On change-409 land + verify, run `openspec archive` on 405–409.
+3. `/kbd-reflect dashboard-bible-parity-build` to flip the ledger.
+4. Promote `pglite-schema-strategy-offline-first` by copying
    `.kbd-orchestrator/phases/pglite-schema-strategy-offline-first/waypoint.json`
-   over `.kbd-orchestrator/current-waypoint.json`.
-3. Re-run `/kbd-execute pglite-schema-strategy-offline-first` — it will
-   detect the gate is open and emit a live dispatch contract.
-
-Design doc:
-[docs/architecture/pglite-schema-strategy.md](../docs/architecture/pglite-schema-strategy.md).
-
-Dependency-respecting execution order (parallelism shown by row):
-
-| Wave | Changes |
-|------|---------|
-| 1 | change-401-routing-redirect-last-route |
-| 2 | change-402-app-shell-dashboard-parity, change-403-per-user-pglite-sync-policy |
-| 3 | change-404-lookup-entities-wiring |
-
-## Plan in 30 seconds
-1. **change-401** — `/dashboard` alias + auth-aware landing redirect +
-   `lastViewedPage` tracker. Unblocks everything else.
-2. **change-402** — port every bible widget; SidebarUserFooter, Toaster,
-   TrialBanner; unify logos.
-3. **change-403** — per-user PGlite keyed on `auth.user.id`; split
-   schema (common + user); adopt prometheus-entity-management v1.3's
-   `createTenantScopedElectricAdapter` + `createPGlitePersistenceAdapter`;
-   document Electric-vs-Realtime per domain.
-4. **change-404** — register PipelineStage / Service / ServiceCategory /
-   MetadataType / SettingsType as entities (via `registerEntityFromSql`);
-   wire dashboard Sales Pipeline to real stages.
-
-## Research anchors (used by the plan)
-- ElectricSQL × Supabase: <https://supabase.com/partners/electricsql>,
-  <https://electric-sql.com/docs/integrations/supabase>
-- Supabase multi-tenancy: <https://medium.com/@itsuki.enjoy/supabase-support-multi-tenancy-with-detail-template-project-34f3a3d97ee4>
-- database.build / postgres.new (per-workspace PGlite idiom):
-  <https://github.com/supabase-community/database-build>
-- prometheus-entity-management v1.3 README (local submodule under
-  `latest-data/packages/prometheus-entity-management/`) — the
-  `createPGlitePersistenceAdapter`,
-  `createTenantScopedElectricAdapter`, and `registerEntityFromSql`
-  APIs the plan depends on.
+   over this file.
+5. Re-run `/kbd-execute pglite-schema-strategy-offline-first` —
+   the gate will be open.

@@ -9,22 +9,37 @@
   "change_backend": "openspec",
   "assessment_path": ".kbd-orchestrator/phases/dashboard-bible-parity-build/assessment.md",
   "plan_path": ".kbd-orchestrator/phases/dashboard-bible-parity-build/plan.md",
-  "progress_path": ".kbd-orchestrator/phases/dashboard-bible-parity-build/progress.json",
   "design_doc": ".claude/plans/foamy-marinating-hollerith.md",
   "prologue_commit": "28808a7",
-  "next_step": "Dispatch W1: change-405-lookup-selectors-tier1-extension (architect → typescript-reviewer). Strictly sequential phase — each subsequent change waits on the prior one's contracts.",
-  "execution_order": [
+  "changes_total": 5,
+  "changes_completed": 0,
+  "changes": [
+    "change-405-lookup-selectors-tier1-extension",
+    "change-406-dashboard-widget-data-hooks",
+    "change-407-dashboard-widget-components",
+    "change-408-dashboard-page-shell-and-registry",
+    "change-409-dashboard-verification"
+  ],
+  "change_state": {
+    "change-405-lookup-selectors-tier1-extension": "PENDING",
+    "change-406-dashboard-widget-data-hooks": "PENDING",
+    "change-407-dashboard-widget-components": "PENDING",
+    "change-408-dashboard-page-shell-and-registry": "PENDING",
+    "change-409-dashboard-verification": "PENDING"
+  },
+  "dependencies": {
+    "change-405-lookup-selectors-tier1-extension": [],
+    "change-406-dashboard-widget-data-hooks": ["change-405-lookup-selectors-tier1-extension"],
+    "change-407-dashboard-widget-components": ["change-406-dashboard-widget-data-hooks"],
+    "change-408-dashboard-page-shell-and-registry": ["change-407-dashboard-widget-components"],
+    "change-409-dashboard-verification": ["change-408-dashboard-page-shell-and-registry"]
+  },
+  "parallelism": [
     ["change-405-lookup-selectors-tier1-extension"],
     ["change-406-dashboard-widget-data-hooks"],
     ["change-407-dashboard-widget-components"],
     ["change-408-dashboard-page-shell-and-registry"],
     ["change-409-dashboard-verification"]
-  ],
-  "previous_phases": [
-    "dashboard-and-data-architecture-parity (complete, archived 2026-05-25)"
-  ],
-  "queued_phases": [
-    "pglite-schema-strategy-offline-first (GATED — promote after this phase reflects)"
   ],
   "definition_of_done_summary": [
     "Bible /Dashboard reproduces at >=95% pixel parity at 1440x900 + 375x667.",
