@@ -21,7 +21,7 @@
  * HotSeatersMVP is the bible. Self-hosted Supabase only.
  */
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowDown,
@@ -184,6 +184,7 @@ const LAST_VIEWED_SKIP = new Set<string>([
 function pickAuthedDestination(input: {
   isLoading: boolean;
   isAuthenticated: boolean;
+  hasCompany: boolean;
   userInfo: { status: string | null; company_id: string | null; preferences: Record<string, unknown> | null } | null;
   userInfoLoading: boolean;
 }): string | null {
@@ -210,17 +211,22 @@ function pickAuthedDestination(input: {
   // branches; otherwise we'd race the row in and bounce through /Onboarding.
   if (input.userInfoLoading) return null;
 
-  // (2) No UserInfo row yet → Onboarding (will create it).
+  // (2) Auth claims already resolved a company, but the cold entity graph has
+  // not returned the user_info row yet. Continue to the app shell; SyncGate
+  // owns hydration behind authenticated routes.
+  if (!input.userInfo && input.hasCompany) return '/Dashboard';
+
+  // (3) No UserInfo row yet → Onboarding (will create it).
   if (!input.userInfo) return '/Onboarding';
 
-  // (3) Inactive user — explicit account-rejected screen (do NOT silently
+  // (4) Inactive user — explicit account-rejected screen (do NOT silently
   // reactivate; deactivation was a deliberate admin action).
   if (input.userInfo.status === 'inactive') return '/account-rejected';
 
-  // (4) No company yet → Onboarding.
+  // (5) No company yet → Onboarding.
   if (!input.userInfo.company_id) return '/Onboarding';
 
-  // (5) Last-viewed page restoration (skip the skip-list + Dashboard
+  // (6) Last-viewed page restoration (skip the skip-list + Dashboard
   // self-loop). Bible Layout.jsx:407-417.
   const lastPage = input.userInfo.preferences?.['lastViewedPage'];
   if (
@@ -232,13 +238,14 @@ function pickAuthedDestination(input: {
     return `/${lastPage}`;
   }
 
-  // (6) Default → /Dashboard.
+  // (7) Default → /Dashboard.
   return '/Dashboard';
 }
 
 export function LandingPage() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, hasCompany } = useAuth();
   const { userInfo, isLoading: userInfoLoading } = useCurrentUser();
+  const navigate = useNavigate();
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authDialogRedirect, setAuthDialogRedirect] = useState('/Dashboard');
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
@@ -250,6 +257,7 @@ export function LandingPage() {
   const destination = pickAuthedDestination({
     isLoading,
     isAuthenticated,
+    hasCompany,
     userInfo: userInfo
       ? {
           status: userInfo.status,
@@ -270,13 +278,13 @@ export function LandingPage() {
     setAuthDialogOpen(true);
   };
 
+  const handleDashboard = () => {
+    navigate('/Dashboard');
+  };
+
   if (destination) {
     return <Navigate to={destination} replace />;
   }
-
-  // Authenticated but waiting on userInfo — render nothing rather than
-  // flashing the marketing surface.
-  if (isAuthenticated) return null;
 
   const googleFontsUrl = buildGoogleFontsUrl();
 
@@ -326,7 +334,7 @@ export function LandingPage() {
               </div>
             </div>
             <Button
-              onClick={handleLogin}
+              onClick={isAuthenticated ? handleDashboard : handleLogin}
               variant="outline"
               style={{
                 borderRadius: 'var(--theme-button-radius)',
@@ -334,7 +342,7 @@ export function LandingPage() {
                 fontFamily: 'var(--theme-font-body)',
               }}
             >
-              Login
+              {isAuthenticated ? 'Dashboard' : 'Login'}
             </Button>
           </div>
         </header>

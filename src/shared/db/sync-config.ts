@@ -105,13 +105,13 @@ export const SYNC_CONFIG: SyncEntityConfig[] = [
   {
     name: 'entity_metadata',
     tier: 'A',
-    tenantColumn: null,
-    // entity_metadata.company_id can be NULL (mirrors metadata_type). Scope
-    // through metadata_type so system-wide metadata rows are included.
-    shapeWhere: (cid) =>
-      `(company_id = ${cid} OR metadata_type_id IN (SELECT id FROM metadata_type WHERE company_id = ${cid} OR company_id IS NULL))`,
+    tenantColumn: 'company_id',
+    // Electric's HTTP shape API does not support subqueries in `where`.
+    // Scope directly to tenant rows plus system-wide rows.
+    shapeWhere: (cid) => `(company_id = ${cid} OR company_id IS NULL)`,
     notes:
-      'Scoped via metadata_type so system-wide tiers/categories sync too.',
+      'System-wide rows (company_id IS NULL) are admitted alongside ' +
+      'tenant-scoped rows. Avoid subqueries: Electric shapes reject them.',
   },
   {
     name: 'entity_setting',

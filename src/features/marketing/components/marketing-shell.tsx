@@ -40,8 +40,10 @@
  */
 import type { PropsWithChildren, ReactNode } from 'react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { AuthOptionsDialog } from '@/features/auth/components/auth-options-dialog';
+import { useAuth } from '@/features/auth/hooks/use-auth';
 import { PolicyViewerModal } from '@/features/marketing/components/policy-viewer-modal';
 
 interface MarketingShellProps {
@@ -56,6 +58,8 @@ export function MarketingShell({
   loginRedirectUrl = '/Dashboard',
   banner,
 }: PropsWithChildren<MarketingShellProps>) {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const [authOpen, setAuthOpen] = useState(false);
   const [policyOpen, setPolicyOpen] = useState(false);
   const [policyType, setPolicyType] = useState<'privacy' | 'terms'>('privacy');
@@ -112,14 +116,20 @@ export function MarketingShell({
           </div>
           <Button
             variant="outline"
-            onClick={() => setAuthOpen(true)}
+            onClick={() => {
+              if (isAuthenticated) {
+                navigate('/Dashboard');
+                return;
+              }
+              setAuthOpen(true);
+            }}
             style={{
               borderRadius: 'var(--theme-button-radius)',
               boxShadow: 'var(--theme-button-shadow)',
               fontFamily: 'var(--theme-font-body)',
             }}
           >
-            Login
+            {isAuthenticated ? 'Dashboard' : 'Login'}
           </Button>
         </div>
       </header>

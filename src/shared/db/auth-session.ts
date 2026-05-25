@@ -5,6 +5,9 @@ import { supabase } from './supabase-client';
 import { closeForUser } from './pglite-client';
 import { resetGraph } from '../stores/graph-reset';
 
+const USE_LEGACY_CREATED_BY_BRIDGE =
+  import.meta.env.VITE_SUPABASE_URL === 'https://hotbase.prometheusags.ai';
+
 /**
  * auth-session.ts — Zustand store wrapping `supabase.auth`.
  *
@@ -13,7 +16,8 @@ import { resetGraph } from '../stores/graph-reset';
  *
  *   - `session`            current Supabase session
  *   - `user`               session.user (convenience)
- *   - `companyId`          resolved from `user_info.auth_user_id = auth.uid()`
+ *   - `currentUserInfoId`  resolved from `user_info.auth_user_id = auth.uid()`
+ *   - `companyId`          resolved from that same `user_info` bridge row
  *   - `isAuthenticated`    session !== null (i.e. SDK believes the user is
  *                          signed in). NOT conflated with onboarding state —
  *                          that's what `hasCompany` is for.
@@ -35,6 +39,7 @@ import { resetGraph } from '../stores/graph-reset';
 export interface AuthSessionState {
   session: Session | null;
   user: User | null;
+  currentUserInfoId: string | null;
   companyId: string | null;
   /** True when the Supabase SDK has an active session. Does NOT imply
    *  the user has completed onboarding — see `hasCompany` for that. */
@@ -49,23 +54,85 @@ export interface AuthSessionState {
   refreshClaims: () => Promise<void>;
 }
 
-async function fetchCompanyId(userId: string): Promise<string | null> {
+interface CurrentUserInfoClaims {
+  currentUserInfoId: string | null;
+  companyId: string | null;
+}
+
+async function fetchCurrentUserInfoClaims(user: User): Promise<CurrentUserInfoClaims> {
+  const email =
+    user.email ??
+    (user.user_metadata?.email as string | undefined) ??
+    null;
+  if (USE_LEGACY_CREATED_BY_BRIDGE && email) {
+    return fetchCurrentUserInfoClaimsByCreatedBy(email);
+  }
+
   const { data, error } = await supabase
     .from('user_info')
-    .select('company_id')
-    .eq('auth_user_id', userId)
-    .single();
+    .select('id, company_id')
+    .eq('auth_user_id', user.id)
+    .maybeSingle();
   if (error) {
-    // PGRST116 = no rows; user_info row not created yet (during onboarding).
-    if (error.code === 'PGRST116') return null;
+    if (
+      email &&
+      (error.code === '42703' || error.message.includes('auth_user_id'))
+    ) {
+      return fetchCurrentUserInfoClaimsByCreatedBy(email);
+    }
     throw error;
   }
-  return (data?.company_id as string | null) ?? null;
+  return {
+    currentUserInfoId: (data?.id as string | null | undefined) ?? null,
+    companyId: (data?.company_id as string | null | undefined) ?? null,
+  };
+}
+
+async function fetchCurrentUserInfoClaimsByCreatedBy(email: string): Promise<CurrentUserInfoClaims> {
+  const { data, error } = await supabase
+    .from('user_info')
+    .select('id, company_id')
+    .eq('created_by', email)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    currentUserInfoId: (data?.id as string | null | undefined) ?? null,
+    companyId: (data?.company_id as string | null | undefined) ?? null,
+  };
+}
+
+async function consumeImplicitHashSession(): Promise<Session | null> {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  if (!hash) return null;
+
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  if (!accessToken || !refreshToken) return null;
+
+  const { data, error } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+  if (error) throw error;
+
+  window.history.replaceState(
+    window.history.state,
+    document.title,
+    `${window.location.pathname}${window.location.search}`,
+  );
+
+  return data.session ?? null;
 }
 
 export const useAuthSession = create<AuthSessionState>((set, get) => ({
   session: null,
   user: null,
+  currentUserInfoId: null,
   companyId: null,
   isAuthenticated: false,
   hasCompany: false,
@@ -102,6 +169,7 @@ export const useAuthSession = create<AuthSessionState>((set, get) => ({
     set({
       session: null,
       user: null,
+      currentUserInfoId: null,
       companyId: null,
       isAuthenticated: false,
       hasCompany: false,
@@ -111,11 +179,17 @@ export const useAuthSession = create<AuthSessionState>((set, get) => ({
   async refreshClaims() {
     const { user, session } = get();
     if (!user) {
-      set({ companyId: null, hasCompany: false, isAuthenticated: !!session });
+      set({
+        currentUserInfoId: null,
+        companyId: null,
+        hasCompany: false,
+        isAuthenticated: !!session,
+      });
       return;
     }
-    const companyId = await fetchCompanyId(user.id);
+    const { currentUserInfoId, companyId } = await fetchCurrentUserInfoClaims(user);
     set({
+      currentUserInfoId,
       companyId,
       hasCompany: companyId !== null,
       // isAuthenticated is solely driven by session presence — keep it true
@@ -128,16 +202,22 @@ export const useAuthSession = create<AuthSessionState>((set, get) => ({
 // ─── Boot: read existing session, then subscribe to changes ────────────────
 void (async () => {
   try {
-    const { data } = await supabase.auth.getSession();
+    const implicitSession = await consumeImplicitHashSession();
+    const { data } = implicitSession
+      ? { data: { session: implicitSession } }
+      : await supabase.auth.getSession();
     const session = data.session ?? null;
     const user = session?.user ?? null;
-    const companyId = user ? await fetchCompanyId(user.id) : null;
+    const claims = user
+      ? await fetchCurrentUserInfoClaims(user)
+      : { currentUserInfoId: null, companyId: null };
     useAuthSession.setState({
       session,
       user,
-      companyId,
+      currentUserInfoId: claims.currentUserInfoId,
+      companyId: claims.companyId,
       isAuthenticated: !!session,
-      hasCompany: companyId !== null,
+      hasCompany: claims.companyId !== null,
       isLoading: false,
     });
   } catch {
@@ -148,13 +228,16 @@ void (async () => {
 supabase.auth.onAuthStateChange((_event, session) => {
   void (async () => {
     const user = session?.user ?? null;
-    const companyId = user ? await fetchCompanyId(user.id) : null;
+    const claims = user
+      ? await fetchCurrentUserInfoClaims(user)
+      : { currentUserInfoId: null, companyId: null };
     useAuthSession.setState({
       session,
       user,
-      companyId,
+      currentUserInfoId: claims.currentUserInfoId,
+      companyId: claims.companyId,
       isAuthenticated: !!session,
-      hasCompany: companyId !== null,
+      hasCompany: claims.companyId !== null,
       isLoading: false,
     });
   })();

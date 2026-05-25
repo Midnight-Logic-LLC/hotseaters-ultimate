@@ -25,8 +25,8 @@ jobs:
     timeout-minutes: 30
     env:
       CI: 'true'
-      HU_PORT: '5174'
-      VITE_BASE_URL: 'http://localhost:5174'
+      HU_PORT: '6173'
+      VITE_BASE_URL: 'http://localhost:6173'
       VITE_SUPABASE_URL: 'http://localhost:8000'
     services:
       postgres:

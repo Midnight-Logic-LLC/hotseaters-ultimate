@@ -19,6 +19,12 @@
 import { openForUser, type LocalDB } from './pglite-client';
 
 const ELECTRIC_URL = import.meta.env.VITE_ELECTRIC_URL;
+const LOCAL_BROWSER_ORIGIN =
+  typeof window !== 'undefined' &&
+  import.meta.env.DEV &&
+  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(window.location.origin)
+    ? window.location.origin
+    : null;
 
 if (!ELECTRIC_URL) {
   throw new Error(
@@ -75,7 +81,7 @@ async function attachSystemShape(
 ): Promise<() => Promise<void> | void> {
   const sub = await db.electric.syncShapeToTable({
     shape: {
-      url: `${ELECTRIC_URL}/v1/shape`,
+      url: `${LOCAL_BROWSER_ORIGIN ?? ELECTRIC_URL}/v1/shape`,
       params: {
         table: tableName,
         where,

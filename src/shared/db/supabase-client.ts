@@ -25,6 +25,12 @@ import {
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const LOCAL_BROWSER_ORIGIN =
+  typeof window !== 'undefined' &&
+  import.meta.env.DEV &&
+  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(window.location.origin)
+    ? window.location.origin
+    : null;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
@@ -43,13 +49,13 @@ if (/\.supabase\.co(\/|$)/i.test(SUPABASE_URL)) {
 }
 
 export const supabase: SupabaseClient = createClient(
-  SUPABASE_URL,
+  LOCAL_BROWSER_ORIGIN ?? SUPABASE_URL,
   SUPABASE_ANON_KEY,
   {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      detectSessionInUrl: false,
     },
   },
 );

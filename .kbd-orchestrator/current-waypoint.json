@@ -10,7 +10,7 @@
   "assessment_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/assessment.md",
   "plan_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/plan.md",
   "progress_path": ".kbd-orchestrator/phases/dashboard-and-data-architecture-parity/progress.json",
-  "next_step": "Wave 1 complete (commit 56f9733, push blocked on ssh key). Dispatch Wave 2: change-402 + change-403 in parallel once push is unblocked.",
+  "next_step": "Wave 2 dispatched: change-402 + change-403 (parallel background agents)",
   "execution_order": [
     [
       "change-401-routing-redirect-last-route"

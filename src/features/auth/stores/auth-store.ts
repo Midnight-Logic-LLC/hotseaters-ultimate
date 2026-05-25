@@ -108,12 +108,10 @@ export async function requestPasswordReset(email: string): Promise<void> {
 export async function exchangeOAuthCode(code: string): Promise<void> {
   const { error, data } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
-    // PKCE race: `detectSessionInUrl: true` in the Supabase client means the
-    // SDK may have already consumed the `?code` query param and stored the
-    // session before this explicit exchange call runs. In that case the
-    // exchange fails with "both auth code and code verifier should be
-    // non-empty" because the code verifier has already been wiped. The
-    // session is still valid — just fall through to refreshClaims.
+    // PKCE race: an existing browser session or a duplicate callback render
+    // can mean the auth code was already consumed and stored before this
+    // explicit exchange call runs. The session is still valid — just fall
+    // through to refreshClaims.
     const msg = error.message.toLowerCase();
     const raced =
       msg.includes('code verifier') ||

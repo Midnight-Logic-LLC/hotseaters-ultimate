@@ -12,7 +12,7 @@ import { stopRealtimeChannels } from './realtime-channels';
  * pglite-client.ts — per-user handles to the in-browser WASM Postgres.
  *
  * Each signed-in user gets their own PGlite instance stored in a separate
- * IDB database (`idb://hotseaters/${userId}`). This module maintains a
+ * IDB database (`idb://hotseaters-<userId>`). This module maintains a
  * `Map<userId, Promise<LocalDBBootResult>>` so concurrent callers for the
  * same user always receive the same boot promise (no double-init) while
  * different users are fully isolated at the IndexedDB layer.
@@ -63,7 +63,7 @@ const dbCache = new Map<string, Promise<LocalDBBootResult>>();
 /**
  * Open (or return cached) PGlite for `userId`.
  *
- * IDB store: `idb://hotseaters/${userId}` — each user has a fully isolated
+ * IDB store: `idb://hotseaters-<userId>` — each user has a fully isolated
  * browser database. Schemas are applied idempotently on every open.
  */
 export function openForUser(userId: string): Promise<LocalDBBootResult> {
@@ -110,7 +110,7 @@ async function createLocalDBForUser(userId: string): Promise<LocalDBBootResult> 
   const db = (await PGliteWorker.create(pgWorker, {
     extensions: EXTENSIONS,
     // Per-user IDB database name: each user has fully isolated storage.
-    dataDir: `idb://hotseaters/${userId}`,
+    dataDir: `idb://hotseaters-${userId}`,
   })) as LocalDB;
 
   // ── Apply schemas (idempotent IF NOT EXISTS) ─────────────────────────────

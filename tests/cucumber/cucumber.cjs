@@ -8,7 +8,7 @@ const baseUrl =
   process.env.HU_BASE_URL ||
   process.env.E2E_BASE_URL ||
   process.env.VITE_BASE_URL ||
-  'http://localhost:5174';
+  'http://localhost:6173';
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL || 'http://localhost:8000';

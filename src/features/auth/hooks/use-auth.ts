@@ -45,14 +45,7 @@ export function useAuth(): UseAuthResult {
   const hasCompany = useAuthSession((s) => s.hasCompany);
   const isLoading = useAuthSession((s) => s.isLoading);
   const companyId = useAuthSession((s) => s.companyId);
-
-  // The auth-session store's `currentUserInfoId` is not yet a first-class
-  // field — derive it from `user.user_metadata` if present, else null. The
-  // canonical source is `user_info.id` via the bridge, but we don't fetch it
-  // here (that would couple this hook to the entity graph too early in boot).
-  // Components that need the user_info row use `useCurrentUser()`.
-  const currentUserInfoId =
-    (user?.user_metadata?.user_info_id as string | undefined) ?? null;
+  const currentUserInfoId = useAuthSession((s) => s.currentUserInfoId);
 
   const signInWithGoogle = useCallback(async () => {
     await useAuthSession.getState().signInWithOAuth('google');

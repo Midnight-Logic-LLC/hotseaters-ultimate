@@ -84,7 +84,7 @@ pnpm tauri icon ./public/brand-source.svg
 ```bash
 pnpm tauri:ios:dev
 ```
-Boots the Vite dev server (`http://localhost:5174`), builds the Rust
+Boots the Vite dev server (`http://localhost:6173`), builds the Rust
 target for `aarch64-apple-ios-sim`, signs with the dev team, and launches
 the Simulator. Hot-reload works for the web layer; Rust changes require
 a relaunch.

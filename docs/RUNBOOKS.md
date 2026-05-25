@@ -37,7 +37,7 @@ cp .env.example .env.local
 
 # 5. run the app
 pnpm gen:pglite-schema
-pnpm dev    # http://localhost:5174
+pnpm dev    # http://localhost:6173
 ```
 
 **Smoke test:** sign in with Google OAuth → land on `/dashboard` → no

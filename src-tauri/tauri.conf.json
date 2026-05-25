@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "identifier": "ai.prometheusags.hotseaters.ultimate",
   "build": {
-    "devUrl": "http://localhost:5174",
+    "devUrl": "http://localhost:6173",
     "frontendDist": "../dist",
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm build"

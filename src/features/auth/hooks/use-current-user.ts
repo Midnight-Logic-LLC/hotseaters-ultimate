@@ -40,10 +40,7 @@ export interface UseCurrentUserResult {
 }
 
 export function useCurrentUser(): UseCurrentUserResult {
-  const userInfoId = useAuthSession(
-    (s) =>
-      (s.user?.user_metadata?.user_info_id as string | undefined) ?? null,
-  );
+  const userInfoId = useAuthSession((s) => s.currentUserInfoId);
   const authLoading = useAuthSession((s) => s.isLoading);
 
   const { data, isLoading } = useEntity<UserInfoRecord, UserInfoRecord>({

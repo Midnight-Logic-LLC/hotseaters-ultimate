@@ -19,8 +19,8 @@
   ],
   "change_state": {
     "change-401-routing-redirect-last-route": "DONE",
-    "change-402-app-shell-dashboard-parity": "PENDING",
-    "change-403-per-user-pglite-sync-policy": "PENDING",
+    "change-402-app-shell-dashboard-parity": "IN_PROGRESS",
+    "change-403-per-user-pglite-sync-policy": "IN_PROGRESS",
     "change-404-lookup-entities-wiring": "PENDING"
   },
   "dependencies": {

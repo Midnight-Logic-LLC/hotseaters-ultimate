@@ -23,10 +23,13 @@ const crossOriginIsolation = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp',
 };
+const APP_PORT = 6173;
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const supabaseUrl = env.VITE_SUPABASE_URL ?? 'http://localhost:8000';
+  const electricUrl = env.VITE_ELECTRIC_URL ?? 'http://localhost:3133';
+  const electricSecret = env.ELECTRIC_SECRET ?? process.env.ELECTRIC_SECRET;
 
   // Guard rail: refuse to build against Supabase Cloud.
   if (/\.supabase\.co/i.test(supabaseUrl)) {
@@ -78,7 +81,8 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       headers: crossOriginIsolation,
-      port: 5174,
+      port: APP_PORT,
+      strictPort: true,
       proxy: {
         // Proxy Supabase paths to the configured upstream so the SPA stays on
         // a single origin. The upstream is local docker-compose by default;
@@ -88,11 +92,25 @@ export default defineConfig(({ mode }) => {
         '/storage':   { target: supabaseUrl, changeOrigin: true, secure: true },
         '/functions': { target: supabaseUrl, changeOrigin: true, secure: true },
         '/realtime':  { target: supabaseUrl, changeOrigin: true, secure: true, ws: true },
+        '/v1': {
+          target: electricUrl,
+          changeOrigin: true,
+          secure: true,
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq, req) => {
+              if (!electricSecret || !req.url?.startsWith('/v1/shape')) return;
+              const url = new URL(req.url, 'http://localhost');
+              url.searchParams.set('secret', electricSecret);
+              proxyReq.path = `${url.pathname}${url.search}`;
+            });
+          },
+        },
       },
     },
     preview: {
       headers: crossOriginIsolation,
-      port: 5174,
+      port: APP_PORT,
+      strictPort: true,
     },
     resolve: {
       dedupe: ['react', 'react-dom', 'zustand'],

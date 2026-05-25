@@ -8,7 +8,7 @@
 // Self-hosted Supabase only. HotSeatersMVP is the bible.
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = Number(process.env.HU_PORT ?? 5174);
+const PORT = Number(process.env.HU_PORT ?? 6173);
 const BASE_URL = process.env.VITE_BASE_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({

@@ -9,7 +9,7 @@
  * === Manual verification steps ===
  *
  * 1. Start the local stack: `docker compose up -d`
- * 2. Sign in as a company owner in the app at http://localhost:5174.
+ * 2. Sign in as a company owner in the app at http://localhost:6173.
  * 3. Open Supabase Studio at http://localhost:8000.
  * 4. Navigate to the Table Editor → company → find your company row.
  * 5. Change the `theme` JSONB column, e.g.:
