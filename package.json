@@ -58,7 +58,7 @@
     "@electric-sql/pglite-sync": "^0.3.17",
     "@fontsource-variable/geist": "^5.2.9",
     "@hookform/resolvers": "^5.0.0",
-    "@prometheus-ags/prometheus-entity-management": "link:../latest-data/packages/prometheus-entity-management",
+    "@prometheus-ags/prometheus-entity-management": "workspace:*",
     "@supabase/supabase-js": "^2.47.0",
     "@tanstack/react-table": "^8.20.0",
     "@tanstack/react-virtual": "^3.10.0",

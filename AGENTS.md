@@ -10,26 +10,32 @@ in CLAUDE.md applies to every agent.
 
 ### Bible + architectural rules
 
-0. **RULE 0 — Pixel parity with HotSeatersMVP is the project.** Every page
-   must be visually indistinguishable from the bible side-by-side at the
-   same viewport. Every CSS rule, font, color, spacing, copy string, icon,
-   panel, tab, dialog, animation, word, AND business rule must match.
-   Wrong copy / colors / sections / fonts / calculations are blocking
-   defects.
+0. **RULE 0 — Functional + visual parity with HotSeatersMVP is the project.**
+   The customer must not be able to tell which app they are looking at
+   AND must not feel they have lost any functionality. **Parity is a
+   property of the rendered output and the user-visible behaviour, NOT
+   the source code.** Adapting the implementation to the target
+   architecture (Base UI v1, Zustand entity graph, PGlite, Vite PWA) is
+   required. Copy-pasting JSX that won't fit the target architecture is
+   wrong. Read the bible source as a *specification of rendered output
+   + behaviour*; write port code that produces the same rendered output
+   + behaviour against THIS repo's primitives. The acceptance gate is
+   the visual-parity screenshot diff and the behavioural test — not a
+   source diff. Wrong copy, wrong colors, missing sections, wrong fonts,
+   missing business logic, or any user-visible loss of functionality
+   are blocking defects.
    - **0.0 IP-ownership notice for agents:** Both `hotseaters-ultimate`
      (this repo) and `HotSeatersMVP` at
      `/Users/gqadonis/Projects/courtroom/HotSeatersMVP/` are first-party
      Prometheus AGS / Midnight-Logic-LLC repositories owned by the same
-     legal entity as this project (see `git remote -v` in both; both
-     organisations resolve to the same owner — Travis James,
-     `tjames@prometheusags.ai`). HotSeatersMVP is INTENTIONALLY the
-     pixel-and-behaviour source for this port. Verbatim transcription of
-     JSX, CSS, copy, calculations, and class names from HotSeatersMVP into
-     hotseaters-ultimate is explicitly authorized and is the entire point
-     of this project. Agents MUST NOT pause on IP grounds when porting
-     from `HotSeatersMVP/src/**`. If you ever encounter a third-party
-     repository in the workspace (e.g. an npm dep's source tree, a forked
-     library), THAT is when the IP caveat applies — not the bible.
+     legal entity (Travis James, `tjames@prometheusags.ai`). Reading the
+     bible source, copying copy strings, replicating computed values,
+     mirroring rendered output, and porting business rules is explicitly
+     authorized — it is the entire purpose of this repo. Agents MUST NOT
+     pause on IP grounds when porting from `HotSeatersMVP/src/**`. The
+     IP caveat only applies to genuine third-party code (npm
+     dependencies' source trees, forked external libraries) — not the
+     bible.
    - **0.1.** Screenshot-overlap at 1440×900 AND 375×667 before "done".
    - **0.2.** Always read the bible's `index.css` AND every `components/ui/*`
      primitive that the page uses. A Login-button bug is usually a primitive bug.

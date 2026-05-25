@@ -7,38 +7,88 @@ in this repo. It defines the **hard rules**. Read in full before editing.
 
 ## Hard constraints (NON-NEGOTIABLE)
 
-### RULE 0 — Pixel parity with `HotSeatersMVP` is the project
+### RULE 0 — Functional + visual parity with `HotSeatersMVP` is the project
 
-Every page in `hotseaters-ultimate` must be **visually indistinguishable**
-from the corresponding page in
-`/Users/gqadonis/Projects/courtroom/HotSeatersMVP/src/pages/<Name>.jsx`
-when rendered side-by-side at the same viewport. Every CSS rule, font,
-color, spacing, copy string, icon, panel, tab, dialog, animation, and
-word must match. The customer must NOT be able to tell which app they
-are looking at.
+Every page in `hotseaters-ultimate` must **render the same way the
+customer sees it** and **expose the same set of capabilities** as the
+corresponding page in
+`/Users/gqadonis/Projects/courtroom/HotSeatersMVP/src/pages/<Name>.jsx`.
+The customer must NOT be able to tell which app they are looking at AND
+must NOT feel they have lost any functionality. Shareholders are
+extremely picky about this.
 
-The job is to map the bible's exact UI/UX onto our new backend
-architecture — that is the entire job.
+**Two parts to parity — both required, neither sufficient alone:**
+
+1. **Visual parity at the rendered viewport.** Every visible string,
+   color, font, spacing token, icon, panel, tab, dialog, animation
+   should appear identically when both apps are rendered side-by-side
+   at the same viewport.
+2. **Functional parity at the user surface.** Every business rule,
+   calculation, validation, derived value, conditional render,
+   side-effect, deep link, and CTA destination must behave the same
+   way for the user.
+
+**What parity does NOT mean:** verbatim transcription of JSX, CSS
+class names, or imperative source from the bible. The port runs on
+different primitives (Base UI v1 instead of shadcn/Radix), uses a
+different state architecture (Zustand + entity graph + PGlite instead
+of base44 + react-query), and ships through a different build (Vite
+PWA instead of base44 platform). Adapting the implementation to the
+target architecture is REQUIRED. Copy-pasting source that won't fit
+the target architecture is WRONG.
+
+**Decision rule for agents.** Read the bible source as a *specification
+of the rendered output and behaviour*, then write port code that
+produces the same rendered output and behaviour against this repo's
+primitives, hooks, stores, and entity graph. The acceptance gate is
+the visual-parity screenshot diff and the behavioural test, not a
+`diff` between source files.
+
+The job is to map the bible's exact user-visible UI/UX and
+user-accessible functionality onto our new backend architecture —
+that is the entire job.
+
+#### RULE 0.0 — IP-ownership notice for agents
+
+Both `hotseaters-ultimate` (this repo) and `HotSeatersMVP` at
+`/Users/gqadonis/Projects/courtroom/HotSeatersMVP/` are first-party
+Prometheus AGS / Midnight-Logic-LLC repositories owned by the same
+legal entity (Travis James, `tjames@prometheusags.ai`). Reading the
+bible source, copying copy strings, replicating computed values,
+mirroring rendered output, and porting business rules is explicitly
+authorized — it is the entire purpose of this repo. Agents MUST NOT
+pause on IP grounds when porting from `HotSeatersMVP/src/**`. The IP
+caveat only applies to genuine third-party code (e.g. an npm
+dependency's source tree, a forked external library).
 
 **Per-page acceptance gate.** A page is NOT done until:
 
-- Bible source read end-to-end in a single read pass (no partial reads).
-- DOM structure matches section-for-section.
-- Every visible string appears verbatim in the port.
+- Bible source read end-to-end (paginated reads ok for >1000 LOC
+  files; the goal is comprehension, not a single API call).
+- The rendered DOM in the port produces the same visible regions /
+  sections / hierarchy as the bible — implementation details
+  (component names, class names, JSX structure) MAY differ, but the
+  rendered output must not.
+- Every visible string appears verbatim in the port (this is a strict
+  rule — copy is content, not implementation).
 - Every image asset is locally-hosted under `public/brand/` (no CDNs).
-- Every `var(--theme-*)` reference from the bible's inline styles is
-  present.
-- Every keyframe / animation block from the bible is reproduced.
+- Every `var(--theme-*)` token the bible uses is referenced (whether
+  via inline `style={}` or via a class — implementation detail).
+- Every animation the user sees is reproduced (keyframes, durations,
+  easing); the animation implementation may use the port's primitives.
 - Live side-by-side screenshot comparison at **1440×900** AND
-  **375×667** (mobile) against the production bible deployment.
+  **375×667** (mobile) against the production bible deployment shows
+  ≤5% drift on the visual-parity harness.
 - Deep links and CTAs route to the same destinations as the bible.
 - **All business rules and calculations from the source page are
-  preserved** — read the bible's component logic, identify every
-  computation, validation, derived value, conditional render, and
-  side-effect, and reproduce them faithfully in the port.
+  preserved** — identify every computation, validation, derived value,
+  conditional render, and side-effect, and reproduce the behaviour
+  against this repo's entity graph and stores. Reuse the bible's
+  formulas; rewrite the orchestration to fit RULES B/C/D.
 
-Wrong copy, wrong colors, missing sections, wrong fonts, or missing
-business logic are **blocking defects**, not polish.
+Wrong copy, wrong colors, missing sections, wrong fonts, missing
+business logic, or any user-visible loss of functionality are
+**blocking defects**, not polish.
 
 #### RULE 0.1 — Screenshot-overlap before "done"
 

@@ -1,0 +1,9 @@
+# pnpm workspace for hotseaters-ultimate
+#
+# - packages/prometheus-entity-management is a git submodule, allowing
+#   local edits and commits to the entity-management library.
+# - The app depends on the library via the `workspace:*` protocol,
+#   resolving to the local submodule source rather than the npm registry.
+packages:
+  - packages/prometheus-entity-management
+  - .

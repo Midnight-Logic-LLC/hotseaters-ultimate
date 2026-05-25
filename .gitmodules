@@ -1,0 +1,3 @@
+[submodule "packages/prometheus-entity-management"]
+	path = packages/prometheus-entity-management
+	url = git@github.com:Prometheus-AGS/prometheus-entity-management.git
