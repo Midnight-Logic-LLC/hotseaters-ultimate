@@ -1,5 +1,6 @@
 {
   "phase": "dashboard-bible-parity-build",
+  "round": "B",
   "project": "hotseaters-ultimate",
   "status": "planned",
   "assessment_complete": true,
@@ -12,14 +13,25 @@
   "progress_path": ".kbd-orchestrator/phases/dashboard-bible-parity-build/progress.json",
   "design_doc": ".claude/plans/foamy-marinating-hollerith.md",
   "prologue_commit": "28808a7",
-  "next_step": "Dispatch W1: change-405-lookup-selectors-tier1-extension (architect → typescript-reviewer). Strictly sequential phase — each subsequent change waits on the prior one's contracts.",
-  "execution_order": [
-    ["change-405-lookup-selectors-tier1-extension"],
-    ["change-406-dashboard-widget-data-hooks"],
-    ["change-407-dashboard-widget-components"],
-    ["change-408-dashboard-page-shell-and-registry"],
-    ["change-409-dashboard-verification"]
+  "round_a_landed_changes": [
+    "change-405-lookup-selectors-tier1-extension",
+    "change-406-dashboard-widget-data-hooks",
+    "change-407-dashboard-widget-components",
+    "change-408-dashboard-page-shell-and-registry",
+    "change-409-dashboard-verification"
   ],
+  "next_step": "change-420 LANDED (submodule fix + SHA bump + RUNBOOKS; npm publish deferred). Manual /Dashboard verification is the next user action before we dispatch change-421. Once the console is confirmed clean of the getSnapshot warning, /kbd-execute change-421-card-primitive-bible-tokens.",
+  "execution_order": [
+    ["change-420-entity-mgmt-memoize-useEntityList-submodule-fix"],
+    ["change-421-card-primitive-bible-tokens"],
+    ["change-422-welcome-header-fallback-parity"],
+    ["change-423-recharts-submodule-or-no-op"],
+    ["change-424-team-members-data-root-cause"]
+  ],
+  "gating": {
+    "change-423-recharts-submodule-or-no-op": "Gated on DevTools Console state at /Dashboard AFTER changes 420-422 land. Phase 2A (no-op) if console clean of `Maximum update depth` + `width(-1)`. Phase 2B (submodule) if either persists.",
+    "change-424-team-members-data-root-cause": "Gated on Network-tab observation of /rest/v1/user_info call AFTER change-420 lands. Four diagnostic branches (A/B/C/D) in change-424/tasks.md."
+  },
   "previous_phases": [
     "dashboard-and-data-architecture-parity (complete, archived 2026-05-25)"
   ],
@@ -37,5 +49,13 @@
     "Cypress role-permutation + offline-fallback + realtime specs all pass.",
     "Lighthouse a11y on /Dashboard >= 95.",
     "Bundle size unchanged or smaller."
+  ],
+  "round_b_dod_additions": [
+    "DevTools Console at /Dashboard clean of `getSnapshot should be cached`, `Maximum update depth exceeded`, and `width(-1) height(-1)`.",
+    "Card chrome matches bible at 1440x900 with <=2% per-card visual drift.",
+    "Welcome header reads `Welcome back, User` pre-hydration and `Welcome back, <FirstName>` post-hydration; no missing-comma flash.",
+    "Quick Stats Team Members count === bible value for the same user.",
+    "@prometheus-ags/prometheus-entity-management@1.3.1 published to npm; submodule SHA bumped in superproject.",
+    "docs/RUNBOOKS.md documents the submodule-fix loop for entity-mgmt + recharts."
   ]
 }
