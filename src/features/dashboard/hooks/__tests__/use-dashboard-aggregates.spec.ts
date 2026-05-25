@@ -121,7 +121,8 @@ const TRIALS = [
 ];
 
 // Invoices: 3 paid this year ($5k + $3k + $2k), 1 outstanding this month ($1k)
-const JAN_1 = new Date(THIS_YEAR, 0, 1);
+// JAN_1 reserved for future date-boundary tests
+// const JAN_1 = new Date(THIS_YEAR, 0, 1);
 const INVOICES = [
   { id: 'inv1', company_id: COMPANY_ID, invoice_number: 'INV-001', total: 5000, status: 'paid', invoice_date: iso(new Date(THIS_YEAR, 0, 15)) },
   { id: 'inv2', company_id: COMPANY_ID, invoice_number: 'INV-002', total: 3000, status: 'paid', invoice_date: iso(new Date(THIS_YEAR, 1, 10)) },

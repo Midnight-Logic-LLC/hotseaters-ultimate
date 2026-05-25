@@ -45,12 +45,20 @@ export interface Tier1UserInfo {
   company_role: LegacyRole;
   is_sales?: boolean | undefined;
   status?: 'active' | 'inactive' | undefined;
+  /** Display name fields surfaced from user_info row. */
+  first_name?: string | null;
+  last_name?: string | null;
 }
 
 export interface Tier1Company extends CompanyFlags {
   id: string;
   name: string;
   theme?: unknown;
+  /** Presence indicates a Stripe subscription; absence = still in trial. */
+  stripe_customer_id?: string | null;
+  /** ISO date string: when the company record was created (trial start). */
+  created_date?: string | null;
+  created_at?: string | null;
 }
 
 export interface Tier1Value {

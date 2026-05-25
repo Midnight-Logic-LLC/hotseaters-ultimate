@@ -352,12 +352,14 @@ export function DashboardPage() {
                         <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
                         <Tooltip
                           contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-                          formatter={(value: number, name: string) => [
-                            name === 'count'
-                              ? `${value} deals`
-                              : `$${Math.round(value).toLocaleString()}`,
-                            name === 'count' ? 'Deals' : 'Value',
-                          ]}
+                          formatter={(rawValue, name) => {
+                            const val = Number(rawValue ?? 0);
+                            const key = String(name);
+                            return [
+                              key === 'count' ? `${val} deals` : `$${Math.round(val).toLocaleString()}`,
+                              key === 'count' ? 'Deals' : 'Value',
+                            ];
+                          }}
                         />
                         <Bar dataKey="count" fill="#7C3AED" radius={[4, 4, 0, 0]} />
                       </BarChart>
@@ -592,13 +594,15 @@ export function DashboardPage() {
                         />
                         <Tooltip
                           contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-                          formatter={(value: number, name: string) => {
-                            if (isTrialConsultant) return [`${Number(value).toFixed(1)}h`, 'Hours'];
+                          formatter={(rawValue, name) => {
+                            const value = Number(rawValue ?? 0);
+                            const key = String(name);
+                            if (isTrialConsultant) return [`${value.toFixed(1)}h`, 'Hours'];
                             return [
-                              name === 'revenue'
+                              key === 'revenue'
                                 ? `$${Math.round(value).toLocaleString()}`
-                                : `${Number(value).toFixed(1)}h`,
-                              name === 'revenue' ? 'Revenue' : 'Hours',
+                                : `${value.toFixed(1)}h`,
+                              key === 'revenue' ? 'Revenue' : 'Hours',
                             ];
                           }}
                         />
@@ -609,7 +613,7 @@ export function DashboardPage() {
                             radius={[0, 4, 4, 0]}
                             label={{
                               position: 'right',
-                              formatter: (v: number) => `${Number(v).toFixed(1)}h`,
+                              formatter: (v: unknown) => `${Number(v ?? 0).toFixed(1)}h`,
                               fontSize: 11,
                               fill: '#374151',
                             }}
@@ -621,7 +625,7 @@ export function DashboardPage() {
                             radius={[0, 4, 4, 0]}
                             label={{
                               position: 'right',
-                              formatter: (v: number) => `$${Math.round(v).toLocaleString()}`,
+                              formatter: (v: unknown) => `$${Math.round(Number(v ?? 0)).toLocaleString()}`,
                               fontSize: 11,
                               fill: '#374151',
                             }}
@@ -684,13 +688,15 @@ export function DashboardPage() {
                         />
                         <Tooltip
                           contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-                          formatter={(value: number, name: string) => {
-                            if (isTrialConsultant) return [`${Number(value).toFixed(1)}h`, 'Hours'];
+                          formatter={(rawValue, name) => {
+                            const value = Number(rawValue ?? 0);
+                            const key = String(name);
+                            if (isTrialConsultant) return [`${value.toFixed(1)}h`, 'Hours'];
                             return [
-                              name === 'revenue'
+                              key === 'revenue'
                                 ? `$${Math.round(value).toLocaleString()}`
-                                : `${Number(value).toFixed(1)}h`,
-                              name === 'revenue' ? 'Revenue' : 'Hours',
+                                : `${value.toFixed(1)}h`,
+                              key === 'revenue' ? 'Revenue' : 'Hours',
                             ];
                           }}
                         />
@@ -701,7 +707,7 @@ export function DashboardPage() {
                             radius={[0, 4, 4, 0]}
                             label={{
                               position: 'right',
-                              formatter: (v: number) => `${Number(v).toFixed(1)}h`,
+                              formatter: (v: unknown) => `${Number(v ?? 0).toFixed(1)}h`,
                               fontSize: 11,
                               fill: '#374151',
                             }}
@@ -713,7 +719,7 @@ export function DashboardPage() {
                             radius={[0, 4, 4, 0]}
                             label={{
                               position: 'right',
-                              formatter: (v: number) => `$${Math.round(v).toLocaleString()}`,
+                              formatter: (v: unknown) => `$${Math.round(Number(v ?? 0)).toLocaleString()}`,
                               fontSize: 11,
                               fill: '#374151',
                             }}
@@ -778,13 +784,15 @@ export function DashboardPage() {
                         />
                         <Tooltip
                           contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-                          formatter={(value: number, name: string) => {
-                            if (isTrialConsultant) return [`${Number(value).toFixed(1)}h`, 'Hours'];
+                          formatter={(rawValue, name) => {
+                            const value = Number(rawValue ?? 0);
+                            const key = String(name);
+                            if (isTrialConsultant) return [`${value.toFixed(1)}h`, 'Hours'];
                             return [
-                              name === 'revenue'
+                              key === 'revenue'
                                 ? `$${Math.round(value).toLocaleString()}`
-                                : `${Number(value).toFixed(1)}h`,
-                              name === 'revenue' ? 'Revenue' : 'Hours',
+                                : `${value.toFixed(1)}h`,
+                              key === 'revenue' ? 'Revenue' : 'Hours',
                             ];
                           }}
                         />
@@ -795,7 +803,7 @@ export function DashboardPage() {
                             radius={[0, 4, 4, 0]}
                             label={{
                               position: 'right',
-                              formatter: (v: number) => `${Number(v).toFixed(1)}h`,
+                              formatter: (v: unknown) => `${Number(v ?? 0).toFixed(1)}h`,
                               fontSize: 11,
                               fill: '#374151',
                             }}
@@ -807,7 +815,7 @@ export function DashboardPage() {
                             radius={[0, 4, 4, 0]}
                             label={{
                               position: 'right',
-                              formatter: (v: number) => `$${Math.round(v).toLocaleString()}`,
+                              formatter: (v: unknown) => `$${Math.round(Number(v ?? 0)).toLocaleString()}`,
                               fontSize: 11,
                               fill: '#374151',
                             }}

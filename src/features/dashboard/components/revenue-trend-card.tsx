@@ -154,9 +154,9 @@ export function RevenueTrendCard({
             />
             <Tooltip
               contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
-              formatter={(value: number, name: string) => [
-                `$${Math.round(value).toLocaleString()}`,
-                name === 'revenue' ? 'Actual' : 'Projected',
+              formatter={(rawValue, name) => [
+                `$${Math.round(Number(rawValue ?? 0)).toLocaleString()}`,
+                String(name) === 'revenue' ? 'Actual' : 'Projected',
               ]}
             />
             {goalValue > 0 && (
