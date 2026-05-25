@@ -28,7 +28,7 @@
  *   - Sticky `<header>` with bottom border, card-bg, backdrop-blur, z-50
  *   - Brand block: 40×40 chameleon logo + "HotSeaters" h1 (brand title font)
  *     and "Trial Tech Toolkit" subtitle (brand subtitle font)
- *   - Right-aligned `Login` outline button (opens AuthOptionsDialog)
+ *   - Right-aligned `Login` outline button (navigates to `/login`)
  *   - Footer: `© 2026 HotSeaters. All rights reserved.` + Privacy/Terms
  *     buttons that open PolicyViewerModal
  *
@@ -42,25 +42,20 @@ import type { PropsWithChildren, ReactNode } from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { AuthOptionsDialog } from '@/features/auth/components/auth-options-dialog';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { PolicyViewerModal } from '@/features/marketing/components/policy-viewer-modal';
 
 interface MarketingShellProps {
-  /** Override the post-auth redirect URL passed to AuthOptionsDialog. */
-  loginRedirectUrl?: string;
   /** Optional content slot below the header, above the children. */
   banner?: ReactNode;
 }
 
 export function MarketingShell({
   children,
-  loginRedirectUrl = '/Dashboard',
   banner,
 }: PropsWithChildren<MarketingShellProps>) {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const [authOpen, setAuthOpen] = useState(false);
   const [policyOpen, setPolicyOpen] = useState(false);
   const [policyType, setPolicyType] = useState<'privacy' | 'terms'>('privacy');
   const [policyTitle, setPolicyTitle] = useState('Privacy Policy');
@@ -121,7 +116,7 @@ export function MarketingShell({
                 navigate('/Dashboard');
                 return;
               }
-              setAuthOpen(true);
+              navigate('/login');
             }}
             style={{
               borderRadius: 'var(--theme-button-radius)',
@@ -188,12 +183,6 @@ export function MarketingShell({
         onClose={() => setPolicyOpen(false)}
         policyType={policyType}
         title={policyTitle}
-      />
-
-      <AuthOptionsDialog
-        open={authOpen}
-        onClose={() => setAuthOpen(false)}
-        redirectUrl={loginRedirectUrl}
       />
     </div>
   );

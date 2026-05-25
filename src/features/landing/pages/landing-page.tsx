@@ -6,8 +6,8 @@
  * inline style is bible-verbatim. Do NOT vary.
  *
  * Differences from the bible — adapter shims only, never UI:
- *   - bible's `base44.auth.redirectToLogin(...)` → our `AuthOptionsDialog`
- *     opened with the same redirect target.
+ *   - bible's `base44.auth.redirectToLogin(...)` → our `navigate('/login')`
+ *     (single login surface; AuthOptionsDialog was removed).
  *   - bible's `useTier1Data()` → our `useAuth()` hook (same shape: loading,
  *     authenticated, companyId, plus pending-invitation token check).
  *   - bible's `generateThemeCSS(defaultTheme)` → our `generateThemeCSS(
@@ -49,7 +49,6 @@ import {
   Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AuthOptionsDialog } from '@/features/auth/components/auth-options-dialog';
 import { PolicyViewerModal } from '@/features/marketing/components/policy-viewer-modal';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
@@ -246,8 +245,6 @@ export function LandingPage() {
   const { isLoading, isAuthenticated, hasCompany } = useAuth();
   const { userInfo, isLoading: userInfoLoading } = useCurrentUser();
   const navigate = useNavigate();
-  const [authDialogOpen, setAuthDialogOpen] = useState(false);
-  const [authDialogRedirect, setAuthDialogRedirect] = useState('/Dashboard');
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
   const [policyModalData, setPolicyModalData] = useState<{
     type: 'privacy' | 'terms';
@@ -269,13 +266,11 @@ export function LandingPage() {
   });
 
   const handleLogin = () => {
-    setAuthDialogRedirect('/Dashboard');
-    setAuthDialogOpen(true);
+    navigate('/login');
   };
 
   const handleSignup = () => {
-    setAuthDialogRedirect('/Onboarding');
-    setAuthDialogOpen(true);
+    navigate('/login');
   };
 
   const handleDashboard = () => {
@@ -948,12 +943,6 @@ export function LandingPage() {
           onClose={() => setPolicyModalOpen(false)}
           policyType={policyModalData.type}
           title={policyModalData.title}
-        />
-
-        <AuthOptionsDialog
-          open={authDialogOpen}
-          onClose={() => setAuthDialogOpen(false)}
-          redirectUrl={authDialogRedirect}
         />
       </div>
     </>
