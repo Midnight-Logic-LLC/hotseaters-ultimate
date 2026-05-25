@@ -20,7 +20,7 @@
     "change-408-dashboard-page-shell-and-registry",
     "change-409-dashboard-verification"
   ],
-  "next_step": "change-420 LANDED (submodule fix + SHA bump + RUNBOOKS; npm publish deferred). Manual /Dashboard verification is the next user action before we dispatch change-421. Once the console is confirmed clean of the getSnapshot warning, /kbd-execute change-421-card-primitive-bible-tokens.",
+  "next_step": "change-420 + change-421 LANDED. Card primitive now binds bible --theme-card-* tokens (commit 93c6621). Manual /Dashboard verification still recommended (clean getSnapshot console + soft stone-border card chrome). Next dispatch: /kbd-execute change-422-welcome-header-fallback-parity (a trivial 2-line copy fix).",
   "execution_order": [
     ["change-420-entity-mgmt-memoize-useEntityList-submodule-fix"],
     ["change-421-card-primitive-bible-tokens"],

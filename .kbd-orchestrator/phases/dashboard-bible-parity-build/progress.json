@@ -16,7 +16,7 @@
   "design_doc": ".claude/plans/foamy-marinating-hollerith.md",
   "prologue_commit": "28808a7",
   "changes_total": 10,
-  "changes_completed": 6,
+  "changes_completed": 7,
   "changes": [
     "change-405-lookup-selectors-tier1-extension",
     "change-406-dashboard-widget-data-hooks",
@@ -36,7 +36,7 @@
     "change-408-dashboard-page-shell-and-registry": "DONE",
     "change-409-dashboard-verification": "DONE",
     "change-420-entity-mgmt-memoize-useEntityList-submodule-fix": "DONE-PENDING-PUBLISH",
-    "change-421-card-primitive-bible-tokens": "TODO",
+    "change-421-card-primitive-bible-tokens": "DONE-PENDING-VR-BASELINES",
     "change-422-welcome-header-fallback-parity": "TODO",
     "change-423-recharts-submodule-or-no-op": "GATED-ON-420-RETEST",
     "change-424-team-members-data-root-cause": "GATED-ON-420-OBSERVATION"
@@ -47,9 +47,10 @@
     "change-407": "e3dc1f1",
     "change-408": "f8af764",
     "change-409": "b9e2b5e",
-    "change-420": "submodule:4b46b53 (fix in submodule, pushed to origin/main) + superproject:e38d64f (SHA bump) + superproject:1b696f2 (RUNBOOKS). npm publish DEFERRED per user."
+    "change-420": "submodule:4b46b53 (fix in submodule, pushed to origin/main) + superproject:e38d64f (SHA bump) + superproject:1b696f2 (RUNBOOKS). npm publish DEFERRED per user.",
+    "change-421": "93c6621 (Card primitive bind to bible --theme-card-* tokens + ui/CLAUDE.md). Per-card VR baselines + manual 1440x900 side-by-side DEFERRED to user (needs bible app running locally to capture baselines)."
   },
-  "next_step": "change-420 LANDED locally (publish deferred). Next: /kbd-execute change-421-card-primitive-bible-tokens. User should also perform the manual /Dashboard verification deferred from change-420 T6+T7 (console clean of getSnapshot warning; Quick Stats Team Members now reflects real data).",
+  "next_step": "change-421 LANDED (Card primitive bound to bible tokens at 93c6621). Next: /kbd-execute change-422-welcome-header-fallback-parity (a trivial 2-line copy fix). After 422 lands, retest /Dashboard to determine 423 (recharts no-op vs submodule) gate.",
   "dependencies": {
     "change-405-lookup-selectors-tier1-extension": [],
     "change-406-dashboard-widget-data-hooks": ["change-405-lookup-selectors-tier1-extension"],
