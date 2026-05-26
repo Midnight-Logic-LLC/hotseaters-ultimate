@@ -615,6 +615,115 @@ HTTP/1.1 and the warning is expected.
 
 ---
 
+## R-13 — Registering a new entity (2.0 transport-registry)
+
+Added in `@prometheus-ags/prometheus-entity-management@2.0.0`. Every entity
+the app fetches from Supabase must be registered once at app boot; hooks then
+use the registry instead of inline `fetch` closures.
+
+### The four steps
+
+**Step 1 — Add the entity type to `src/shared/db/entity-transports.ts`**
+
+```ts
+// Tier-A (synced to PGlite via Electric — authoritative: true, staleTime: 5 000 ms)
+reg('MyNewEntity', 'my_new_entity_table', true, 5_000);
+
+// Tier-C (REST-only — authoritative: false, no staleTime)
+reg('MyNewEntity', 'my_new_entity_table', false);
+```
+
+Pick Tier-A if the entity is in `src/shared/db/sync-config.ts` (PGlite-synced).
+Pick Tier-C for anything fetched straight from Supabase REST without local sync.
+
+**Step 2 — Create the feature hook**
+
+```ts
+// src/features/<feature>/hooks/use-<entity>.ts
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
+import { useTier1 } from '@/app/tier1-provider';
+
+interface MyEntityRow { id: string; company_id: string; /* ... */ }
+
+export function useMyEntity() {
+  const { company } = useTier1();
+  const companyId = company?.id ?? null;
+
+  return useEntities<MyEntityRow>('MyNewEntity', {
+    filter: companyId
+      ? [{ field: 'company_id', op: 'eq', value: companyId }]
+      : null,
+    enabled: !!companyId,
+  });
+}
+```
+
+`useEntities` returns `{ items, isLoading, isError, error, refetch }`.
+`error` is `TerminalError | TransientError | null` — use `instanceof TerminalError`
+to distinguish 4xx (table missing, permission denied) from 5xx/network faults.
+
+**Step 3 — Consume the hook in a component**
+
+```tsx
+// components follow RULE B: no stores, no supabase, no PGlite
+import { useMyEntity } from '@/features/<feature>/hooks/use-<entity>';
+
+export function MyWidget() {
+  const { items, isLoading, isError } = useMyEntity();
+  if (isLoading) return <Skeleton />;
+  if (isError)  return <ErrorState />;
+  return <ul>{items.map(e => <li key={e.id}>{e.id}</li>)}</ul>;
+}
+```
+
+**Step 4 — Add the entity to `src/features/<feature>/entities.ts`** (if not there)
+
+```ts
+import { registerEntityJsonSchema } from '@prometheus-ags/prometheus-entity-management';
+registerEntityJsonSchema('MyNewEntity', { /* JSON Schema */ });
+```
+
+### Error handling reference
+
+| Error class | HTTP range | Retry? | UI treatment |
+|---|---|---|---|
+| `TerminalError` | 4xx (400, 403, 404) | No | Show static error state; don't retry |
+| `TransientError` | 5xx + network | Yes (3×, backoff) | Show skeleton; hook retries automatically |
+
+```ts
+import { TerminalError } from '@prometheus-ags/prometheus-entity-management';
+
+if (error instanceof TerminalError && error.status === 404) {
+  // table does not exist yet — render graceful empty state
+}
+```
+
+### The LEAD_RADAR_AVAILABLE pattern (gating a missing schema)
+
+If the DB table for an entity doesn't exist yet, the REST transport will return
+a `TerminalError` (HTTP 400/404) — no retry storm. You can still gate the fetch
+with a flag so no request fires at all:
+
+```ts
+// in the hook
+const { items } = useEntities<MyRow>('Lead', {
+  filter: ...,
+  enabled: FEATURE_FLAG_ENABLED && !!companyId,
+});
+```
+
+Flip `FEATURE_FLAG_ENABLED = true` once the migration lands. Zero other changes.
+
+### Verification checklist
+
+- [ ] `registerEntityTransport('MyNewEntity', ...)` present in `entity-transports.ts`
+- [ ] `registerAllTransports()` is called before the first hook renders (already true — it runs at module evaluation time in `app-providers.tsx`)
+- [ ] `pnpm typecheck` clean
+- [ ] Hook returns correct `items` in a test with a mocked `useEntities`
+- [ ] Widget renders graceful skeleton while `isLoading`, graceful empty state when `items.length === 0`
+
+---
+
 ## See also
 
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md)
