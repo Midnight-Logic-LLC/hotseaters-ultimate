@@ -20,7 +20,7 @@
     "change-408-dashboard-page-shell-and-registry",
     "change-409-dashboard-verification"
   ],
-  "next_step": "change-420 + change-421 LANDED. Card primitive now binds bible --theme-card-* tokens (commit 93c6621). Manual /Dashboard verification still recommended (clean getSnapshot console + soft stone-border card chrome). Next dispatch: /kbd-execute change-422-welcome-header-fallback-parity (a trivial 2-line copy fix).",
+  "next_step": "change-420 + change-421 + change-422 LANDED (commits 4b46b53/e38d64f/1b696f2/93c6621/29cf8a0). Tests: 299/299 green. Next ACTION = user-side gate: retest /Dashboard in dev browser. If DevTools console clean of `Maximum update depth` + `width(-1)` AND Quick Stats Team Members shows a non-zero count, then dispatch change-423 (no-op path) and change-424 (diagnostic Branch A — already fixed by 420). If anything still fails, the failing observation drives the 423/424 paths described in their respective tasks.md.",
   "execution_order": [
     ["change-420-entity-mgmt-memoize-useEntityList-submodule-fix"],
     ["change-421-card-primitive-bible-tokens"],

@@ -31,4 +31,4 @@
 
 ## Verification commit
 
-- `<sha>` — welcome-header copy + spec updates (filled after commit).
+- `29cf8a0` — welcome-header copy + spec updates.
