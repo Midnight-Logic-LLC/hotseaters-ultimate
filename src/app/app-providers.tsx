@@ -2,6 +2,13 @@ import { useEffect, type PropsWithChildren } from 'react';
 import { SyncGate } from '@/app/sync-gate';
 import { Tier1Provider } from '@/app/tier1-provider';
 import { applyThemeVars, DEFAULT_THEME } from '@/shared/lib/theme';
+import { registerAllTransports } from '@/shared/db/entity-transports';
+
+// Register entity transports exactly once, synchronously at module evaluation
+// time — before any hook renders and before React's first reconciliation pass.
+// This is safe because the registry is a process-global Map; calling it here
+// is equivalent to calling it at the top of main.tsx.
+registerAllTransports();
 
 /**
  * AppProviders — composition of app-level context providers.
