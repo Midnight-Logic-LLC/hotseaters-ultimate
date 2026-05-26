@@ -332,9 +332,40 @@ async function parseEmitOrder() {
 
 // ── main ───────────────────────────────────────────────────────────────────
 async function main() {
+  // Strict mode: fail hard if migrations are missing. Used by CI's
+  // `gen:pglite-schema:check` drift gate. Off by default so a developer
+  // building the app without a `latest-data` checkout gets a soft warning
+  // + uses the already-committed `local-schema.sql` (the schema that
+  // ships in the bundle is the *committed* file, not whatever this script
+  // would emit). The app has no runtime dependency on the migrations dir.
+  const strict =
+    process.env.PGLITE_SCHEMA_STRICT === '1' ||
+    process.argv.includes('--strict');
+
   if (!existsSync(MIGRATIONS_DIR)) {
-    console.error(`[gen-pglite-schema] migrations dir not found: ${MIGRATIONS_DIR}`);
-    process.exit(1);
+    if (strict) {
+      console.error(
+        `[gen-pglite-schema] migrations dir not found: ${MIGRATIONS_DIR}\n` +
+          `[gen-pglite-schema] (STRICT mode — set PGLITE_SCHEMA_STRICT=0 or drop --strict to soft-warn instead)`,
+      );
+      process.exit(1);
+    }
+    console.warn(
+      `[gen-pglite-schema] migrations dir not found: ${MIGRATIONS_DIR}\n` +
+        `[gen-pglite-schema] Skipping regeneration; using committed src/shared/db/local-schema.sql as-is.\n` +
+        `[gen-pglite-schema] To regenerate, place the supabase migrations at one of:\n` +
+        `[gen-pglite-schema]   - hotseaters-ultimate/latest-data/supabase/migrations/ (vendored)\n` +
+        `[gen-pglite-schema]   - ../latest-data/supabase/migrations/ (sibling checkout)\n` +
+        `[gen-pglite-schema] CI invokes this script with --strict via gen:pglite-schema:check; that gate enforces non-drift.`,
+    );
+    if (!existsSync(OUT_PATH)) {
+      console.error(
+        `[gen-pglite-schema] FATAL: no migrations AND no committed ${OUT_PATH}. ` +
+          `Cannot proceed — the runtime needs this file. Either commit a baseline or vendor migrations.`,
+      );
+      process.exit(1);
+    }
+    return; // soft no-op; committed local-schema.sql wins
   }
 
   const config = await parseSyncConfig();

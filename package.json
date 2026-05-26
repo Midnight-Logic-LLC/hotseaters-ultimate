@@ -30,7 +30,7 @@
     "manual:validate": "node scripts/validate-user-manual.mjs && node scripts/validate-user-manual-links.mjs",
     "manual:embed": "node scripts/embed-manual.mjs",
     "gen:pglite-schema": "node scripts/gen-pglite-schema.mjs",
-    "gen:pglite-schema:check": "node scripts/gen-pglite-schema.mjs && git diff --exit-code src/shared/db/local-schema.sql",
+    "gen:pglite-schema:check": "node scripts/gen-pglite-schema.mjs --strict && git diff --exit-code src/shared/db/local-schema.sql",
     "gen:feature": "node scripts/gen-feature.mjs",
     "tauri": "tauri",
     "tauri:init": "tauri init",
