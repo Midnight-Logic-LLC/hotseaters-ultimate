@@ -14,6 +14,7 @@
  */
 
 import { test, expect } from '../fixtures';
+import type { Page } from '@playwright/test';
 
 const ALWAYS_PRESENT = [
   'welcome-header',
@@ -39,7 +40,7 @@ const REVENUE_PRESENT = [
 const SALES_PIPELINE = 'sales-pipeline-chart';
 
 async function assertWidgets(
-  page: import('@playwright/test').Page,
+  page: Page,
   present: string[],
   absent: string[],
   role: string,

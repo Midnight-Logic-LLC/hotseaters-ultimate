@@ -1,12 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useGraphStore } from '@prometheus-ags/prometheus-entity-management';
 import type { PipelineStage } from '@/shared/db/lookups-selectors';
 
 const mockUseTier1 = vi.fn();
 const mockUseTrialsList = vi.fn();
 const mockUseClientsList = vi.fn();
-const mockFetchTimeEntries = vi.fn();
 
 vi.mock('@/app/tier1-provider', () => ({
   useTier1: () => mockUseTier1(),
@@ -17,15 +15,20 @@ vi.mock('@/features/trials/hooks/use-trials-list', () => ({
 vi.mock('@/features/clients/hooks/use-clients-list', () => ({
   useClientsList: () => mockUseClientsList(),
 }));
-vi.mock('@/features/time-entries/stores/time-entries-store', () => ({
-  fetchTimeEntriesForCompany: (...args: unknown[]) => mockFetchTimeEntries(...args),
-}));
 
+// Mock useEntities at the module level
+vi.mock('@prometheus-ags/prometheus-entity-management', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@prometheus-ags/prometheus-entity-management')>();
+  return {
+    ...actual,
+    useEntities: vi.fn(),
+  };
+});
+
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useActiveTrialStats } from '../use-active-trial-stats';
 
-function resetGraphStore(): void {
-  useGraphStore.setState({ entities: {}, patches: {}, lists: {}, entityStates: {} });
-}
+const mockUseEntities = vi.mocked(useEntities);
 
 const stages: PipelineStage[] = [
   { id: 'sales', name: 'Lead', type: 'sales', revenue_probability: 0.5, is_active: true, order: 1, company_id: null },
@@ -50,23 +53,28 @@ const clients = [
 ];
 
 beforeEach(() => {
-  resetGraphStore();
   mockUseTier1.mockImplementation(() => tier1);
   mockUseTrialsList.mockReturnValue({ items: trials, isLoading: false });
   mockUseClientsList.mockReturnValue({ clients, isLoading: false });
-  mockFetchTimeEntries.mockReset();
-  mockFetchTimeEntries.mockResolvedValue([]);
+  mockUseEntities.mockImplementation((type: string) => {
+    if (type === 'TimeEntry') return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+  });
 });
 
 describe('useActiveTrialStats', () => {
   it('aggregates per active op-stage trial, sorted by revenue desc', async () => {
-    mockFetchTimeEntries.mockResolvedValue([
+    const timeEntryData = [
       { id: 'te1', trial_id: 't1', duration_hours: 4, amount: 800 },
       { id: 'te2', trial_id: 't1', duration_hours: 2, amount: 400 },
       { id: 'te3', trial_id: 't2', duration_hours: 6, amount: 1200 },
       // sales-stage trial should be excluded from list (its entries don't bubble up either)
       { id: 'te-sales', trial_id: 't-sales', duration_hours: 1, amount: 100 },
-    ]);
+    ];
+    mockUseEntities.mockImplementation((type: string) => {
+      if (type === 'TimeEntry') return { items: timeEntryData, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+      return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    });
     const { result } = renderHook(() => useActiveTrialStats());
     await waitFor(() => {
       expect(result.current.stats.length).toBeGreaterThan(0);

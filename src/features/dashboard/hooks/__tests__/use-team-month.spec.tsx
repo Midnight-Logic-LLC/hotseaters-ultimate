@@ -1,11 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useGraphStore } from '@prometheus-ags/prometheus-entity-management';
 
 const mockUseTier1 = vi.fn();
 const mockUseTeam = vi.fn();
-const mockFetchTimeEntries = vi.fn();
-const mockFetchAssignments = vi.fn();
 
 vi.mock('@/app/tier1-provider', () => ({
   useTier1: () => mockUseTier1(),
@@ -13,24 +10,25 @@ vi.mock('@/app/tier1-provider', () => ({
 vi.mock('@/features/company/hooks/use-team', () => ({
   useTeam: (...args: unknown[]) => mockUseTeam(...args),
 }));
-vi.mock('@/features/time-entries/stores/time-entries-store', () => ({
-  fetchTimeEntriesForCompany: (...args: unknown[]) => mockFetchTimeEntries(...args),
-}));
-vi.mock('@/features/subcontracts/stores/subcontracts-store', () => ({
-  fetchAssignmentsHiredByCompany: (...args: unknown[]) => mockFetchAssignments(...args),
-}));
 
+// Mock useEntities at the module level
+vi.mock('@prometheus-ags/prometheus-entity-management', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@prometheus-ags/prometheus-entity-management')>();
+  return {
+    ...actual,
+    useEntities: vi.fn(),
+  };
+});
+
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useTeamMonth } from '../use-team-month';
 
-function resetGraphStore(): void {
-  useGraphStore.setState({ entities: {}, patches: {}, lists: {}, entityStates: {} });
-}
+const mockUseEntities = vi.mocked(useEntities);
 
 const NOW = new Date(2026, 2, 15); // Mar 15, 2026 — month window is Mar 1..Mar 31
 const tier1 = { company: { id: 'co', name: 'Co' } };
 
 beforeEach(() => {
-  resetGraphStore();
   mockUseTier1.mockImplementation(() => tier1);
   mockUseTeam.mockReturnValue({
     members: [
@@ -38,18 +36,25 @@ beforeEach(() => {
     ],
     isLoading: false,
   });
-  mockFetchTimeEntries.mockReset();
-  mockFetchAssignments.mockReset();
-  mockFetchAssignments.mockResolvedValue([]);
+  mockUseEntities.mockImplementation((type: string) => {
+    if (type === 'TimeEntry') return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    if (type === 'SubcontractAssignment') return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+  });
 });
 
 describe('useTeamMonth', () => {
   it('aggregates time entries in the calendar month', async () => {
-    mockFetchTimeEntries.mockResolvedValue([
+    const monthTimeEntries = [
       { id: 'te1', company_id: 'co', consultant_id: 'c1', start_time: '2026-03-05T10:00:00Z', duration_hours: 3, amount: 600 },
       { id: 'te2', company_id: 'co', consultant_id: 'c1', start_time: '2026-03-22T11:00:00Z', duration_hours: 5, amount: 1000 },
       { id: 'te-out', company_id: 'co', consultant_id: 'c1', start_time: '2026-02-28T11:00:00Z', duration_hours: 8, amount: 1600 },
-    ]);
+    ];
+    mockUseEntities.mockImplementation((type: string) => {
+      if (type === 'TimeEntry') return { items: monthTimeEntries, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+      if (type === 'SubcontractAssignment') return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+      return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    });
     const { result } = renderHook(() => useTeamMonth({ now: NOW }));
     await waitFor(() => {
       expect(result.current.stats.length).toBeGreaterThan(0);

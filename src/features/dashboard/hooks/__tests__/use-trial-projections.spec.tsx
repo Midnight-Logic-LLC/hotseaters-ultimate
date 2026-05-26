@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useGraphStore } from '@prometheus-ags/prometheus-entity-management';
 import type { PipelineStage, LookupRow } from '@/shared/db/lookups-selectors';
 
 const mockUseTier1 = vi.fn();
 const mockUseTrialsList = vi.fn();
-const mockFetchTrialServicesForCompany = vi.fn();
 
 vi.mock('@/app/tier1-provider', () => ({
   useTier1: () => mockUseTier1(),
@@ -15,18 +13,19 @@ vi.mock('@/features/trials/hooks/use-trials-list', () => ({
   useTrialsList: (...args: unknown[]) => mockUseTrialsList(...args),
 }));
 
-vi.mock('@/features/trials/stores/trials-store', () => ({
-  fetchTrialServicesForCompany: (...args: unknown[]) =>
-    mockFetchTrialServicesForCompany(...args),
-}));
+// Mock useEntities at the module level
+vi.mock('@prometheus-ags/prometheus-entity-management', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@prometheus-ags/prometheus-entity-management')>();
+  return {
+    ...actual,
+    useEntities: vi.fn(),
+  };
+});
 
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useTrialProjections } from '../use-trial-projections';
 
-/** Reset the entity-graph store between tests so useEntityList queryKeys
- * don't carry stale ids/lists across cases. */
-function resetGraphStore(): void {
-  useGraphStore.setState({ entities: {}, patches: {}, lists: {}, entityStates: {} });
-}
+const mockUseEntities = vi.mocked(useEntities);
 
 const stages: PipelineStage[] = [
   { id: 'sales', name: 'Lead', type: 'sales', revenue_probability: 0.5, is_active: true, order: 1, company_id: null },
@@ -60,10 +59,11 @@ const trialServices = [
 ];
 
 beforeEach(() => {
-  resetGraphStore();
-  mockFetchTrialServicesForCompany.mockReset();
-  mockFetchTrialServicesForCompany.mockResolvedValue(trialServices);
   mockUseTrialsList.mockReturnValue({ items: trials, isLoading: false });
+  mockUseEntities.mockImplementation((type: string) => {
+    if (type === 'TrialService') return { items: trialServices, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+  });
 });
 
 describe('useTrialProjections', () => {
@@ -90,7 +90,6 @@ describe('useTrialProjections', () => {
     mockUseTier1.mockImplementation(() => perTrialTier1);
     const { result } = renderHook(() => useTrialProjections());
     await waitFor(() => {
-      expect(mockFetchTrialServicesForCompany).toHaveBeenCalledWith('co');
       expect(result.current.projectedInvoices.size).toBeGreaterThan(0);
     });
     // 3 days * $100 = $300 billed on Mar 3 + 7 days = Mar 10
@@ -122,7 +121,10 @@ describe('useTrialProjections', () => {
         projected_daily_revenue: 100,
       },
     ];
-    mockFetchTrialServicesForCompany.mockResolvedValue(monthlyTrialServices);
+    mockUseEntities.mockImplementation((type: string) => {
+      if (type === 'TrialService') return { items: monthlyTrialServices, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+      return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    });
     const { result } = renderHook(() => useTrialProjections());
     await waitFor(() => {
       expect(result.current.projectedInvoices.size).toBeGreaterThan(0);

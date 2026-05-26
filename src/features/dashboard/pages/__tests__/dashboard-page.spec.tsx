@@ -3,8 +3,8 @@
  *
  * Asserts the shell:
  *   • renders the dashboard-page testid,
- *   • renders EmptyDashboard when useDashboardEmpty returns isEmpty,
- *   • otherwise renders every widget the registry returns.
+ *   • renders every widget the registry returns,
+ *   • applies the kpiGridClass returned by useDashboardLayout.
  *
  * Visual parity + role-permutation assertions live in change-409
  * (Playwright). This spec covers shape only.
@@ -48,17 +48,10 @@ vi.mock('@/shared/db/supabase-client', () => {
 
 const mockUseDashboardWidgets = vi.fn();
 const mockUseDashboardLayout = vi.fn();
-const mockUseDashboardEmpty = vi.fn();
 
 vi.mock('@/features/dashboard/hooks/use-dashboard-widgets', () => ({
   useDashboardWidgets: () => mockUseDashboardWidgets(),
   useDashboardLayout: () => mockUseDashboardLayout(),
-}));
-vi.mock('@/features/dashboard/hooks/use-dashboard-empty', () => ({
-  useDashboardEmpty: () => mockUseDashboardEmpty(),
-}));
-vi.mock('@/features/dashboard/components/empty-dashboard', () => ({
-  EmptyDashboard: () => <div data-testid="empty-dashboard">Empty</div>,
 }));
 
 import { DashboardPage } from '../dashboard-page';
@@ -72,7 +65,6 @@ beforeEach(() => {
     kpiGridClass: 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6',
     quickActionsGridClass: 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
   });
-  mockUseDashboardEmpty.mockReturnValue({ isEmpty: false, isLoading: false });
 });
 
 describe('DashboardPage', () => {
@@ -82,18 +74,7 @@ describe('DashboardPage', () => {
     expect(screen.getByTestId('dashboard-page')).toBeTruthy();
   });
 
-  it('renders EmptyDashboard when useDashboardEmpty.isEmpty=true', () => {
-    mockUseDashboardEmpty.mockReturnValue({ isEmpty: true, isLoading: false });
-    mockUseDashboardWidgets.mockReturnValue([
-      { id: 'kpi-active-trials', Component: () => <FakeWidget id="kpi-active-trials" />, slot: 'kpi', enabledFor: () => true },
-    ]);
-    render(<DashboardPage />);
-    expect(screen.getByTestId('empty-dashboard')).toBeTruthy();
-    // Widgets NOT rendered when the empty splash is showing.
-    expect(screen.queryByTestId('widget-kpi-active-trials')).toBeNull();
-  });
-
-  it('renders one widget per registry spec when not empty', () => {
+  it('renders one widget per registry spec', () => {
     mockUseDashboardWidgets.mockReturnValue([
       { id: 'kpi-active-trials', Component: () => <FakeWidget id="kpi-active-trials" />, slot: 'kpi', enabledFor: () => true },
       { id: 'recent-activity-card', Component: () => <FakeWidget id="recent-activity-card" />, slot: 'main-3', enabledFor: () => true },

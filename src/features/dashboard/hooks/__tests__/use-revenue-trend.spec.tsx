@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useGraphStore } from '@prometheus-ags/prometheus-entity-management';
 
 const mockUseTier1 = vi.fn();
 const mockUseDashboardPreferences = vi.fn();
 const mockUseTrialProjections = vi.fn();
-const mockFetchInvoicesForCompany = vi.fn();
 
 vi.mock('@/app/tier1-provider', () => ({
   useTier1: () => mockUseTier1(),
@@ -19,23 +17,27 @@ vi.mock('@/features/dashboard/hooks/use-trial-projections', () => ({
   useTrialProjections: () => mockUseTrialProjections(),
 }));
 
-vi.mock('@/features/invoices/stores/invoices-store', () => ({
-  fetchInvoicesForCompany: (...args: unknown[]) =>
-    mockFetchInvoicesForCompany(...args),
-}));
+// Mock useEntities at the module level
+vi.mock('@prometheus-ags/prometheus-entity-management', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@prometheus-ags/prometheus-entity-management')>();
+  return {
+    ...actual,
+    useEntities: vi.fn(),
+  };
+});
 
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useRevenueTrend } from '../use-revenue-trend';
 
-function resetGraphStore(): void {
-  useGraphStore.setState({ entities: {}, patches: {}, lists: {}, entityStates: {} });
-}
+const mockUseEntities = vi.mocked(useEntities);
 
 const NOW = new Date(2026, 2, 15); // 2026-03-15
 
 beforeEach(() => {
-  resetGraphStore();
-  mockFetchInvoicesForCompany.mockReset();
-  mockFetchInvoicesForCompany.mockResolvedValue([]);
+  mockUseEntities.mockImplementation((type: string) => {
+    if (type === 'Invoice') return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+  });
   mockUseTrialProjections.mockReturnValue({
     projectedInvoices: new Map(),
     isLoading: false,
@@ -88,9 +90,16 @@ describe('useRevenueTrend', () => {
       prefs: { fiscalYear: 2026, showCumulative: false, period: 'month' },
       isLoading: false,
     });
-    mockFetchInvoicesForCompany.mockResolvedValue([
-      { id: 'i1', invoice_date: '2026-01-15', total: 10_000 },
-    ]);
+    mockUseEntities.mockImplementation((type: string) => {
+      if (type === 'Invoice') return {
+        items: [{ id: 'i1', invoice_date: '2026-01-15', total: 10_000 }],
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+      return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    });
     const { result } = renderHook(() => useRevenueTrend({ now: NOW }));
     await waitFor(() => {
       expect(result.current.data.length).toBe(12);
@@ -126,11 +135,20 @@ describe('useRevenueTrend', () => {
       prefs: { fiscalYear: 2026, showCumulative: true, period: 'month' },
       isLoading: false,
     });
-    mockFetchInvoicesForCompany.mockResolvedValue([
-      { id: 'i1', invoice_date: '2026-01-15', total: 1_000 },
-      { id: 'i2', invoice_date: '2026-02-15', total: 1_000 },
-      { id: 'i3', invoice_date: '2026-03-15', total: 1_000 },
-    ]);
+    mockUseEntities.mockImplementation((type: string) => {
+      if (type === 'Invoice') return {
+        items: [
+          { id: 'i1', invoice_date: '2026-01-15', total: 1_000 },
+          { id: 'i2', invoice_date: '2026-02-15', total: 1_000 },
+          { id: 'i3', invoice_date: '2026-03-15', total: 1_000 },
+        ],
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+      return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    });
     const { result } = renderHook(() => useRevenueTrend({ now: NOW }));
     await waitFor(() => {
       expect(result.current.data[2]?.revenue).toBeGreaterThan(0);

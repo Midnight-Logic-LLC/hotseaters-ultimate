@@ -1,11 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useGraphStore } from '@prometheus-ags/prometheus-entity-management';
 
 const mockUseTier1 = vi.fn();
 const mockUseTeam = vi.fn();
-const mockFetchTimeEntries = vi.fn();
-const mockFetchAssignments = vi.fn();
 
 vi.mock('@/app/tier1-provider', () => ({
   useTier1: () => mockUseTier1(),
@@ -15,19 +12,19 @@ vi.mock('@/features/company/hooks/use-team', () => ({
   useTeam: (...args: unknown[]) => mockUseTeam(...args),
 }));
 
-vi.mock('@/features/time-entries/stores/time-entries-store', () => ({
-  fetchTimeEntriesForCompany: (...args: unknown[]) => mockFetchTimeEntries(...args),
-}));
+// Mock useEntities at the module level
+vi.mock('@prometheus-ags/prometheus-entity-management', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@prometheus-ags/prometheus-entity-management')>();
+  return {
+    ...actual,
+    useEntities: vi.fn(),
+  };
+});
 
-vi.mock('@/features/subcontracts/stores/subcontracts-store', () => ({
-  fetchAssignmentsHiredByCompany: (...args: unknown[]) => mockFetchAssignments(...args),
-}));
-
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useTeamWeek } from '../use-team-week';
 
-function resetGraphStore(): void {
-  useGraphStore.setState({ entities: {}, patches: {}, lists: {}, entityStates: {} });
-}
+const mockUseEntities = vi.mocked(useEntities);
 
 const NOW = new Date(2026, 2, 11); // Wed Mar 11, 2026 — week is Sun Mar 8 .. Sat Mar 14
 const tier1 = { company: { id: 'co', name: 'Co' } };
@@ -57,13 +54,13 @@ const assignments = [
 ];
 
 beforeEach(() => {
-  resetGraphStore();
   mockUseTier1.mockImplementation(() => tier1);
   mockUseTeam.mockReturnValue({ members, isLoading: false });
-  mockFetchTimeEntries.mockReset();
-  mockFetchTimeEntries.mockResolvedValue(timeEntries);
-  mockFetchAssignments.mockReset();
-  mockFetchAssignments.mockResolvedValue(assignments);
+  mockUseEntities.mockImplementation((type: string) => {
+    if (type === 'TimeEntry') return { items: timeEntries, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    if (type === 'SubcontractAssignment') return { items: assignments, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+  });
 });
 
 describe('useTeamWeek', () => {

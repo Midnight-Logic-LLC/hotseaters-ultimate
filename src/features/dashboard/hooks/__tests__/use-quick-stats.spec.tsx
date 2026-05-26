@@ -1,14 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useGraphStore } from '@prometheus-ags/prometheus-entity-management';
 
 const mockUseTier1 = vi.fn();
 const mockUseTeam = vi.fn();
 const mockUseClientsList = vi.fn();
-const mockFetchInvoices = vi.fn();
-const mockFetchTimeEntries = vi.fn();
-const mockFetchRequests = vi.fn();
-const mockFetchGigs = vi.fn();
 
 vi.mock('@/app/tier1-provider', () => ({
   useTier1: () => mockUseTier1(),
@@ -19,27 +14,35 @@ vi.mock('@/features/company/hooks/use-team', () => ({
 vi.mock('@/features/clients/hooks/use-clients-list', () => ({
   useClientsList: () => mockUseClientsList(),
 }));
-vi.mock('@/features/invoices/stores/invoices-store', () => ({
-  fetchInvoicesForCompany: (...args: unknown[]) => mockFetchInvoices(...args),
-}));
-vi.mock('@/features/time-entries/stores/time-entries-store', () => ({
-  fetchTimeEntriesForCompany: (...args: unknown[]) => mockFetchTimeEntries(...args),
-}));
-vi.mock('@/features/subcontracts/stores/subcontracts-store', () => ({
-  fetchRequestsForCompany: (...args: unknown[]) => mockFetchRequests(...args),
-  fetchAssignmentsAsSubcontractor: (...args: unknown[]) => mockFetchGigs(...args),
-}));
 
+// Mock useEntities at the module level
+vi.mock('@prometheus-ags/prometheus-entity-management', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@prometheus-ags/prometheus-entity-management')>();
+  return {
+    ...actual,
+    useEntities: vi.fn(),
+  };
+});
+
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useQuickStats } from '../use-quick-stats';
 
-function resetGraphStore(): void {
-  useGraphStore.setState({ entities: {}, patches: {}, lists: {}, entityStates: {} });
-}
+const mockUseEntities = vi.mocked(useEntities);
+
+const invoices = [
+  { id: 'i1', total: 1000, status: 'sent' },
+  { id: 'i2', total: 500, status: 'overdue' },
+];
+const timeEntries = [
+  { id: 'te1', consultant_id: 'm1', start_time: '2026-03-09T10:00:00Z', duration_hours: 4 },
+  { id: 'te2', consultant_id: 'm2', start_time: '2026-03-10T10:00:00Z', duration_hours: 6 },
+];
+const requests = [{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }];
+const assignments = [{ id: 'g1' }];
 
 const NOW = new Date(2026, 2, 11); // Wed Mar 11
 
 beforeEach(() => {
-  resetGraphStore();
   mockUseClientsList.mockReturnValue({
     clients: [
       { id: 'cl-a', status: 'active' },
@@ -56,20 +59,13 @@ beforeEach(() => {
     ],
     isLoading: false,
   });
-  mockFetchInvoices.mockReset();
-  mockFetchInvoices.mockResolvedValue([
-    { id: 'i1', total: 1000, status: 'sent' },
-    { id: 'i2', total: 500, status: 'overdue' },
-  ]);
-  mockFetchTimeEntries.mockReset();
-  mockFetchTimeEntries.mockResolvedValue([
-    { id: 'te1', consultant_id: 'm1', start_time: '2026-03-09T10:00:00Z', duration_hours: 4 },
-    { id: 'te2', consultant_id: 'm2', start_time: '2026-03-10T10:00:00Z', duration_hours: 6 },
-  ]);
-  mockFetchRequests.mockReset();
-  mockFetchRequests.mockResolvedValue([{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }]);
-  mockFetchGigs.mockReset();
-  mockFetchGigs.mockResolvedValue([{ id: 'g1' }]);
+  mockUseEntities.mockImplementation((type: string) => {
+    if (type === 'Invoice') return { items: invoices, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    if (type === 'TimeEntry') return { items: timeEntries, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    if (type === 'SubcontractRequest') return { items: requests, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    if (type === 'SubcontractAssignment') return { items: assignments, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+    return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+  });
 });
 
 describe('useQuickStats', () => {
