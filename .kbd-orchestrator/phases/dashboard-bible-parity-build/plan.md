@@ -1,82 +1,181 @@
-# Plan — dashboard-bible-parity-build
+# Plan — dashboard-bible-parity-build (Regression Round B: changes 420–424)
 
-> Execution contract. Full architectural rationale lives in
-> [`.claude/plans/foamy-marinating-hollerith.md`](../../../.claude/plans/foamy-marinating-hollerith.md).
-> This file is the wave list `/kbd-execute` will dispatch from.
+> This plan SUPERSEDES the earlier 405–409 plan for the *regression
+> round* that follows the post-build dashboard defects identified in
+> `assessment.md` §A–C. The original 405–409 plan and its execution
+> remain valid and committed; this plan tracks the follow-on work to
+> reach the bible-parity DoD now that the regression is understood.
 
-## Prologue (already landed)
+## Context
 
-- **Phase A — bible business rules**: commit `28808a7`. 7 pure modules
-  + 70 tests in `src/features/dashboard/business-rules/`. Every
-  calculation from `HotSeatersMVP/src/pages/Dashboard.jsx` lines
-  163–588, byte-for-byte. **Not part of this phase's change ledger;
-  it's the foundation each subsequent change composes.**
-
-## Execution order (waves)
-
-Strictly sequential — each change depends on the prior one's
-contracts.
+Five-change ordered series, OpenSpec backend, sequential dependencies:
 
 ```
-W1: change-405-lookup-selectors-tier1-extension      agent: architect → typescript-reviewer
-W2: change-406-dashboard-widget-data-hooks           agent: tdd-guide
-W3: change-407-dashboard-widget-components           agent: ui-ux-designer + typescript-reviewer
-W4: change-408-dashboard-page-shell-and-registry     agent: typescript-reviewer + code-reviewer
-W5: change-409-dashboard-verification                agent: e2e-runner + code-reviewer
+change-420 (entity-mgmt submodule fix — keystone)
+       │
+       ▼
+change-421 (Card primitive bible tokens)         ← independent of 420 but
+       │                                           ships with it for the
+       │                                           combined visual+data fix
+       ▼
+change-422 (Welcome header parity)               ← independent; 2-line fix
+       │
+       ▼
+change-423 (Recharts submodule OR no-op)         ← GATED on observation
+       │                                           after 420 lands
+       ▼
+change-424 (Team Members data root cause)        ← diagnostic + targeted
+                                                   fix after 420 lands
 ```
 
-## Change list
+420 is the **keystone**: it stabilizes the snapshot identity that
+`useSyncExternalStore` consumes, which most likely (a) eliminates the
+recharts loop as a side-effect and (b) unblocks every Tier-A and
+hybrid `useEntityList` consumer, which most likely unblocks the
+Team Members count and other empty widgets.
 
-| ID | Wave | Title | Primary agent | Risk |
-|---|---|---|---|---|
-| 405 | W1 | Lookup selectors + Tier1 extension | architect | Low |
-| 406 | W2 | Widget data hooks (14) | tdd-guide | Med — graph selector correctness |
-| 407 | W3 | Widget components (17) | ui-ux-designer + typescript-reviewer | Med — visual parity |
-| 408 | W4 | Page shell + role-aware registry + cleanup | typescript-reviewer | Low |
-| 409 | W5 | Verification (E2E + visual + a11y) | e2e-runner + code-reviewer | Low |
+421 + 422 are parallel-safe cosmetic + copy fixes; they're sequenced
+after 420 so any rebuild/test cycle they trigger benefits from the
+fixed data flow.
 
-## Cross-cutting constraints (binding on every change)
+423 and 424 are **gated on observation** — we run the dashboard
+AFTER 420–422 land and check whether the recharts loop / data
+mismatch persists. If they don't, those changes close as no-op
+diagnostic records. If they do, they take their respective
+investigation-then-fix paths.
 
-- **RULE 0** — bible visual + functional parity.
-- **RULE 1** — self-hosted Supabase only.
-- **RULE 3** — architectural invariants (components → hooks → stores → shared/db).
-- **RULE A** — kebab-case filenames (rename before editing).
-- **RULE B / F** — components import only hooks + UI primitives.
-- **RULE E** — `prometheus-entity-management`, no TanStack Query.
-- **RULE J** — every bible business rule preserved (Phase A enforces).
-- **80% test coverage** per `common/testing.md`.
-- **No `console.log`** in production code.
+## Execution order
 
-## Definition of done (rolls up §DoD in assessment.md)
+| Wave | Change | Title | Primary agent | Risk | Gated? |
+|---|---|---|---|---|---|
+| W1 | 420 | Memoize useEntityList in entity-mgmt submodule | typescript-reviewer + tdd-guide | Low (1-line library fix) | No |
+| W2 | 421 | Card primitive uses bible tokens | ui-ux-designer + typescript-reviewer | Low (single primitive) | No |
+| W3 | 422 | Welcome header fallback parity | typescript-reviewer | Trivial | No |
+| W4 | 423 | Recharts submodule OR no-op | typescript-reviewer | Med (only if Phase 2B fires) | YES — gated on T1 retest |
+| W5 | 424 | Team Members data root cause | tdd-guide + database-reviewer | Med (RLS / auth surface possible) | YES — gated on T1 diagnostic |
 
-A signed-in user on `/Dashboard`:
+## Parallelism
 
-1. Sees the bible's 17 widgets in the bible's grid layout (with
-   role-appropriate subset).
-2. Can change the RevenueTrend fiscal-year + cumulative toggle, and
-   the preference persists across reloads (write goes through
-   `local_writes` → Supabase REST).
-3. Triggers any quick-action → navigates to the bible's destination.
-4. Sees realtime updates to any widget within 50ms of a server change
-   (Realtime Manager + Electric).
-5. Sees ≤5% visual drift vs the bible at 1440×900 + 375×667.
-6. Sees zero `role === '…'` strings in any widget JSX.
+Strictly sequential per wave. Each change consumes the prior wave's
+verification. 423 + 424 share the "post-420 retest" step but can run
+in either order once that retest is recorded.
 
-## OpenSpec change pointers
+## Dependencies
 
-- `openspec/changes/change-405-lookup-selectors-tier1-extension/proposal.md`
-- `openspec/changes/change-406-dashboard-widget-data-hooks/proposal.md`
-- `openspec/changes/change-407-dashboard-widget-components/proposal.md`
-- `openspec/changes/change-408-dashboard-page-shell-and-registry/proposal.md`
-- `openspec/changes/change-409-dashboard-verification/proposal.md`
+- 420 has no dependencies on 421/422/423/424.
+- 421 has no hard dep on 420 (it's a primitive rewrite), but is
+  sequenced after to keep the visual-regression baseline stable.
+- 422 has no hard dep on 420.
+- 423 is gated on `pnpm dev` console state AFTER 420+421+422.
+- 424 is gated on Network-tab observations AFTER 420 lands.
 
-Each has its own `tasks.md`. Acceptance criteria in those files are
-the executable contract; this plan is the index.
+## Definition of Done (this regression round)
 
-## Promotion path
+Layered on top of the existing phase DoD already in `progress.json`:
 
-When change-409 lands + verifies:
+1. DevTools Console at `/Dashboard` clean of:
+   - `getSnapshot should be cached to avoid an infinite loop` (420).
+   - `Maximum update depth exceeded` (423 or side-effect of 420).
+   - `width(-1) height(-1) of chart should be greater than 0` (423
+     or side-effect of 420).
+2. Card chrome at 1440×900 matches the bible's soft 1 px stone border
+   + drop shadow + 8 px radius (421); per-card visual regression ≤2 %
+   drift.
+3. Welcome header reads "Welcome back, User" pre-hydration and
+   "Welcome back, <FirstName>" post-hydration; no missing-comma flash
+   (422).
+4. Quick Stats → Team Members value === bible value for the same user
+   (424).
+5. `@prometheus-ags/prometheus-entity-management@1.3.1` published to
+   npm (420). Submodule pointer in `hotseaters-ultimate` advanced.
+6. `pnpm typecheck && pnpm lint && pnpm test` stay 298/298+ green
+   throughout.
+7. `docs/RUNBOOKS.md` documents:
+   - The submodule-fix loop for entity-mgmt (added by 420).
+   - The recharts submodule loop OR the existing tarball loop with a
+     "when to upgrade to a submodule" pointer (added by 423).
 
-1. Run `openspec archive` on each of 405..409.
-2. `/kbd-reflect dashboard-bible-parity-build` to flip the ledger.
-3. Promote `pglite-schema-strategy-offline-first` from GATED → active.
+## Implementation notes
+
+### 420 — entity-mgmt memoize fix (1-line library change)
+
+The change is one `useMemo` wrap. The hard part is the publish-and-
+submodule-bump dance:
+
+1. Edit `packages/prometheus-entity-management/src/hooks.ts`.
+2. Rebuild via the submodule's own `pnpm build`.
+3. App picks up the change instantly through `workspace:*` link.
+4. Test in browser. Confirm clean console.
+5. Bump submodule version 1.3.0 → 1.3.1, update CHANGELOG.
+6. `git commit` inside submodule; `git push origin main`.
+7. `npm publish` from inside the submodule.
+8. Back in superproject: `git add packages/prometheus-entity-management`
+   to commit the new SHA. Push. CI installs the new SHA.
+
+Document this loop in `docs/RUNBOOKS.md` so a future contributor
+doesn't repeat the prior round's wrong-directory mistake (which
+edited the unrelated `latest-data/packages/...` copy).
+
+### 421 — Card primitive
+
+Remove `rounded-xl`, `ring-1 ring-foreground/10`, `bg-card`,
+`overflow-hidden`, and `py-4` from the default class string. Add
+inline default `style={{ borderRadius, boxShadow, borderWidth,
+borderStyle, borderColor, backgroundColor }}` reading from
+`--theme-card-*` tokens. Spread `props.style` AFTER so per-call
+overrides still win. Add `--theme-stone-200` and `--theme-card-*-padding`
+tokens to `src/index.css` if absent.
+
+Visual regression baseline must be refreshed against the bible
+(`pnpm test:visual-parity:update` with the bible app running).
+
+### 422 — Welcome header
+
+```tsx
+// before
+Welcome back{userInfo?.first_name ? `, ${userInfo.first_name}` : ''}
+// after
+Welcome back, {userInfo?.first_name || 'User'}
+```
+
+Two-token diff. Spec covers loading / hydrated / falsy states.
+
+### 423 — Recharts conditional
+
+After 420–422, take a clean DevTools console screenshot at
+`/Dashboard`. If both `Maximum update depth exceeded` and `width(-1)`
+are gone, close 423 as no-op with the screenshot for record. If
+either persists, take the submodule path: `git submodule add`,
+`workspace:*` pin, identify the patch point, fix in source, rebuild,
+SHA-bump.
+
+### 424 — Team Members diagnostic
+
+After 420 lands, open Network tab, inspect the `user_info` REST call.
+Branch on observation. The latent `status: 'active'` parity fix from
+the bible's `Dashboard.jsx:209` ships in every branch since it's
+correct regardless of which root cause fires.
+
+## Risk register
+
+- **Submodule SHA not bumped**: forgetting to `git add
+  packages/prometheus-entity-management` in the superproject after
+  420 means CI installs the old SHA and the `getSnapshot` warning
+  returns. Mitigation: documented in RUNBOOKS + 420 T12.
+- **`workspace:*` + `npm publish` interaction**: pnpm rewrites
+  `workspace:*` deps to actual versions on publish. The submodule's
+  own deps must use `workspace:*` or pinned versions; confirm before
+  T11. Mitigation: 420 T11 explicit verification step.
+- **Recharts submodule cost**: adopting recharts as a submodule
+  means we own its build pipeline forever. Mitigation: 423 is
+  gated; we only adopt if the no-op path fails.
+- **RLS regression**: if 424 lands in branch C (RLS-rejected), the
+  migration goes in `latest-data/supabase/migrations/` and requires
+  the migration runbook. Mitigation: 424 T6C explicit migration
+  step.
+
+## Sources
+
+See `assessment.md` §I for the full source list (recharts upstream
+issues, zustand discussion #1936, pnpm workspaces docs, bible
+`Dashboard.jsx`).

@@ -1,51 +1,48 @@
 # Current waypoint — hotseaters-ultimate
 
-**Phase:** `dashboard-bible-parity-build`
+**Phase:** `dashboard-bible-parity-build` (regression round B)
 **Status:** planned (ready to execute)
 **Change backend:** OpenSpec (`openspec/` at repo root)
-**Design doc:** [.claude/plans/foamy-marinating-hollerith.md](../.claude/plans/foamy-marinating-hollerith.md)
+**Prologue commit:** `28808a7` (Phase A — business rules, landed)
+**Round-A changes (LANDED + DONE):** `change-405..409`
+**Round-B changes (READY):** `change-420..424`
 
-## What just finished
-- `dashboard-and-data-architecture-parity` reflected and archived 2026-05-25.
-  All 4 changes (401–404) moved to `openspec/changes/archive/` and 5 spec
-  capabilities created under `openspec/specs/` (auth-routing, app-shell,
-  dashboard, local-first-sync, lookups).
-- Dashboard-rebuild Phase A (bible business rules) committed in `28808a7`
-  — 7 modules + 70 tests, the foundation every subsequent widget hook
-  composes.
+## What's next
 
-## Phase scope
-**Build the actual bible-parity dashboard surface** as the reference
-implementation every other feature page will follow. 5 sequential
-OpenSpec changes (405–409), Phases B–F of the dashboard rebuild plan.
+Dispatch `change-420-entity-mgmt-memoize-useEntityList-submodule-fix`
+(the keystone). This is the 1-line library fix at
+`packages/prometheus-entity-management/src/hooks.ts` `useEntityList`
+return → `useMemo` wrap. Rebuild via the submodule's own `pnpm build`,
+test in browser, then version-bump (1.3.0 → 1.3.1) + `npm publish` +
+superproject submodule SHA bump.
 
-| Wave | Change | Deliverable |
-|---|---|---|
-| W1 | 405 | Lookup selectors + Tier1 extension |
-| W2 | 406 | 14 widget data hooks (`useEntityView` hybrid mode) |
-| W3 | 407 | 17 widget components (bible visual parity) |
-| W4 | 408 | Thin page shell + role-aware widget registry + cleanup |
-| W5 | 409 | Verification — Cypress role permutations + offline-fallback + realtime + visual harness + Lighthouse a11y |
+After 420 verifies clean console:
+1. Dispatch 421 (Card primitive bible tokens).
+2. Dispatch 422 (Welcome header parity — trivial).
+3. **Gate**: re-test `/Dashboard` console + Network. Then:
+   - Dispatch 423 (recharts no-op OR submodule) based on observation.
+   - Dispatch 424 (Team Members diagnostic + targeted fix) based on
+     observation.
 
-## Next step
-Run `/kbd-execute dashboard-bible-parity-build` to dispatch W1
-(change-405). Each subsequent wave waits on the prior one's contracts
-— strictly sequential.
+## Why round B
 
-## Queued next phase (GATED)
-`pglite-schema-strategy-offline-first` remains GATED — 9 changes
-(410–418) across 5 waves. Gate releases when change-409 lands. Once
-that phase ships, the dashboard's hybrid-mode widgets backed by
-un-synced entities (`invoice`, `time_entry`, `subcontract_*`)
-auto-promote to local-first via change-415's per-feature `entities.ts`
-wiring. **Zero widget code changes required for the promotion.**
+`progress.json` showed `execution_complete: true` after round A
+(405–409), but post-deploy testing surfaced four real regressions
+the user demanded be fixed before reflecting:
 
-## Promotion path
-1. Dispatch `/kbd-execute dashboard-bible-parity-build` (W1).
-2. On change-409 land + verify, run `openspec archive` on 405–409.
-3. `/kbd-reflect dashboard-bible-parity-build` to flip the ledger.
-4. Promote `pglite-schema-strategy-offline-first` by copying
-   `.kbd-orchestrator/phases/pglite-schema-strategy-offline-first/waypoint.json`
-   over this file.
-5. Re-run `/kbd-execute pglite-schema-strategy-offline-first` —
-   the gate will be open.
+1. Recharts `Maximum update depth` crash inside
+   `<ChartDataContextProvider>` (page-breaking).
+2. `getSnapshot should be cached` warning regressed (root cause:
+   prior fix landed in the wrong directory — see `assessment.md` §A.1).
+3. Card chrome diverges from the bible (hard ring vs soft border).
+4. Quick Stats → Team Members shows 0 vs bible's 2 for the same user.
+
+Round B addresses all four. See `assessment.md` for the full root-cause
+analysis and `plan.md` for the executable change list.
+
+## Sequencing reminder
+
+Round B changes are strictly sequential per wave. 423 and 424 are
+**gated on observation** after 420–422 land — we don't pre-decide
+their final shape because §A.1's keystone fix may resolve them as a
+side-effect.
