@@ -15,8 +15,6 @@
  */
 
 import { useMemo } from 'react';
-import { EmptyDashboard } from '@/features/dashboard/components/empty-dashboard';
-import { useDashboardEmpty } from '@/features/dashboard/hooks/use-dashboard-empty';
 import {
   useDashboardLayout,
   useDashboardWidgets,
@@ -51,7 +49,6 @@ function renderSlot(specs: ReadonlyArray<WidgetSpec>) {
 export function DashboardPage() {
   const specs = useDashboardWidgets();
   const grouped = useMemo(() => partition(specs), [specs]);
-  const { isEmpty } = useDashboardEmpty();
   const { kpiGridClass } = useDashboardLayout();
 
   return (
@@ -70,62 +67,56 @@ export function DashboardPage() {
       >
         {renderSlot(grouped.header)}
 
-        {isEmpty ? (
-          <EmptyDashboard />
-        ) : (
-          <>
-            {renderSlot(grouped.banner)}
+        {renderSlot(grouped.banner)}
 
-            {/* KPI row — class comes from useDashboardLayout, NOT a role check. */}
-            {grouped.kpi.length > 0 && (
-              <section
-                className={kpiGridClass}
-                style={{
-                  gap: 'var(--theme-card-gap)',
-                  marginBottom: 'var(--theme-section-gap)',
-                }}
-                aria-label="Key metrics"
-              >
-                {renderSlot(grouped.kpi)}
-              </section>
-            )}
-
-            {/* Main 3-column row (Pipeline | Quick Stats | Recent Activity).
-                Empty slots collapse — role filter handles the matrix. */}
-            {grouped['main-1'].length +
-              grouped['main-2'].length +
-              grouped['main-3'].length >
-              0 && (
-              <section
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-                style={{
-                  gap: 'var(--theme-card-gap)',
-                  marginBottom: 'var(--theme-section-gap)',
-                }}
-              >
-                {renderSlot(grouped['main-1'])}
-                {renderSlot(grouped['main-2'])}
-                {renderSlot(grouped['main-3'])}
-              </section>
-            )}
-
-            {/* Wide row — full-card on mobile, 2-col on lg. */}
-            {grouped.wide.length > 0 && (
-              <section
-                className="grid grid-cols-1 lg:grid-cols-2"
-                style={{
-                  gap: 'var(--theme-card-gap)',
-                  marginBottom: 'var(--theme-section-gap)',
-                }}
-              >
-                {renderSlot(grouped.wide)}
-              </section>
-            )}
-
-            {/* Footer — Quick Actions */}
-            {renderSlot(grouped.footer)}
-          </>
+        {/* KPI row — class comes from useDashboardLayout, NOT a role check. */}
+        {grouped.kpi.length > 0 && (
+          <section
+            className={kpiGridClass}
+            style={{
+              gap: 'var(--theme-card-gap)',
+              marginBottom: 'var(--theme-section-gap)',
+            }}
+            aria-label="Key metrics"
+          >
+            {renderSlot(grouped.kpi)}
+          </section>
         )}
+
+        {/* Main 3-column row (Pipeline | Quick Stats | Recent Activity).
+            Empty slots collapse — role filter handles the matrix. */}
+        {grouped['main-1'].length +
+          grouped['main-2'].length +
+          grouped['main-3'].length >
+          0 && (
+          <section
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+            style={{
+              gap: 'var(--theme-card-gap)',
+              marginBottom: 'var(--theme-section-gap)',
+            }}
+          >
+            {renderSlot(grouped['main-1'])}
+            {renderSlot(grouped['main-2'])}
+            {renderSlot(grouped['main-3'])}
+          </section>
+        )}
+
+        {/* Wide row — full-card on mobile, 2-col on lg. */}
+        {grouped.wide.length > 0 && (
+          <section
+            className="grid grid-cols-1 lg:grid-cols-2"
+            style={{
+              gap: 'var(--theme-card-gap)',
+              marginBottom: 'var(--theme-section-gap)',
+            }}
+          >
+            {renderSlot(grouped.wide)}
+          </section>
+        )}
+
+        {/* Footer — Quick Actions */}
+        {renderSlot(grouped.footer)}
       </div>
     </div>
   );
