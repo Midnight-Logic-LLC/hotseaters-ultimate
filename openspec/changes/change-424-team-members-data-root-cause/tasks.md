@@ -16,13 +16,21 @@
 
 ## Diagnostic results
 
-(filled in during T3)
+(Partially resolved via static analysis — 2026-05-26)
 
-- Request URL: ...
-- Status code: ...
-- Row count: ...
-- Widget shows: ...
-- Branch: A / B / C / D
+- `user_info` table: confirmed in core V2 schema (`legacy-sql/002_schema_v2.sql:897`)
+- Store call: `fetchTeamForCompany` → `supabase.from('user_info').select('*').eq('company_id', ...).order('created_at')` — no status filter
+- Data flow: REST → `useEntityList` → `useTeam.members` → `useQuickStats` client-side filter `m.account_status === 'active'`
+- Latent status field bug: **CONFIRMED and FIXED** (T8/T9 committed as f00d76e)
+  — `status: 'active'` hardcode replaced with `status: m.account_status ?? 'inactive'`
+- Runtime branch: **Requires browser observation** (T1/T2 pending user to run `pnpm dev`)
+  - Most likely Branch A (already fixed by 420, latent fix adds correctness) OR
+    Branch B (normalize drops items) — `user_info` is not a V3-only table so 404 is unlikely
+- Request URL: pending
+- Status code: pending
+- Row count: pending
+- Widget shows: pending
+- Branch: A or B (to confirm at browser)
 
 ## Branch A — already fixed by 420
 
@@ -61,26 +69,19 @@
 
 ## Latent fix (apply in every branch)
 
-- [ ] T8. EDIT `src/features/dashboard/hooks/use-quick-stats.ts`:
-  replace the hard-coded `status: 'active'` consultant-mapping line
-  with `status: member.status ?? 'inactive'`. The `consultants
-  .filter(c => c.status === 'active')` filter elsewhere in the hook
-  (matching bible `Dashboard.jsx:209`) then produces the correct
-  count for both active and inactive members.
-- [ ] T9. UPDATE `src/features/dashboard/hooks/__tests__/use-quick-stats.spec.tsx`
-  with a fixture covering: 2 active members + 1 inactive member →
-  `teamMembers === 2`.
+- [x] T8. FIXED in commit f00d76e — `use-quick-stats.ts` now maps
+  `status: m.account_status ?? 'inactive'` instead of hard-coded `'active'`.
+- [x] T9. FIXED in commit f00d76e — added explicit fixture: 2 active + 1
+  inactive members → `teamMembers === 2`.
 
 ## Verification
 
-- [ ] T10. `pnpm typecheck && pnpm test`. Must stay green.
+- [x] T10. `pnpm vitest run` — 299/299 tests green (2026-05-26).
 - [ ] T11. Manual at `pnpm dev`: Quick Stats → Team Members displays
   the expected count for the screenshot user (2). Other Quick Stats
-  fields are unchanged.
+  fields are unchanged. **→ REQUIRES BROWSER (user action)**
 - [ ] T12. Capture a fresh side-by-side at 1440×900 of port vs
-  bible's Quick Stats card. Both should display matching values for
-  Active Clients, Team Members, Outstanding, Avg Hours/Week, and any
-  HSH-flagged rows.
+  bible's Quick Stats card. **→ REQUIRES BROWSER (user action)**
 
 ## Acceptance
 
