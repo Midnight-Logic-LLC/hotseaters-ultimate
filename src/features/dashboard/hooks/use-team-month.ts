@@ -2,24 +2,19 @@
  * use-team-month — monthly hours + revenue per active consultant (+ HSH).
  *
  * Same data sources as use-team-week, different window (current calendar
- * month). Composes useTeam + useEntityView (TimeEntry + Assignments) +
+ * month). Composes useTeam + useEntities (TimeEntry + Assignments) +
  * Phase A aggregateTeamStats.
+ *
+ * 2.0 migration: replaced useEntityView (inline remoteFetch closures) with
+ * useEntities (transport-registry-backed).
  *
  * Bible: HotSeatersMVP/src/pages/Dashboard.jsx lines 617–658.
  */
 
 import { useMemo } from 'react';
-import { useEntityView } from '@prometheus-ags/prometheus-entity-management';
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useTier1 } from '@/app/tier1-provider';
 import { useTeam } from '@/features/company/hooks/use-team';
-import {
-  fetchTimeEntriesForCompany,
-  type TimeEntryRow,
-} from '@/features/time-entries/stores/time-entries-store';
-import {
-  fetchAssignmentsHiredByCompany,
-  type SubcontractAssignmentRow,
-} from '@/features/subcontracts/stores/subcontracts-store';
 import {
   aggregateTeamStats,
   filterTimeEntriesInWindow,
@@ -28,6 +23,9 @@ import {
   type TeamMemberStat,
   type TimeEntryRow as BizTimeEntryRow,
 } from '@/features/dashboard/business-rules/team-performance';
+
+interface TimeEntryRow { id: string; user_id: string | null; start_time: string | null; end_time: string | null; duration_hours: number | null; amount: number | null; }
+interface SubcontractAssignmentRow { id: string; subcontractor_id: string | null; status: string | null; hours_per_week: number | null; rate: number | null; }
 
 export interface TeamMonthResult {
   stats: TeamMemberStat[];
@@ -58,35 +56,25 @@ export function useTeamMonth(opts: UseTeamMonthOptions = {}): TeamMonthResult {
 
   const { members, isLoading: teamLoading } = useTeam(companyId);
 
-  const timeEntryView = useEntityView<TimeEntryRow>({
-    type: 'TimeEntry',
-    baseQueryKey: ['TimeEntry', 'month', companyId ?? '__none__', start.toISOString(), end.toISOString()],
-    view: {},
-    mode: 'hybrid',
+  const { items: timeEntries, isLoading: timeLoading } = useEntities<TimeEntryRow>('TimeEntry', {
+    filter: companyId
+      ? [
+          { field: 'company_id', op: 'eq', value: companyId },
+          { field: 'start_time', op: 'gte', value: start.toISOString() },
+          { field: 'start_time', op: 'lte', value: end.toISOString() },
+        ]
+      : null,
     enabled: !!companyId,
-    remoteFetch: async () => {
-      if (!companyId) return { items: [], total: 0 };
-      const items = await fetchTimeEntriesForCompany(companyId, {
-        since: start.toISOString(),
-        until: end.toISOString(),
-      });
-      return { items, total: items.length };
-    },
-    normalize: (raw) => ({ id: raw.id, data: raw }),
   });
 
-  const assignmentView = useEntityView<SubcontractAssignmentRow>({
-    type: 'SubcontractAssignment',
-    baseQueryKey: ['SubcontractAssignment', 'hiredBy', companyId ?? '__none__', 'active'],
-    view: {},
-    mode: 'hybrid',
+  const { items: assignments, isLoading: assignmentsLoading } = useEntities<SubcontractAssignmentRow>('SubcontractAssignment', {
+    filter: companyId
+      ? [
+          { field: 'hired_by_id', op: 'eq', value: companyId },
+          { field: 'status', op: 'eq', value: 'active' },
+        ]
+      : null,
     enabled: !!companyId,
-    remoteFetch: async () => {
-      if (!companyId) return { items: [], total: 0 };
-      const items = await fetchAssignmentsHiredByCompany(companyId, { status: 'active' });
-      return { items, total: items.length };
-    },
-    normalize: (raw) => ({ id: raw.id, data: raw }),
   });
 
   return useMemo<TeamMonthResult>(() => {
@@ -100,28 +88,28 @@ export function useTeamMonth(opts: UseTeamMonthOptions = {}): TeamMonthResult {
         status: 'active',
       }));
     const windowEntries = filterTimeEntriesInWindow(
-      timeEntryView.items as unknown as BizTimeEntryRow[],
+      timeEntries as unknown as BizTimeEntryRow[],
       start,
       end,
     );
     const stats = aggregateTeamStats({
       consultants,
       windowEntries,
-      subcontractAssignments: assignmentView.items as unknown as BizAssignmentRow[],
+      subcontractAssignments: assignments as unknown as BizAssignmentRow[],
     });
     return {
       stats: stats.length > 0 ? stats : EMPTY,
-      isLoading: teamLoading || timeEntryView.isLoading || assignmentView.isLoading,
+      isLoading: teamLoading || timeLoading || assignmentsLoading,
     };
   }, [
     companyId,
     members,
-    timeEntryView.items,
-    assignmentView.items,
+    timeEntries,
+    assignments,
     start,
     end,
     teamLoading,
-    timeEntryView.isLoading,
-    assignmentView.isLoading,
+    timeLoading,
+    assignmentsLoading,
   ]);
 }

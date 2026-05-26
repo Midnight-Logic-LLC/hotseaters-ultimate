@@ -4,22 +4,20 @@
  *
  * Composes:
  *   • useTrialProjections   — projected-invoice map (Tier-A trial_service).
- *   • useEntityView<Invoice> (hybrid REST) — actual invoices in the FY.
+ *   • useEntities<InvoiceRow> — actual invoices in the FY (Tier-C REST).
  *   • useDashboardPreferences — fiscal year, period, cumulative toggles.
  *   • useTier1().company    — fiscal_year_start_month + annual_revenue_target.
  *   • Phase A revenue-trend — monthlyTrend / weeklyTrend / toCumulative /
  *                              attachTrend / revenueGoalForPeriod.
  *
+ * 2.0 migration: replaced useEntityView (inline remoteFetch) with useEntities.
+ *
  * Bible: HotSeatersMVP/src/pages/Dashboard.jsx lines 116–120 + 403–525.
  */
 
 import { useMemo } from 'react';
-import { useEntityView } from '@prometheus-ags/prometheus-entity-management';
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useTier1 } from '@/app/tier1-provider';
-import {
-  fetchInvoicesForCompany,
-  type InvoiceRow,
-} from '@/features/invoices/stores/invoices-store';
 import {
   attachTrend,
   availableFiscalYears,
@@ -35,6 +33,8 @@ import {
 } from '@/features/dashboard/business-rules/revenue-trend';
 import { useDashboardPreferences } from '@/features/dashboard/hooks/use-dashboard-preferences';
 import { useTrialProjections } from '@/features/dashboard/hooks/use-trial-projections';
+
+interface InvoiceRow { id: string; invoice_date: string | null; amount: number | null; status: string | null; }
 
 export interface RevenueTrendResult {
   /** Chart-ready dataset (actual + projected + trend). */
@@ -82,35 +82,28 @@ export function useRevenueTrend(opts: UseRevenueTrendOptions = {}): RevenueTrend
     [fiscalYear, fiscalYearStartMonth],
   );
 
-  // Hybrid-mode invoice fetch scoped to the FY window. We pass the FY
-  // bounds to remoteFetch so we only pull the relevant slice.
   const sinceIso = useMemo(() => fiscalYearStart.toISOString().slice(0, 10), [fiscalYearStart]);
   const untilIso = useMemo(() => fiscalYearEnd.toISOString().slice(0, 10), [fiscalYearEnd]);
 
-  const invoiceView = useEntityView<InvoiceRow>({
-    type: 'Invoice',
-    baseQueryKey: ['Invoice', 'fy', companyId ?? '__none__', sinceIso, untilIso],
-    view: {},
-    mode: 'hybrid',
+  // Invoices in the fiscal year window — Tier-C REST via transport registry.
+  const { items: invoiceItems, isLoading: invoicesLoading } = useEntities<InvoiceRow>('Invoice', {
+    filter: companyId
+      ? [
+          { field: 'company_id', op: 'eq', value: companyId },
+          { field: 'invoice_date', op: 'gte', value: sinceIso },
+          { field: 'invoice_date', op: 'lte', value: untilIso },
+        ]
+      : null,
+    sort: [{ field: 'invoice_date', direction: 'asc' }],
+    limit: 5000,
     enabled: !!companyId,
-    remoteFetch: async () => {
-      if (!companyId) return { items: [], total: 0 };
-      const items = await fetchInvoicesForCompany(companyId, {
-        since: sinceIso,
-        until: untilIso,
-        orderBy: 'invoice_date_asc',
-        limit: 5000,
-      });
-      return { items, total: items.length };
-    },
-    normalize: (raw) => ({ id: raw.id, data: raw }),
   });
 
   const { projectedInvoices, isLoading: projectionsLoading } = useTrialProjections();
 
   const data = useMemo<TrendPointWithTrend[]>(() => {
     if (!companyId) return EMPTY_DATA;
-    const invoicesForTrend = invoiceView.items as unknown as InvoiceForTrend[];
+    const invoicesForTrend = invoiceItems as unknown as InvoiceForTrend[];
     const base =
       period === 'week'
         ? weeklyTrend({ invoices: invoicesForTrend, projectedInvoices, fiscalYearStart })
@@ -119,7 +112,7 @@ export function useRevenueTrend(opts: UseRevenueTrendOptions = {}): RevenueTrend
     return attachTrend(final);
   }, [
     companyId,
-    invoiceView.items,
+    invoiceItems,
     projectedInvoices,
     fiscalYearStart,
     period,
@@ -145,6 +138,6 @@ export function useRevenueTrend(opts: UseRevenueTrendOptions = {}): RevenueTrend
     cumulative,
     availableFiscalYears: fyOptions,
     revenueGoal,
-    isLoading: prefsLoading || projectionsLoading || invoiceView.isLoading,
+    isLoading: prefsLoading || projectionsLoading || invoicesLoading,
   };
 }

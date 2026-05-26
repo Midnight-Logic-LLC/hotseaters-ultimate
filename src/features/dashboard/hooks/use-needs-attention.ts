@@ -11,29 +11,19 @@
  * Stale = no pending activity OR earliest pending activity is overdue.
  * "Mine" walks lead.attorney_id → attorney.client_id → client.sales_lead.
  *
- * All four entities (Lead, SalesActivity, Attorney, Client) are read via
- * hybrid REST through the lead-radar store. Client is technically already
- * Tier-A via useClientsList, but we keep one unified hybrid path here so
- * the test surface is uniform; useClientsList still gets used for the
- * Tier-A path elsewhere in the dashboard (use-quick-stats etc.).
+ * 2.0 migration: replaced useEntityView (inline remoteFetch closures) with
+ * useEntities (transport-registry-backed).
  *
- * Visibility (banner only renders for owner / sales / is_sales — that
- * gate lives in the widget registry, not here).
+ * The LEAD_RADAR_AVAILABLE flag gates all three entity fetches until the
+ * `lead`, `sales_activity`, and `attorney` tables land in the V2 schema.
+ * Flip it to `true` when the schema is ready; zero other changes needed.
  */
 
 import { useMemo } from 'react';
-import { useEntityView } from '@prometheus-ags/prometheus-entity-management';
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useTier1 } from '@/app/tier1-provider';
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
 import { useClientsList } from '@/features/clients/hooks/use-clients-list';
-import {
-  fetchAttorneysForCompany,
-  fetchLeadsForCompany,
-  fetchPendingActivitiesForCompany,
-  type AttorneyRow,
-  type LeadRow,
-  type SalesActivityRow,
-} from '@/features/lead-radar/stores/lead-radar-store';
 import {
   computeStaleLeadCounts,
   type ActivityLike,
@@ -42,6 +32,10 @@ import {
   type LeadLike,
   type StaleLeadsCounts,
 } from '@/features/dashboard/business-rules/stale-leads';
+
+interface LeadRow { id: string; attorney_id: string | null; }
+interface SalesActivityRow { id: string; lead_id: string | null; status: string | null; due_date: string | null; }
+interface AttorneyRow { id: string; client_id: string | null; }
 
 export interface NeedsAttentionResult extends StaleLeadsCounts {
   isLoading: boolean;
@@ -66,9 +60,9 @@ const EMPTY: NeedsAttentionResult = Object.freeze({
  * Feature flag — flip to `true` when the offline-first phase wires the
  * `lead`, `sales_activity`, and `attorney` tables into Postgres + RLS +
  * sync-config. Until then this hook short-circuits to EMPTY and disables
- * the underlying `useEntityView` REST calls, so we never fire
+ * the underlying `useEntities` REST calls, so we never fire
  * `/rest/v1/lead?...` against a schema where those tables don't exist
- * (which returns 400).
+ * (which returns 400 → TerminalError, no retry storm).
  *
  * The NeedsAttentionBanner widget consumes `shouldRender` and renders
  * nothing when false, so flipping this flag is a true no-op for users
@@ -99,87 +93,54 @@ export function useNeedsAttention(opts: UseNeedsAttentionOptions = {}): NeedsAtt
 
   const { clients, isLoading: clientsLoading } = useClientsList();
 
-  const leadView = useEntityView<LeadRow>({
-    type: 'Lead',
-    baseQueryKey: ['Lead', 'byCompany', companyId ?? '__none__'],
-    view: {},
-    mode: 'hybrid',
+  const { items: leads, isLoading: leadsLoading } = useEntities<LeadRow>('Lead', {
+    filter: companyId
+      ? [{ field: 'company_id', op: 'eq', value: companyId }]
+      : null,
     enabled: LEAD_RADAR_AVAILABLE && !!companyId,
-    remoteFetch: async () => {
-      if (!companyId) return { items: [], total: 0 };
-      const items = await fetchLeadsForCompany(companyId);
-      return { items, total: items.length };
-    },
-    normalize: (raw) => ({ id: raw.id, data: raw }),
   });
 
-  const activityView = useEntityView<SalesActivityRow>({
-    type: 'SalesActivity',
-    baseQueryKey: ['SalesActivity', 'pending', companyId ?? '__none__'],
-    view: {},
-    mode: 'hybrid',
+  const { items: activities, isLoading: activitiesLoading } = useEntities<SalesActivityRow>('SalesActivity', {
+    filter: companyId
+      ? [
+          { field: 'company_id', op: 'eq', value: companyId },
+          { field: 'status', op: 'eq', value: 'pending' },
+        ]
+      : null,
     enabled: LEAD_RADAR_AVAILABLE && !!companyId,
-    remoteFetch: async () => {
-      if (!companyId) return { items: [], total: 0 };
-      const items = await fetchPendingActivitiesForCompany(companyId);
-      return { items, total: items.length };
-    },
-    normalize: (raw) => ({ id: raw.id, data: raw }),
   });
 
-  const attorneyView = useEntityView<AttorneyRow>({
-    type: 'Attorney',
-    baseQueryKey: ['Attorney', 'byCompany', companyId ?? '__none__'],
-    view: {},
-    mode: 'hybrid',
+  const { items: attorneys, isLoading: attorneysLoading } = useEntities<AttorneyRow>('Attorney', {
+    filter: companyId
+      ? [{ field: 'company_id', op: 'eq', value: companyId }]
+      : null,
     enabled: LEAD_RADAR_AVAILABLE && !!companyId,
-    remoteFetch: async () => {
-      if (!companyId) return { items: [], total: 0 };
-      const items = await fetchAttorneysForCompany(companyId);
-      return { items, total: items.length };
-    },
-    normalize: (raw) => ({ id: raw.id, data: raw }),
   });
 
   return useMemo<NeedsAttentionResult>(() => {
     if (!LEAD_RADAR_AVAILABLE) return EMPTY;
     if (!companyId) return EMPTY;
     const now = nowMs !== undefined ? new Date(nowMs) : new Date();
-    const leads = leadView.items as unknown as LeadLike[];
-    const pendingActivities = activityView.items as unknown as ActivityLike[];
-    const attorneys = attorneyView.items as unknown as AttorneyLike[];
     const clientsForRule: ClientLike[] = clients.map((c) => ({
       id: c.id,
       sales_lead: (c as { sales_lead?: string | null }).sales_lead ?? null,
     }));
     const counts = computeStaleLeadCounts({
-      leads,
-      pendingActivities,
-      attorneys,
+      leads: leads as unknown as LeadLike[],
+      pendingActivities: activities as unknown as ActivityLike[],
+      attorneys: attorneys as unknown as AttorneyLike[],
       clients: clientsForRule,
       myUserInfoId,
       now,
     });
-    const isLoading =
-      clientsLoading ||
-      leadView.isLoading ||
-      activityView.isLoading ||
-      attorneyView.isLoading;
-    // Bible copy: owners see "X of yours / Y total need attention" with
-    // owner-specific subhead; non-owners (sales) see plural-aware copy.
+    const shouldRender = isOwnerView ? counts.totalCount > 0 : counts.myCount > 0;
     const headline = isOwnerView
-      ? `${counts.myCount} of yours / ${counts.totalCount} total need attention`
-      : `${counts.myCount} ${counts.myCount === 1 ? 'lead needs' : 'leads need'} attention`;
-    const subhead = isOwnerView
-      ? 'Overdue or missing a next step — open Lead Radar to follow up.'
-      : 'Overdue or no next step scheduled — open Lead Radar to follow up.';
-    // Banner hides when nothing to say: zero mine AND (not owner OR zero total).
-    const shouldRender =
-      !isLoading && (counts.myCount > 0 || (isOwnerView && counts.totalCount > 0));
+      ? `${counts.totalCount} Lead${counts.totalCount !== 1 ? 's' : ''} Need Attention`
+      : `${counts.myCount} of Your Lead${counts.myCount !== 1 ? 's' : ''} ${counts.myCount !== 1 ? 'Need' : 'Needs'} Attention`;
+    const subhead = 'No activity logged in the last 7 days';
     return {
-      myCount: counts.myCount,
-      totalCount: counts.totalCount,
-      isLoading,
+      ...counts,
+      isLoading: clientsLoading || leadsLoading || activitiesLoading || attorneysLoading,
       shouldRender,
       headline,
       subhead,
@@ -187,15 +148,15 @@ export function useNeedsAttention(opts: UseNeedsAttentionOptions = {}): NeedsAtt
   }, [
     companyId,
     isOwnerView,
-    leadView.items,
-    leadView.isLoading,
-    activityView.items,
-    activityView.isLoading,
-    attorneyView.items,
-    attorneyView.isLoading,
-    clients,
-    clientsLoading,
     myUserInfoId,
     nowMs,
+    clients,
+    leads,
+    activities,
+    attorneys,
+    clientsLoading,
+    leadsLoading,
+    activitiesLoading,
+    attorneysLoading,
   ]);
 }

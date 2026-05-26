@@ -4,23 +4,26 @@
  * Two halves with different data paths:
  *   • Recently won deals — Tier-A (Trial via useTrialsList → graph). Pure
  *     derivation of top-3 by `won_date DESC`.
- *   • Recent invoices — Hybrid REST: invoice isn't in SYNC_CONFIG yet, so
- *     we hand a `remoteFetch` to `useEntityView` that pulls top-3 from
- *     Supabase via the invoices store. When invoice later joins sync,
- *     this hook auto-flips to local-only completeness with zero code
- *     change (per the dashboard plan §4.3).
+ *   • Recent invoices — Tier-C REST via useEntities (transport registry).
+ *
+ * 2.0 migration: replaced useEntityView (inline remoteFetch) with useEntities.
+ * The transport resolves to makeRestTransport("invoice") registered at boot.
  *
  * Bible: HotSeatersMVP/src/pages/Dashboard.jsx lines 680–688 + 991–1090.
  */
 
 import { useMemo } from 'react';
-import { useEntityView } from '@prometheus-ags/prometheus-entity-management';
+import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useTier1 } from '@/app/tier1-provider';
 import { useTrialsList } from '@/features/trials/hooks/use-trials-list';
-import {
-  fetchInvoicesForCompany,
-  type InvoiceRow,
-} from '@/features/invoices/stores/invoices-store';
+
+interface InvoiceRow {
+  id: string;
+  invoice_number: string | null;
+  total: number | null;
+  status: string | null;
+  invoice_date: string | null;
+}
 
 export interface RecentlyWonDeal {
   id: string;
@@ -56,24 +59,14 @@ export function useRecentActivity(opts: UseRecentActivityOptions = {}): RecentAc
   const companyId = company?.id ?? null;
   const { items: trials, isLoading: trialsLoading } = useTrialsList({ companyId });
 
-  // Hybrid-mode view over Invoice. baseQueryKey is what the graph stores
-  // the id list under; remoteFetch fires when local completeness is false
-  // (which is always, until invoice joins SYNC_CONFIG).
-  const invoiceView = useEntityView<InvoiceRow>({
-    type: 'Invoice',
-    baseQueryKey: ['Invoice', 'recent', companyId ?? '__none__'],
-    view: {},
-    mode: 'hybrid',
+  // Recent invoices ordered by invoice_date desc — Tier-C REST.
+  const { items: invoiceItems, isLoading: invoicesLoading } = useEntities<InvoiceRow>('Invoice', {
+    filter: companyId
+      ? [{ field: 'company_id', op: 'eq', value: companyId }]
+      : null,
+    sort: [{ field: 'invoice_date', direction: 'desc' }],
+    limit,
     enabled: !!companyId,
-    remoteFetch: async () => {
-      if (!companyId) return { items: [], total: 0 };
-      const items = await fetchInvoicesForCompany(companyId, {
-        orderBy: 'invoice_date_desc',
-        limit,
-      });
-      return { items, total: items.length };
-    },
-    normalize: (raw) => ({ id: raw.id, data: raw }),
   });
 
   const recentlyWon = useMemo<RecentlyWonDeal[]>(() => {
@@ -93,19 +86,19 @@ export function useRecentActivity(opts: UseRecentActivityOptions = {}): RecentAc
   }, [companyId, trials, limit]);
 
   const recentInvoices = useMemo<RecentInvoice[]>(() => {
-    if (!companyId || invoiceView.items.length === 0) return EMPTY_INVOICES;
-    return invoiceView.items.slice(0, limit).map<RecentInvoice>((row) => ({
+    if (!companyId || invoiceItems.length === 0) return EMPTY_INVOICES;
+    return invoiceItems.slice(0, limit).map<RecentInvoice>((row) => ({
       id: row.id,
       invoice_number: row.invoice_number,
       total: row.total ?? 0,
       status: row.status,
       invoice_date: row.invoice_date,
     }));
-  }, [companyId, invoiceView.items, limit]);
+  }, [companyId, invoiceItems, limit]);
 
   return {
     recentlyWon,
     recentInvoices,
-    isLoading: trialsLoading || invoiceView.isLoading,
+    isLoading: trialsLoading || invoicesLoading,
   };
 }
