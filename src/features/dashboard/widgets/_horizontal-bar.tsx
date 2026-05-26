@@ -72,18 +72,18 @@ export interface HorizontalBarProps<T extends HorizontalBarDatum> {
     /** Tooltip formatter — e.g. (v) => `$${v.toLocaleString()}`. */
     formatter?: (v: number) => string;
   }>;
-  /** Pixel height; ResponsiveContainer fills width. Defaults to 14rem. */
-  height?: string;
+  /** Pixel height; ResponsiveContainer fills width. Defaults to bible's 200px. */
+  height?: number;
 }
 
 export function HorizontalBar<T extends HorizontalBarDatum>({
   data,
   bars,
-  height = '14rem',
+  height = 200,
 }: HorizontalBarProps<T>) {
   return (
-    <div style={{ width: '100%', height, minWidth: 0, minHeight: '14rem' }}>
-      <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+    <div style={{ width: '100%', minWidth: 0 }}>
+      <ResponsiveContainer width="100%" height={height} minWidth={1}>
         <BarChart
           data={data}
           layout="vertical"

@@ -1,7 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 const mockUseTeamWeek = vi.fn();
+let warnSpy: ReturnType<typeof vi.spyOn>;
+let errorSpy: ReturnType<typeof vi.spyOn>;
+
+const rechartsSizeWarning = /width\(.*height\(.*chart should be greater than 0/s;
+
 vi.mock('@/features/dashboard/hooks/use-team-week', () => ({
   useTeamWeek: () => mockUseTeamWeek(),
 }));
@@ -9,7 +14,18 @@ vi.mock('@/features/dashboard/hooks/use-team-week', () => ({
 import { WeeklyTeamPerformance } from '../weekly-team-performance';
 
 beforeEach(() => {
+  warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   mockUseTeamWeek.mockReset();
+});
+
+afterEach(() => {
+  const chartWarnings = [...warnSpy.mock.calls, ...errorSpy.mock.calls]
+    .map((args) => args.join(' '))
+    .filter((message) => rechartsSizeWarning.test(message));
+  warnSpy.mockRestore();
+  errorSpy.mockRestore();
+  expect(chartWarnings).toEqual([]);
 });
 
 describe('WeeklyTeamPerformance', () => {

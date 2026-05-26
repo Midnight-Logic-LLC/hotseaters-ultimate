@@ -62,7 +62,7 @@ export function ActiveTrialPerformance() {
                 formatter: (v) => `$${Math.round(v).toLocaleString()}`,
               },
             ]}
-            height="18rem"
+            height={288}
           />
         )}
       </CardContent>
