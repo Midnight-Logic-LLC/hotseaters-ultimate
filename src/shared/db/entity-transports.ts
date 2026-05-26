@@ -10,14 +10,14 @@
  * replaces the prior transport (useful in tests).
  *
  * Transport tiers:
- *   `authoritative: true`  — Tier-A entities that also sync into PGlite via
- *                            Electric. The transport is used as the REST
- *                            fallback while offline-first wiring is pending.
+ *   `authoritative: true`  — Tier-A entities. Electric syncs them into PGlite;
+ *                            `pglite-graph-bridge` watches the `*_synced` tables
+ *                            and upserts rows into the entity graph in real time.
+ *                            staleTime is intentionally large (24h): the bridge
+ *                            keeps the graph fresh, so the REST fallback only fires
+ *                            on the very first mount (before the bridge has run).
  *   `authoritative: false` — Tier-C entities: server-only, REST-only.
- *                            These will never live in PGlite.
- *
- * staleTime: Tier-A entities use 5 s (kept fresh via Electric/realtime).
- *            Tier-C entities use the library default (30 s).
+ *                            These will never live in PGlite; 30 s default.
  *
  * RULE 1: Self-hosted Supabase only. The supabase-client module already
  * refuses to construct a client pointing at `*.supabase.co`.
@@ -73,20 +73,26 @@ function reg<T extends object>(
  *
  * Order: Tier-A first (FK-dependency order), then Tier-C.
  */
+// 24 hours in ms — Tier-A staleTime. The pglite-graph-bridge keeps the graph
+// current via PGlite live queries, so the REST transport is only a fallback for
+// the very first mount (before the bridge's live query has fired).
+const TIER_A_STALE_TIME = 24 * 60 * 60 * 1_000;
+
 export function registerAllTransports(): void {
-  // Tier-A — synced via Electric, authoritative local copies expected.
-  reg('Company',                 'company',                    true,  5_000);
-  reg('UserInfo',                'user_info',                  true,  5_000);
-  reg('MetadataType',            'metadata_type',              true, 10_000);
-  reg('EntityMetadata',          'entity_metadata',            true,  5_000);
-  reg('Client',                  'client',                     true,  5_000);
-  reg('ClientAddress',           'client_address',             true,  5_000);
-  reg('ClientServiceOverride',   'client_service_override',    true,  5_000);
-  reg('Trial',                   'trial',                      true,  5_000);
-  reg('TrialService',            'trial_service',              true,  5_000);
-  reg('TrialContact',            'trial_contact',              true,  5_000);
-  reg('TrialSegment',            'trial_segment',              true,  5_000);
-  reg('TrialServiceAssignment',  'trial_service_assignment',   true,  5_000);
+  // Tier-A — synced via Electric + pglite-graph-bridge keeps graph current.
+  // Long staleTime: bridge is the reactivity mechanism; REST is the fallback.
+  reg('Company',                 'company',                    true,  TIER_A_STALE_TIME);
+  reg('UserInfo',                'user_info',                  true,  TIER_A_STALE_TIME);
+  reg('MetadataType',            'metadata_type',              true,  TIER_A_STALE_TIME);
+  reg('EntityMetadata',          'entity_metadata',            true,  TIER_A_STALE_TIME);
+  reg('Client',                  'client',                     true,  TIER_A_STALE_TIME);
+  reg('ClientAddress',           'client_address',             true,  TIER_A_STALE_TIME);
+  reg('ClientServiceOverride',   'client_service_override',    true,  TIER_A_STALE_TIME);
+  reg('Trial',                   'trial',                      true,  TIER_A_STALE_TIME);
+  reg('TrialService',            'trial_service',              true,  TIER_A_STALE_TIME);
+  reg('TrialContact',            'trial_contact',              true,  TIER_A_STALE_TIME);
+  reg('TrialSegment',            'trial_segment',              true,  TIER_A_STALE_TIME);
+  reg('TrialServiceAssignment',  'trial_service_assignment',   true,  TIER_A_STALE_TIME);
 
   // Tier-C — server-only REST, no local PGlite copy.
   reg('Invoice',                 'invoice',                    false);

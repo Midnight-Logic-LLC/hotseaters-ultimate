@@ -21,6 +21,10 @@ import {
   getSyncMeta,
   markHydrated,
 } from '@/shared/db/pglite-client';
+import {
+  startGraphBridge,
+  type GraphBridgeHandle,
+} from '@/shared/db/pglite-graph-bridge';
 import { startWriteSync } from '@/shared/db/write-sync';
 
 /**
@@ -73,6 +77,7 @@ export function SyncGate({ children }: PropsWithChildren) {
   const handlesRef = useRef<{
     tenantSync?: TenantSyncResult;
     graph?: EntityGraphHandle;
+    graphBridge?: GraphBridgeHandle;
     stopWriteSync?: () => Promise<void>;
     activeCompanyId?: string;
   }>({});
@@ -85,10 +90,11 @@ export function SyncGate({ children }: PropsWithChildren) {
     // Sign-out path: tear down anything that's running.
     if (!session || !companyId || !userId) {
       void (async () => {
-        const { tenantSync, graph, stopWriteSync, activeCompanyId } =
+        const { tenantSync, graph, graphBridge, stopWriteSync, activeCompanyId } =
           handlesRef.current;
         if (activeCompanyId) {
           try {
+            await graphBridge?.stop();
             await tenantSync?.unsubscribe();
             await stopWriteSync?.();
             graph?.dispose();
@@ -177,9 +183,24 @@ export function SyncGate({ children }: PropsWithChildren) {
           return;
         }
 
+        // ── Step 5: Electric→graph bridge ────────────────────────────────────
+        // Watches each Tier-A *_synced table with a PGlite live query.
+        // When Electric writes a row, the bridge upserts it directly into the
+        // entity graph so subsequent navigation skips the REST round-trip.
+        // This is what makes "local-first" mean "instant on return visit".
+        const graphBridge = await startGraphBridge(userId, companyId);
+        if (cancelled) {
+          await graphBridge.stop();
+          graph.dispose();
+          await tenantSync.unsubscribe();
+          await stopWriteSync();
+          return;
+        }
+
         handlesRef.current = {
           tenantSync,
           graph,
+          graphBridge,
           stopWriteSync,
           activeCompanyId: companyId,
         };
