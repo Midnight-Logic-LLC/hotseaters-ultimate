@@ -2,11 +2,11 @@
   "phase": "dashboard-bible-parity-build",
   "round": "B",
   "project": "hotseaters-ultimate",
-  "status": "planned",
+  "status": "reflected",
   "assessment_complete": true,
   "plan_complete": true,
-  "execution_complete": false,
-  "reflection_complete": false,
+  "execution_complete": true,
+  "reflection_complete": true,
   "change_backend": "openspec",
   "assessment_path": ".kbd-orchestrator/phases/dashboard-bible-parity-build/assessment.md",
   "plan_path": ".kbd-orchestrator/phases/dashboard-bible-parity-build/plan.md",
@@ -20,13 +20,23 @@
     "change-408-dashboard-page-shell-and-registry",
     "change-409-dashboard-verification"
   ],
-  "next_step": "change-420 + change-421 + change-422 LANDED (commits 4b46b53/e38d64f/1b696f2/93c6621/29cf8a0). Tests: 299/299 green. Next ACTION = user-side gate: retest /Dashboard in dev browser. If DevTools console clean of `Maximum update depth` + `width(-1)` AND Quick Stats Team Members shows a non-zero count, then dispatch change-423 (no-op path) and change-424 (diagnostic Branch A — already fixed by 420). If anything still fails, the failing observation drives the 423/424 paths described in their respective tasks.md.",
+  "next_step": "Phase reflected 2026-05-26. Run /kbd-new-phase hotseaters-page-parity-port to advance to Wave W1 (public surface: /, /Landing, /PrivacyPolicy, /TermsOfService, /Pricing, /ReferralLanding). Deferred items: npm publish 2.0.0, VR baselines, change-424 T11/T12 browser smoke.",
   "execution_order": [
-    ["change-420-entity-mgmt-memoize-useEntityList-submodule-fix"],
-    ["change-421-card-primitive-bible-tokens"],
-    ["change-422-welcome-header-fallback-parity"],
-    ["change-423-recharts-submodule-or-no-op"],
-    ["change-424-team-members-data-root-cause"]
+    [
+      "change-420-entity-mgmt-memoize-useEntityList-submodule-fix"
+    ],
+    [
+      "change-421-card-primitive-bible-tokens"
+    ],
+    [
+      "change-422-welcome-header-fallback-parity"
+    ],
+    [
+      "change-423-recharts-submodule-or-no-op"
+    ],
+    [
+      "change-424-team-members-data-root-cause"
+    ]
   ],
   "gating": {
     "change-423-recharts-submodule-or-no-op": "Gated on DevTools Console state at /Dashboard AFTER changes 420-422 land. Phase 2A (no-op) if console clean of `Maximum update depth` + `width(-1)`. Phase 2B (submodule) if either persists.",
@@ -36,7 +46,7 @@
     "dashboard-and-data-architecture-parity (complete, archived 2026-05-25)"
   ],
   "queued_phases": [
-    "pglite-schema-strategy-offline-first (GATED — promote after this phase reflects)"
+    "pglite-schema-strategy-offline-first (GATED \u2014 promote after this phase reflects)"
   ],
   "definition_of_done_summary": [
     "Bible /Dashboard reproduces at >=95% pixel parity at 1440x900 + 375x667.",

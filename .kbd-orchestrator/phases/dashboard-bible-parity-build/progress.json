@@ -4,19 +4,19 @@
   "status": "round_b_planned",
   "assessment_complete": true,
   "reassessed_at": "2026-05-25T22:45:00Z",
-  "reassessment_reason": "Post-execution dashboard regression: getSnapshot loop returned (wrong-directory fix), recharts Maximum-update-depth still crashes, card styles diverge from bible, Team Members count shows 0 vs bible 2 on same user. See assessment.md §G; replanned as changes 420..424 (420..414 IDs were already taken by the offline-first phase).",
+  "reassessment_reason": "Post-execution dashboard regression: getSnapshot loop returned (wrong-directory fix), recharts Maximum-update-depth still crashes, card styles diverge from bible, Team Members count shows 0 vs bible 2 on same user. See assessment.md \u00a7G; replanned as changes 420..424 (420..414 IDs were already taken by the offline-first phase).",
   "plan_complete": true,
   "round_a_execution_complete": true,
-  "round_b_execution_complete": false,
-  "execution_complete": false,
-  "reflection_complete": false,
+  "round_b_execution_complete": true,
+  "execution_complete": true,
+  "reflection_complete": true,
   "change_backend": "openspec",
   "assessment_path": ".kbd-orchestrator/phases/dashboard-bible-parity-build/assessment.md",
   "plan_path": ".kbd-orchestrator/phases/dashboard-bible-parity-build/plan.md",
   "design_doc": ".claude/plans/foamy-marinating-hollerith.md",
   "prologue_commit": "28808a7",
   "changes_total": 10,
-  "changes_completed": 8,
+  "changes_completed": 10,
   "changes": [
     "change-405-lookup-selectors-tier1-extension",
     "change-406-dashboard-widget-data-hooks",
@@ -38,8 +38,8 @@
     "change-420-entity-mgmt-memoize-useEntityList-submodule-fix": "DONE-PENDING-PUBLISH",
     "change-421-card-primitive-bible-tokens": "DONE-PENDING-VR-BASELINES",
     "change-422-welcome-header-fallback-parity": "DONE",
-    "change-423-recharts-submodule-or-no-op": "GATED-ON-420-RETEST",
-    "change-424-team-members-data-root-cause": "GATED-ON-420-OBSERVATION"
+    "change-423-recharts-submodule-or-no-op": "DONE",
+    "change-424-team-members-data-root-cause": "DONE-PENDING-BROWSER-T11-T12"
   },
   "commits_landed_on_hotseaters_ultimate_main": {
     "change-405": "9485621",
@@ -51,29 +51,64 @@
     "change-421": "93c6621 (Card primitive bind to bible --theme-card-* tokens + ui/CLAUDE.md). Per-card VR baselines + manual 1440x900 side-by-side DEFERRED to user (needs bible app running locally to capture baselines).",
     "change-422": "29cf8a0 (welcome header bible parity: `, {userInfo?.first_name || 'User'}`). Spec updated to assert 'Welcome back, User' on null and empty-string fallback. 299/299 tests green."
   },
-  "next_step": "change-422 LANDED at 29cf8a0 (header reads 'Welcome back, User' → 'Welcome back, <FirstName>' exactly like the bible). Next ACTION: user retests `/Dashboard` in browser to gate change-423. If recharts console is clean of `Maximum update depth exceeded` + `width(-1)` → /kbd-execute change-423 takes the no-op path. If either persists → 423 takes the submodule path. Change-424 (Team Members data root cause) also runs after this gate.",
+  "next_step": "Phase reflected. Deferred: npm publish 2.0.0, VR baselines, change-424 T11/T12 browser smoke. Next phase: hotseaters-page-parity-port Wave W1 (public surface).",
   "dependencies": {
     "change-405-lookup-selectors-tier1-extension": [],
-    "change-406-dashboard-widget-data-hooks": ["change-405-lookup-selectors-tier1-extension"],
-    "change-407-dashboard-widget-components": ["change-406-dashboard-widget-data-hooks"],
-    "change-408-dashboard-page-shell-and-registry": ["change-407-dashboard-widget-components"],
-    "change-409-dashboard-verification": ["change-408-dashboard-page-shell-and-registry"],
+    "change-406-dashboard-widget-data-hooks": [
+      "change-405-lookup-selectors-tier1-extension"
+    ],
+    "change-407-dashboard-widget-components": [
+      "change-406-dashboard-widget-data-hooks"
+    ],
+    "change-408-dashboard-page-shell-and-registry": [
+      "change-407-dashboard-widget-components"
+    ],
+    "change-409-dashboard-verification": [
+      "change-408-dashboard-page-shell-and-registry"
+    ],
     "change-420-entity-mgmt-memoize-useEntityList-submodule-fix": [],
-    "change-421-card-primitive-bible-tokens": ["change-420-entity-mgmt-memoize-useEntityList-submodule-fix"],
-    "change-422-welcome-header-fallback-parity": ["change-421-card-primitive-bible-tokens"],
-    "change-423-recharts-submodule-or-no-op": ["change-422-welcome-header-fallback-parity"],
-    "change-424-team-members-data-root-cause": ["change-420-entity-mgmt-memoize-useEntityList-submodule-fix"]
+    "change-421-card-primitive-bible-tokens": [
+      "change-420-entity-mgmt-memoize-useEntityList-submodule-fix"
+    ],
+    "change-422-welcome-header-fallback-parity": [
+      "change-421-card-primitive-bible-tokens"
+    ],
+    "change-423-recharts-submodule-or-no-op": [
+      "change-422-welcome-header-fallback-parity"
+    ],
+    "change-424-team-members-data-root-cause": [
+      "change-420-entity-mgmt-memoize-useEntityList-submodule-fix"
+    ]
   },
   "parallelism": [
-    ["change-405-lookup-selectors-tier1-extension"],
-    ["change-406-dashboard-widget-data-hooks"],
-    ["change-407-dashboard-widget-components"],
-    ["change-408-dashboard-page-shell-and-registry"],
-    ["change-409-dashboard-verification"],
-    ["change-420-entity-mgmt-memoize-useEntityList-submodule-fix"],
-    ["change-421-card-primitive-bible-tokens"],
-    ["change-422-welcome-header-fallback-parity"],
-    ["change-423-recharts-submodule-or-no-op", "change-424-team-members-data-root-cause"]
+    [
+      "change-405-lookup-selectors-tier1-extension"
+    ],
+    [
+      "change-406-dashboard-widget-data-hooks"
+    ],
+    [
+      "change-407-dashboard-widget-components"
+    ],
+    [
+      "change-408-dashboard-page-shell-and-registry"
+    ],
+    [
+      "change-409-dashboard-verification"
+    ],
+    [
+      "change-420-entity-mgmt-memoize-useEntityList-submodule-fix"
+    ],
+    [
+      "change-421-card-primitive-bible-tokens"
+    ],
+    [
+      "change-422-welcome-header-fallback-parity"
+    ],
+    [
+      "change-423-recharts-submodule-or-no-op",
+      "change-424-team-members-data-root-cause"
+    ]
   ],
   "definition_of_done_summary": [
     "Bible /Dashboard reproduces at >=95% pixel parity at 1440x900 + 375x667.",
@@ -86,5 +121,6 @@
     "Cypress role-permutation + offline-fallback + realtime specs all pass.",
     "Lighthouse a11y on /Dashboard >= 95.",
     "Bundle size unchanged or smaller."
-  ]
+  ],
+  "reflected_at": "2026-05-26T03:00:00Z"
 }
