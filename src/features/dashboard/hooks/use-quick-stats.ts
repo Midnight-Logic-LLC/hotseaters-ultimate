@@ -141,7 +141,7 @@ export function useQuickStats(opts: UseQuickStatsOptions = {}): QuickStatsResult
         id: m.id,
         first_name: m.first_name,
         last_name: m.last_name,
-        status: 'active',
+        status: m.account_status ?? 'inactive',
       }));
     const outstanding = computeOutstandingInvoices(invoices);
     const windowEntries = filterTimeEntriesInWindow(

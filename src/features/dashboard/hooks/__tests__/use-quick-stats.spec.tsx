@@ -92,6 +92,24 @@ describe('useQuickStats', () => {
     expect(result.current.activeHshGigs).toBeUndefined();
   });
 
+  it('counts only active members for teamMembers (2 active + 1 inactive)', async () => {
+    // T9: validates the latent fix — status must reflect account_status, not be hardcoded 'active'
+    mockUseTier1.mockImplementation(() => ({
+      company: { id: 'co', name: 'Co', marketplace_post_jobs: false, marketplace_fill_jobs: false },
+    }));
+    mockUseTeam.mockReturnValue({
+      members: [
+        { id: 'm1', account_status: 'active', first_name: 'A', last_name: 'X' },
+        { id: 'm2', account_status: 'active', first_name: 'B', last_name: 'Y' },
+        { id: 'm3', account_status: 'inactive', first_name: 'C', last_name: 'Z' },
+      ],
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useQuickStats({ now: NOW }));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.teamMembers).toBe(2);
+  });
+
   it('includes HSH counters when company flags are set', async () => {
     mockUseTier1.mockImplementation(() => ({
       company: { id: 'co', name: 'Co', marketplace_post_jobs: true, marketplace_fill_jobs: true },
