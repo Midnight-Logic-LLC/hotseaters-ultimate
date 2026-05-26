@@ -46,10 +46,11 @@ interface UserInfoRoleShape extends Record<string, unknown> {
 }
 
 export function useCurrentRoles(): UseCurrentRolesResult {
-  const userInfoId = useAuthSession(
-    (s) =>
-      (s.user?.user_metadata?.user_info_id as string | undefined) ?? null,
-  );
+  // `currentUserInfoId` is resolved by auth-session.ts on every auth state
+  // change via a `user_info` query (by auth_user_id or by email fallback).
+  // Do NOT read from `user_metadata.user_info_id` — that JWT claim is not
+  // populated automatically by Supabase and is always undefined.
+  const userInfoId = useAuthSession((s) => s.currentUserInfoId);
   const authLoading = useAuthSession((s) => s.isLoading);
 
   const { data, isLoading } = useEntity<UserInfoRoleShape, UserInfoRoleShape>({

@@ -65,7 +65,7 @@ async function fetchCurrentUserInfoClaims(user: User): Promise<CurrentUserInfoCl
     (user.user_metadata?.email as string | undefined) ??
     null;
   if (USE_LEGACY_CREATED_BY_BRIDGE && email) {
-    return fetchCurrentUserInfoClaimsByCreatedBy(email);
+    return fetchCurrentUserInfoClaimsByCreatedBy(email, user.id);
   }
 
   const { data, error } = await supabase
@@ -73,12 +73,18 @@ async function fetchCurrentUserInfoClaims(user: User): Promise<CurrentUserInfoCl
     .select('id, company_id')
     .eq('auth_user_id', user.id)
     .maybeSingle();
+
+  // No row found via auth_user_id — try the legacy email fallback and backfill.
+  if (!error && !data && email) {
+    return fetchCurrentUserInfoClaimsByCreatedBy(email, user.id);
+  }
+
   if (error) {
     if (
       email &&
       (error.code === '42703' || error.message.includes('auth_user_id'))
     ) {
-      return fetchCurrentUserInfoClaimsByCreatedBy(email);
+      return fetchCurrentUserInfoClaimsByCreatedBy(email, user.id);
     }
     throw error;
   }
@@ -88,14 +94,28 @@ async function fetchCurrentUserInfoClaims(user: User): Promise<CurrentUserInfoCl
   };
 }
 
-async function fetchCurrentUserInfoClaimsByCreatedBy(email: string): Promise<CurrentUserInfoClaims> {
+async function fetchCurrentUserInfoClaimsByCreatedBy(
+  email: string,
+  userId?: string,
+): Promise<CurrentUserInfoClaims> {
   const { data, error } = await supabase
     .from('user_info')
-    .select('id, company_id')
+    .select('id, company_id, auth_user_id')
     .eq('created_by', email)
     .limit(1)
     .maybeSingle();
   if (error) throw error;
+
+  // Backfill auth_user_id + account_status when we find a ported row that
+  // has no auth_user_id set yet. This links the legacy row to the live
+  // auth.users entry so future lookups use the fast primary-key path.
+  if (data && userId && !data.auth_user_id) {
+    void supabase
+      .from('user_info')
+      .update({ auth_user_id: userId, account_status: 'active' })
+      .eq('id', data.id as string);
+  }
+
   return {
     currentUserInfoId: (data?.id as string | null | undefined) ?? null,
     companyId: (data?.company_id as string | null | undefined) ?? null,
