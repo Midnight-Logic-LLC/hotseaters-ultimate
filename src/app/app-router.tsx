@@ -34,6 +34,9 @@ import { TermsOfServicePage } from '@/features/marketing/pages/terms-of-service-
 import { PricingPage } from '@/features/marketing/pages/pricing-page';
 import { ReferralLandingPage } from '@/features/marketing/pages/referral-landing-page';
 import { ApprovalsPage } from '@/features/approvals/pages/approvals-page';
+import { LeadRadarPage } from '@/features/lead-radar/pages/lead-radar-page';
+import { DealTrackerPage } from '@/features/deals/pages/deal-tracker-page';
+import { SalesPage } from '@/features/sales/pages/sales-page';
 import { LastRouteTracker } from '@/app/last-route-tracker';
 
 // Register feature entity schemas at module load — idempotent.
@@ -240,22 +243,44 @@ export function AppRouter() {
               }
             />
 
-            {/* Sales-scoped placeholders */}
+            {/* Sales Hub (bible: Sales.jsx — three-tab Lead Radar / Deal Tracker / Projections) */}
+            <Route
+              path="Sales"
+              element={
+                <RoleGuard roles={SALES_ROLES}>
+                  <SalesPage />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="sales"
+              element={<Navigate to="/Sales" replace />}
+            />
+
+            {/* Sales-scoped routes */}
             <Route
               path="LeadRadar"
               element={
                 <RoleGuard roles={SALES_ROLES}>
-                  <RoutePlaceholder name="Lead Radar" />
+                  <LeadRadarPage />
                 </RoleGuard>
               }
+            />
+            <Route
+              path="lead-radar"
+              element={<Navigate to="/LeadRadar" replace />}
             />
             <Route
               path="DealTracker"
               element={
                 <RoleGuard roles={SALES_ROLES}>
-                  <RoutePlaceholder name="Deal Tracker" />
+                  <DealTrackerPage />
                 </RoleGuard>
               }
+            />
+            <Route
+              path="deal-tracker"
+              element={<Navigate to="/DealTracker" replace />}
             />
 
             {/* Trials (Change 7) */}
