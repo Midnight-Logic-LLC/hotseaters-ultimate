@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 /**
- * dockerize-deps.mjs — rewrite the workspace `link:` reference to a `file:`
- * reference pointing at the vendored `prometheus-entity-management` dist.
+ * dockerize-deps.mjs — rewrite the workspace `workspace:` reference to the
+ * published npm version of prometheus-entity-management.
  *
  * Run inside the docker build. Idempotent: if package.json is already
- * patched (i.e. the dep is already a `file:vendor/...` ref), exits 0.
+ * patched (i.e. the dep is already the npm version ref), exits 0.
  *
- * Rationale: the workspace setup uses
- *   "@prometheus-ags/prometheus-entity-management":
- *     "link:../latest-data/packages/prometheus-entity-management"
- * which only resolves when the sibling repo is in the build context. Image
- * builds use a single-repo context and consume the library's pre-built dist.
+ * Rationale: the workspace setup uses `workspace:*` which only resolves when
+ * the git submodule at packages/prometheus-entity-management is present. Image
+ * builds use a single-repo context and install from the npm registry instead.
  *
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
@@ -18,7 +16,8 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const PKG_PATH = resolve(process.cwd(), 'package.json');
-const VENDOR_PATH = 'file:./vendor/prometheus-entity-management';
+const NPM_VERSION = '2.0.0';
+const NPM_REF = `^${NPM_VERSION}`;
 const DEP_NAME = '@prometheus-ags/prometheus-entity-management';
 
 if (!existsSync(PKG_PATH)) {
@@ -34,8 +33,8 @@ if (!current) {
   process.exit(1);
 }
 
-if (current === VENDOR_PATH) {
-  console.log('[dockerize-deps] already vendored — no-op');
+if (current === NPM_REF) {
+  console.log('[dockerize-deps] already using npm ref — no-op');
   process.exit(0);
 }
 
@@ -45,6 +44,6 @@ if (!current.startsWith('link:') && !current.startsWith('workspace:')) {
   process.exit(1);
 }
 
-pkg.dependencies[DEP_NAME] = VENDOR_PATH;
+pkg.dependencies[DEP_NAME] = NPM_REF;
 writeFileSync(PKG_PATH, JSON.stringify(pkg, null, 2) + '\n');
-console.log(`[dockerize-deps] rewrote ${DEP_NAME}: ${current} → ${VENDOR_PATH}`);
+console.log(`[dockerize-deps] rewrote ${DEP_NAME}: ${current} → ${NPM_REF}`);

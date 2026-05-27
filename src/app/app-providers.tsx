@@ -3,12 +3,17 @@ import { SyncGate } from '@/app/sync-gate';
 import { Tier1Provider } from '@/app/tier1-provider';
 import { applyThemeVars, DEFAULT_THEME } from '@/shared/lib/theme';
 import { registerAllTransports } from '@/shared/db/entity-transports';
+import { registerCompanySettingsTabs } from '@/features/company/settings-registration';
 
 // Register entity transports exactly once, synchronously at module evaluation
 // time — before any hook renders and before React's first reconciliation pass.
 // This is safe because the registry is a process-global Map; calling it here
 // is equivalent to calling it at the top of main.tsx.
 registerAllTransports();
+
+// Register all company settings tabs with the plugin-ready registry.
+// Must run before any SettingsPage render so tabs are present on first mount.
+registerCompanySettingsTabs();
 
 /**
  * AppProviders — composition of app-level context providers.

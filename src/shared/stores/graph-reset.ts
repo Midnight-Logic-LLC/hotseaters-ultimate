@@ -7,9 +7,8 @@
  * who signs in after sign-out never briefly sees the previous tenant's data
  * while PGlite re-hydrates from Electric.
  *
- * The graph store does NOT expose a dedicated `reset()` action in the v1.x
- * public API (confirmed by inspecting `vendor/prometheus-entity-management/
- * dist/index.d.ts`), so we use `setState` directly — the idiomatic Zustand
+ * The graph store does NOT expose a dedicated `reset()` action in the v2.x
+ * public API, so we use `setState` directly — the idiomatic Zustand
  * escape hatch for external resets.
  *
  * Called from `auth-session.ts` → `signOut` (change-403).

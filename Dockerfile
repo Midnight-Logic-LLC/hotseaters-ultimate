@@ -16,20 +16,11 @@
 #   Self-hosted Supabase only. VITE_SUPABASE_URL must NOT match *.supabase.co.
 #   The Vite build itself enforces this guard rail (see vite.config.ts).
 #
-# The `prometheus-entity-management` library is consumed via the package.json
-# `link:../latest-data/packages/prometheus-entity-management` reference at
-# development time. For container builds, the library must be vendored or
-# resolved differently because the sibling repo is not in the build context.
-#
-# We vendor it at build time by copying the dist/ tarball produced by the
-# library's `tsup` build. The CI image-build workflow is responsible for:
-#   1. cd ../latest-data && pnpm --filter @prometheus-ags/prometheus-entity-management build
-#   2. cp -r ../latest-data/packages/prometheus-entity-management/dist /tmp/pem-dist
-#   3. cp -r /tmp/pem-dist ./vendor/prometheus-entity-management
-# Then this Dockerfile copies ./vendor/prometheus-entity-management/ in.
-#
-# Alternative (preferred long-term): publish the library to a private npm
-# registry. Documented in docs/RUNBOOKS.md.
+# The `prometheus-entity-management` library is consumed via `workspace:*`
+# during development (git submodule at packages/prometheus-entity-management).
+# For container builds the submodule is not in the build context, so
+# dockerize-deps.mjs rewrites the dep to `^2.0.0` before pnpm install,
+# letting the npm registry supply the package. No vendor directory required.
 # =============================================================================
 
 # ── Stage 1: build ──────────────────────────────────────────────────────────
@@ -54,17 +45,12 @@ WORKDIR /app
 # Copy manifest first for dependency-layer caching.
 COPY package.json pnpm-lock.yaml* ./
 
-# CI must place a built prometheus-entity-management dist tarball here.
-# Local docker build without this requires a different strategy (see header).
-COPY vendor/prometheus-entity-management ./vendor/prometheus-entity-management
-
-# Patch the package.json link: to a file:vendor reference for the container
-# build. This is the one place we deviate from the workspace setup; it's
-# idempotent (script bails if already patched).
+# Rewrite workspace:* → ^2.0.0 so pnpm resolves the library from npm.
+# Idempotent — exits 0 if already rewritten.
 COPY scripts/dockerize-deps.mjs ./scripts/dockerize-deps.mjs
 RUN node scripts/dockerize-deps.mjs
 
-RUN pnpm install --no-frozen-lockfile --prefer-offline
+RUN pnpm install --no-frozen-lockfile
 
 # Copy the rest of the source.
 COPY tsconfig.json tsconfig.build.json vite.config.ts components.json eslint.config.js index.html ./

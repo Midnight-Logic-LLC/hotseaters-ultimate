@@ -41,6 +41,31 @@ export const CompanySchema: JsonSchemaObject = {
   },
 };
 
+/**
+ * DocumentTemplate — minimal list-view shape for S09. Full editor (sections,
+ * page settings, placeholder mapping) is deferred to Wave W8.
+ *
+ * Bible source: HotSeatersMVP/src/components/settings/DocumentTemplateManagement.jsx
+ *   base44.entities.DocumentTemplate.{filter,create,update,delete}
+ */
+export const DocumentTemplateSchema: JsonSchemaObject = {
+  type: 'object',
+  required: ['id', 'name'],
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    name: { type: 'string' },
+    template_type: { type: ['string', 'null'] }, // 'document' | 'billing' | 'email'
+    category_id: { type: ['string', 'null'], format: 'uuid' },
+    company_id: { type: ['string', 'null'], format: 'uuid' },
+    is_active: { type: 'boolean' },
+    has_signature_fields: { type: 'boolean' },
+    is_contract: { type: 'boolean' },
+    created_at: { type: ['string', 'null'] },
+    updated_at: { type: ['string', 'null'] },
+  },
+};
+
 export const COMPANY_FEATURE_ENTITY_SCHEMAS: Record<string, JsonSchemaObject> = {
   Company: CompanySchema,
+  DocumentTemplate: DocumentTemplateSchema,
 };

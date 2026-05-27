@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS _pglite_schema_version (
 );
 
 INSERT INTO _pglite_schema_version (id, version)
-  VALUES (1, '20260525000004')
-  ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version;
+  VALUES (1, '20260526000001')
+  ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS _sync_meta (
   id              INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
@@ -72,13 +72,13 @@ CREATE TABLE IF NOT EXISTS metadata_type_synced (
   scope                        TEXT,
   name                         TEXT,
   description                  TEXT,
-  is_active                    TEXT,
-  is_default                   TEXT,
+  is_active                    BOOLEAN,
+  is_default                   BOOLEAN,
   "order"                      INTEGER,
   extra_schema                 JSONB,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -89,13 +89,13 @@ CREATE TABLE IF NOT EXISTS metadata_type_local (
   scope                        TEXT,
   name                         TEXT,
   description                  TEXT,
-  is_active                    TEXT,
-  is_default                   TEXT,
+  is_active                    BOOLEAN,
+  is_default                   BOOLEAN,
   "order"                      INTEGER,
   extra_schema                 JSONB,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false
@@ -172,10 +172,10 @@ CREATE TABLE IF NOT EXISTS entity_metadata_synced (
   metadata_type_id             TEXT,
   company_id                   TEXT,
   multiplier                   NUMERIC,
-  extra                        TEXT,
+  extra                        JSONB,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -185,10 +185,10 @@ CREATE TABLE IF NOT EXISTS entity_metadata_local (
   metadata_type_id             TEXT,
   company_id                   TEXT,
   multiplier                   NUMERIC,
-  extra                        TEXT,
+  extra                        JSONB,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false

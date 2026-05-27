@@ -16,3 +16,6 @@ playwright-report
 .env.*.local
 *.log
 .DS_Store
+
+latest-data/
+HotSeatersMVP/

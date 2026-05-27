@@ -43,45 +43,33 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - name: Checkout (without submodules — entity-mgmt is vendored from latest-data below)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: false
           fetch-depth: 0
+          submodules: false
 
-      # Stage the entity-mgmt deploy key on disk with restrictive perms.
-      # The submodule will be cloned using this key explicitly via
-      # core.sshCommand + IdentitiesOnly=yes (no ssh-agent URL magic).
-      - name: Stage entity-mgmt deploy key
+      # Init only the entity-mgmt submodule using its dedicated deploy key.
+      - name: Init entity-mgmt submodule
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.ENTITY_MGMT_DEPLOY_KEY }}" > ~/.ssh/entity_mgmt_key
           chmod 600 ~/.ssh/entity_mgmt_key
           ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git config submodule.packages/prometheus-entity-management.url \
+            git@github.com:Prometheus-AGS/prometheus-entity-management.git
+          git -c core.sshCommand="ssh -i $HOME/.ssh/entity_mgmt_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            submodule update --init --force --depth=1 \
+            packages/prometheus-entity-management
 
-      - name: Checkout latest-data (in-workspace, without submodules)
+      - name: Checkout latest-data (migrations only)
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/hotseaters-data-migration-system
           ssh-key: ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
           path: latest-data
           submodules: false
-
-      # Rewrite submodule URL to SSH and clone with explicit IdentityFile.
-      # IdentitiesOnly=yes prevents ssh from trying any ssh-agent identity
-      # before our key (which would hit rate limits / wrong-repo errors).
-      - name: Init entity-mgmt submodule via dedicated deploy key
-        working-directory: latest-data
-        run: |
-          set -euo pipefail
-          git submodule sync --recursive
-          git config submodule.packages/prometheus-entity-management.url \
-            git@github.com:Prometheus-AGS/prometheus-entity-management.git
-          git -c core.sshCommand="ssh -i $HOME/.ssh/entity_mgmt_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-            submodule update --init --force --depth=1 \
-            packages/prometheus-entity-management
-          ls -la packages/prometheus-entity-management/ | head -5
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -102,36 +90,8 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
 
-      # Build the entity-mgmt library from latest-data's submodule source.
-      # Build BEFORE install so the freshly-built dist is available when
-      # pnpm resolves the workspace dependency.
-      - name: Rebuild entity-mgmt from submodule source
-        run: |
-          set -euo pipefail
-          SUBMODULE=latest-data/packages/prometheus-entity-management
-          VENDOR_DIR=vendor/prometheus-entity-management
-          echo "Building entity-mgmt from ${SUBMODULE}..."
-          pushd "${SUBMODULE}"
-          pnpm install --frozen-lockfile || pnpm install
-          pnpm build
-          popd
-          echo "Re-vendoring dist/ + package.json into ${VENDOR_DIR}..."
-          rm -rf "${VENDOR_DIR}/dist"
-          mkdir -p "${VENDOR_DIR}"
-          cp -R "${SUBMODULE}/dist" "${VENDOR_DIR}/dist"
-          cp    "${SUBMODULE}/package.json" "${VENDOR_DIR}/package.json"
-          echo "Vendored files:"
-          ls -la "${VENDOR_DIR}/dist" | head -10
-
-      # Rewrite the package.json link:../latest-data ref to file:./vendor
-      # so pnpm resolves the package against the freshly-vendored dist
-      # instead of the sibling-repo path (which doesn't exist in CI layout).
-      # Same script the Dockerfile runs. Idempotent.
-      - name: Repoint @prometheus-ags/prometheus-entity-management to vendor
-        run: node scripts/dockerize-deps.mjs
-
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile --prefer-offline
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'

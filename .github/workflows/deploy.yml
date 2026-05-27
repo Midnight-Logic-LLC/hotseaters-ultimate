@@ -13,9 +13,11 @@
 #                               (no container.developer needed — we only
 #                               push images; the cross-repo PR handles
 #                               kustomization updates without kubectl)
-#   LATEST_DATA_PUSH_TOKEN      Personal Access Token with `contents: write`
-#                               on Midnight-Logic-LLC/hotseaters-data-migration-system
+#   LATEST_DATA_DEPLOY_KEY      SSH deploy key with write access on
+#                               Midnight-Logic-LLC/hotseaters-data-migration-system
 #                               (used to push the tag-bump commit there)
+#   ENTITY_MGMT_DEPLOY_KEY      SSH deploy key (read-only) on
+#                               Prometheus-AGS/prometheus-entity-management
 #   VITE_SUPABASE_URL           https://hotbase.prometheusags.ai
 #   VITE_SUPABASE_ANON_KEY      from latest-data's hotseaters-secrets ANON_KEY
 #   VITE_ELECTRIC_URL           https://electricsql.prometheusags.ai
@@ -51,6 +53,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       # --- self-hosted guard rail ----------------------------------------
       # Bail before docker auth if someone tries to ship a Supabase Cloud
@@ -67,76 +71,24 @@ jobs:
             exit 1
           fi
 
-      # --- auto-rebuild + re-vendor entity-mgmt --------------------------
-      # The Dockerfile resolves the entity-mgmt library via the vendored
-      # dist at vendor/prometheus-entity-management/. Rather than rely on
-      # a human re-running `pnpm build` + copying dist/ on every upstream
-      # change, CI rebuilds from latest-data's submodule on every deploy.
-      # The committed vendor/ is overwritten before docker build.
-      # Stage the entity-mgmt deploy key on disk with restrictive perms.
-      # We use this key explicitly via core.sshCommand when cloning the
-      # submodule — bypassing ssh-agent's URL-routing magic entirely.
-      - name: Stage entity-mgmt deploy key
+      # --- entity-mgmt submodule ----------------------------------------
+      # The docker build uses dockerize-deps.mjs to rewrite workspace:* →
+      # ^2.0.0 and pulls from npm, so no submodule is strictly needed inside
+      # the Docker build context. We still init it here so the workspace is
+      # consistent for any pre-build scripts (e.g. gen:pglite-schema:check).
+      - name: Init entity-mgmt submodule
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.ENTITY_MGMT_DEPLOY_KEY }}" > ~/.ssh/entity_mgmt_key
           chmod 600 ~/.ssh/entity_mgmt_key
           ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
-
-      - name: Checkout latest-data (without submodules)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.LATEST_DATA_REPO }}
-          ssh-key: ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
-          path: latest-data-source
-          submodules: false
-
-      # Rewrite submodule URL to SSH form and clone with explicit IdentityFile.
-      # IdentitiesOnly=yes prevents ssh from trying any other agent-loaded
-      # keys first (which would hit rate limits / wrong-repo errors).
-      - name: Init entity-mgmt submodule via dedicated deploy key
-        working-directory: latest-data-source
-        run: |
-          set -euo pipefail
-          git submodule sync --recursive
           git config submodule.packages/prometheus-entity-management.url \
             git@github.com:Prometheus-AGS/prometheus-entity-management.git
           git -c core.sshCommand="ssh -i ~/.ssh/entity_mgmt_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
             submodule update --init --force --depth=1 \
             packages/prometheus-entity-management
-          ls -la packages/prometheus-entity-management/ | head -5
-
-      - name: Setup pnpm + Node
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.12.0
-          run_install: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Rebuild + vendor @prometheus-ags/prometheus-entity-management
-        run: |
-          set -euo pipefail
-          SUBMODULE=latest-data-source/packages/prometheus-entity-management
-          VENDOR_DIR=vendor/prometheus-entity-management
-          if [[ ! -f "${SUBMODULE}/package.json" ]]; then
-            echo "::error::Submodule ${SUBMODULE} missing or not initialised." >&2
-            exit 1
-          fi
-          pushd "${SUBMODULE}"
-          pnpm install --frozen-lockfile || pnpm install
-          pnpm build
-          popd
-          rm -rf "${VENDOR_DIR}/dist"
-          mkdir -p "${VENDOR_DIR}"
-          cp -R "${SUBMODULE}/dist" "${VENDOR_DIR}/dist"
-          cp    "${SUBMODULE}/package.json" "${VENDOR_DIR}/package.json"
-          VERSION=$(node -p "require('./${VENDOR_DIR}/package.json').version")
-          echo "Re-vendored entity-mgmt version: ${VERSION}"
-          ls -la "${VENDOR_DIR}/dist" | head -10
 
       # --- image tag = short commit SHA ----------------------------------
       - name: Compute image tag
@@ -160,9 +112,8 @@ jobs:
 
       # --- build & push: hotseaters-ultimate (web image) -----------------
       # platforms: linux/amd64 only. Single-arch by design — GKE node pool is
-      # x86_64; we don't need an arm64 manifest. The build context is the
-      # repo root (this repo); the Dockerfile vendors the entity-mgmt dist
-      # in via `vendor/`.
+      # x86_64. The Dockerfile runs dockerize-deps.mjs to rewrite the
+      # workspace:* dep to ^2.0.0, then installs from npm. No vendor dir.
       - name: Build & push hotseaters-ultimate image
         uses: docker/build-push-action@v6
         with:
@@ -189,11 +140,10 @@ jobs:
       # clone latest-data, edit the overlay, and push back. ArgoCD's
       # auto-sync on latest-data then rolls the cluster.
       #
-      # AUTHENTICATION (no PAT): we authenticate via a per-repo SSH
-      # deploy key registered on latest-data with write access. Stored
-      # as `LATEST_DATA_DEPLOY_KEY` (private key) in this repo's secrets.
-      # This avoids PAT-scope hell (fine-grained PATs needing org admin
-      # approval per repo) and limits blast radius to a single repo.
+      # AUTHENTICATION: we authenticate via a per-repo SSH deploy key
+      # registered on latest-data with write access. Stored as
+      # `LATEST_DATA_DEPLOY_KEY` in this repo's secrets. This limits blast
+      # radius to a single repo.
       - name: Set up SSH deploy key for latest-data
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -215,7 +165,6 @@ jobs:
           set -euo pipefail
           REG="${GAR_LOCATION}/${GCP_PROJECT}/${GAR_REPO}"
           cd "$(dirname "${OVERLAY_FILE}")"
-          # `kustomize` ships on ubuntu-latest.
           kustomize edit set image \
             "hotseaters/hotseaters-ultimate=${REG}/${IMAGE_NAME}:${NEW_SHA}"
           cd -
@@ -234,8 +183,6 @@ jobs:
           fi
           git add "${OVERLAY_FILE}"
           git commit -m "ci(hotseaters-ultimate): deploy ${NEW_SHA} [skip ci]"
-          # Rebase-and-retry: latest-data has its own deploy bot, so the
-          # branch may advance between checkout and now.
           for attempt in 1 2 3 4 5; do
             if git push origin HEAD:main; then
               echo "tag bump pushed on attempt ${attempt}"

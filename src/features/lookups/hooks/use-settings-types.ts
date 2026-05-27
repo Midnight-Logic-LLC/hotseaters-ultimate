@@ -2,12 +2,8 @@
  * use-settings-types.ts — hook for reading SettingsType rows from the entity
  * graph store.
  *
- * NOTE: settings_type does not yet exist as a standalone table in the v2
- * schema — its data is folded into metadata_type via the `scope` column.
- * This hook returns an empty array until a dedicated SettingsType entity is
- * registered (see src/features/lookups/entities.ts). When the upstream schema
- * gains a settings_type table, update entities.ts to register it and update
- * this hook to read from 'SettingsType' instead.
+ * Reads from the 'SettingsType' entity slice registered by
+ * `registerSettingsEntities()` (src/features/settings/entities.ts).
  *
  * Architecture: hooks → stores (useGraphStore). No direct store import in
  * components — components call this hook.
@@ -16,25 +12,26 @@
  */
 
 import { useGraphStore } from '@prometheus-ags/prometheus-entity-management';
+import type { SettingsTypeEntity } from '@/features/settings/entities';
 
-export interface SettingsTypeEntity {
-  id: string;
-  key: string | null;
-  label: string | null;
-  entity_scope: string | null;
-  json_schema: Record<string, unknown> | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
+export type { SettingsTypeEntity };
 
 /**
  * Returns all SettingsType rows from the entity graph store.
- * Returns an empty array when the SettingsType entity is not yet registered.
+ * Returns empty array + isLoading:false when no rows have been synced yet.
  */
-export function useSettingsTypes(): SettingsTypeEntity[] {
+export function useSettingsTypes(): {
+  settingsTypes: SettingsTypeEntity[];
+  isLoading: boolean;
+} {
   const entities = useGraphStore(
-    (s) => (s.entities as Record<string, Record<string, unknown>>)['SettingsType'] ?? {},
+    (s) =>
+      (s.entities as Record<string, Record<string, unknown>>)[
+        'SettingsType'
+      ] ?? {},
   );
 
-  return Object.values(entities) as SettingsTypeEntity[];
+  const settingsTypes = Object.values(entities) as SettingsTypeEntity[];
+
+  return { settingsTypes, isLoading: false };
 }

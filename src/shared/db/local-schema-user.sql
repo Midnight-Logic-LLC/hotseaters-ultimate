@@ -38,17 +38,20 @@ CREATE TABLE IF NOT EXISTS company_synced (
   zip                          TEXT,
   owner_id                     TEXT,
   subscription_tier            TEXT,
-  is_active                    TEXT,
+  is_active                    BOOLEAN,
   stripe_customer_id           TEXT,
-  marketplace_post_jobs        TEXT,
-  marketplace_fill_jobs        TEXT,
-  has_hsh_addon                TEXT,
+  marketplace_post_jobs        BOOLEAN,
+  marketplace_fill_jobs        BOOLEAN,
+  has_hsh_addon                BOOLEAN,
+  approval_required            BOOLEAN,
+  theme                        JSONB,
+  logo                         TEXT,
   hsh_rating                   NUMERIC,
   hsh_reviews_count            INTEGER,
-  show_debug_info              TEXT,
+  show_debug_info              BOOLEAN,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -67,17 +70,20 @@ CREATE TABLE IF NOT EXISTS company_local (
   zip                          TEXT,
   owner_id                     TEXT,
   subscription_tier            TEXT,
-  is_active                    TEXT,
+  is_active                    BOOLEAN,
   stripe_customer_id           TEXT,
-  marketplace_post_jobs        TEXT,
-  marketplace_fill_jobs        TEXT,
-  has_hsh_addon                TEXT,
+  marketplace_post_jobs        BOOLEAN,
+  marketplace_fill_jobs        BOOLEAN,
+  has_hsh_addon                BOOLEAN,
+  approval_required            BOOLEAN,
+  theme                        JSONB,
+  logo                         TEXT,
   hsh_rating                   NUMERIC,
   hsh_reviews_count            INTEGER,
-  show_debug_info              TEXT,
+  show_debug_info              BOOLEAN,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false
@@ -87,14 +93,14 @@ CREATE OR REPLACE VIEW company AS
   SELECT s.* FROM company_synced s
   WHERE NOT EXISTS (SELECT 1 FROM company_local l WHERE l.id = s.id)
   UNION ALL
-  SELECT l.id, l.legacy_id, l.name, l.email, l.sender_email, l.phone, l.website, l.address, l.city, l.state, l.zip, l.owner_id, l.subscription_tier, l.is_active, l.stripe_customer_id, l.marketplace_post_jobs, l.marketplace_fill_jobs, l.has_hsh_addon, l.hsh_rating, l.hsh_reviews_count, l.show_debug_info, l.created_at, l.updated_at, l.is_sample, l.created_by_id, l.created_by
+  SELECT l.id, l.legacy_id, l.name, l.email, l.sender_email, l.phone, l.website, l.address, l.city, l.state, l.zip, l.owner_id, l.subscription_tier, l.is_active, l.stripe_customer_id, l.marketplace_post_jobs, l.marketplace_fill_jobs, l.has_hsh_addon, l.approval_required, l.theme, l.logo, l.hsh_rating, l.hsh_reviews_count, l.show_debug_info, l.created_at, l.updated_at, l.is_sample, l.created_by_id, l.created_by
   FROM company_local l
   WHERE NOT l.is_deleted;
 
 CREATE OR REPLACE FUNCTION company_insert() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO company_local (id, legacy_id, name, email, sender_email, phone, website, address, city, state, zip, owner_id, subscription_tier, is_active, stripe_customer_id, marketplace_post_jobs, marketplace_fill_jobs, has_hsh_addon, hsh_rating, hsh_reviews_count, show_debug_info, created_at, updated_at, is_sample, created_by_id, created_by)
-  VALUES (COALESCE(NEW.id, gen_random_uuid()::text), NEW.legacy_id, NEW.name, NEW.email, NEW.sender_email, NEW.phone, NEW.website, NEW.address, NEW.city, NEW.state, NEW.zip, NEW.owner_id, NEW.subscription_tier, NEW.is_active, NEW.stripe_customer_id, NEW.marketplace_post_jobs, NEW.marketplace_fill_jobs, NEW.has_hsh_addon, NEW.hsh_rating, NEW.hsh_reviews_count, NEW.show_debug_info, NEW.created_at, NEW.updated_at, NEW.is_sample, NEW.created_by_id, NEW.created_by);
+  INSERT INTO company_local (id, legacy_id, name, email, sender_email, phone, website, address, city, state, zip, owner_id, subscription_tier, is_active, stripe_customer_id, marketplace_post_jobs, marketplace_fill_jobs, has_hsh_addon, approval_required, theme, logo, hsh_rating, hsh_reviews_count, show_debug_info, created_at, updated_at, is_sample, created_by_id, created_by)
+  VALUES (COALESCE(NEW.id, gen_random_uuid()::text), NEW.legacy_id, NEW.name, NEW.email, NEW.sender_email, NEW.phone, NEW.website, NEW.address, NEW.city, NEW.state, NEW.zip, NEW.owner_id, NEW.subscription_tier, NEW.is_active, NEW.stripe_customer_id, NEW.marketplace_post_jobs, NEW.marketplace_fill_jobs, NEW.has_hsh_addon, NEW.approval_required, NEW.theme, NEW.logo, NEW.hsh_rating, NEW.hsh_reviews_count, NEW.show_debug_info, NEW.created_at, NEW.updated_at, NEW.is_sample, NEW.created_by_id, NEW.created_by);
   INSERT INTO local_writes (entity, operation, row_id, payload)
   VALUES ('company', 'insert', NEW.id, to_jsonb(NEW));
   PERFORM pg_notify('local_write', 'company');
@@ -104,8 +110,8 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION company_update() RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO company_local (id, legacy_id, name, email, sender_email, phone, website, address, city, state, zip, owner_id, subscription_tier, is_active, stripe_customer_id, marketplace_post_jobs, marketplace_fill_jobs, has_hsh_addon, hsh_rating, hsh_reviews_count, show_debug_info, created_at, updated_at, is_sample, created_by_id, created_by)
-  VALUES (NEW.id, NEW.legacy_id, NEW.name, NEW.email, NEW.sender_email, NEW.phone, NEW.website, NEW.address, NEW.city, NEW.state, NEW.zip, NEW.owner_id, NEW.subscription_tier, NEW.is_active, NEW.stripe_customer_id, NEW.marketplace_post_jobs, NEW.marketplace_fill_jobs, NEW.has_hsh_addon, NEW.hsh_rating, NEW.hsh_reviews_count, NEW.show_debug_info, NEW.created_at, NEW.updated_at, NEW.is_sample, NEW.created_by_id, NEW.created_by)
+  INSERT INTO company_local (id, legacy_id, name, email, sender_email, phone, website, address, city, state, zip, owner_id, subscription_tier, is_active, stripe_customer_id, marketplace_post_jobs, marketplace_fill_jobs, has_hsh_addon, approval_required, theme, logo, hsh_rating, hsh_reviews_count, show_debug_info, created_at, updated_at, is_sample, created_by_id, created_by)
+  VALUES (NEW.id, NEW.legacy_id, NEW.name, NEW.email, NEW.sender_email, NEW.phone, NEW.website, NEW.address, NEW.city, NEW.state, NEW.zip, NEW.owner_id, NEW.subscription_tier, NEW.is_active, NEW.stripe_customer_id, NEW.marketplace_post_jobs, NEW.marketplace_fill_jobs, NEW.has_hsh_addon, NEW.approval_required, NEW.theme, NEW.logo, NEW.hsh_rating, NEW.hsh_reviews_count, NEW.show_debug_info, NEW.created_at, NEW.updated_at, NEW.is_sample, NEW.created_by_id, NEW.created_by)
   ON CONFLICT (id) DO UPDATE SET
     legacy_id = EXCLUDED.legacy_id,
     name = EXCLUDED.name,
@@ -124,6 +130,9 @@ BEGIN
     marketplace_post_jobs = EXCLUDED.marketplace_post_jobs,
     marketplace_fill_jobs = EXCLUDED.marketplace_fill_jobs,
     has_hsh_addon = EXCLUDED.has_hsh_addon,
+    approval_required = EXCLUDED.approval_required,
+    theme = EXCLUDED.theme,
+    logo = EXCLUDED.logo,
     hsh_rating = EXCLUDED.hsh_rating,
     hsh_reviews_count = EXCLUDED.hsh_reviews_count,
     show_debug_info = EXCLUDED.show_debug_info,
@@ -176,7 +185,7 @@ CREATE TABLE IF NOT EXISTS user_info_synced (
   user_id                      TEXT,
   status                       TEXT,
   consultant_tier_id           TEXT,
-  is_sales                     TEXT,
+  is_sales                     BOOLEAN,
   hsh_location                 TEXT,
   hsh_rating                   NUMERIC,
   hsh_reviews_count            INTEGER,
@@ -184,7 +193,7 @@ CREATE TABLE IF NOT EXISTS user_info_synced (
   hsh_profile_description      TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   auth_user_id                 TEXT,
@@ -208,7 +217,7 @@ CREATE TABLE IF NOT EXISTS user_info_local (
   user_id                      TEXT,
   status                       TEXT,
   consultant_tier_id           TEXT,
-  is_sales                     TEXT,
+  is_sales                     BOOLEAN,
   hsh_location                 TEXT,
   hsh_rating                   NUMERIC,
   hsh_reviews_count            INTEGER,
@@ -216,7 +225,7 @@ CREATE TABLE IF NOT EXISTS user_info_local (
   hsh_profile_description      TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   auth_user_id                 TEXT,
@@ -313,10 +322,10 @@ CREATE TABLE IF NOT EXISTS entity_setting_synced (
   company_id                   TEXT,
   user_info_id                 TEXT,
   document_template_id         TEXT,
-  data                         TEXT,
+  data                         JSONB,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -327,10 +336,10 @@ CREATE TABLE IF NOT EXISTS entity_setting_local (
   company_id                   TEXT,
   user_info_id                 TEXT,
   document_template_id         TEXT,
-  data                         TEXT,
+  data                         JSONB,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false
@@ -408,12 +417,12 @@ CREATE TABLE IF NOT EXISTS client_synced (
   phone                        TEXT,
   website                      TEXT,
   sales_lead                   TEXT,
-  is_lead                      TEXT,
+  is_lead                      BOOLEAN,
   status                       TEXT,
   notes                        TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -427,12 +436,12 @@ CREATE TABLE IF NOT EXISTS client_local (
   phone                        TEXT,
   website                      TEXT,
   sales_lead                   TEXT,
-  is_lead                      TEXT,
+  is_lead                      BOOLEAN,
   status                       TEXT,
   notes                        TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false
@@ -516,10 +525,10 @@ CREATE TABLE IF NOT EXISTS client_address_synced (
   city                         TEXT,
   state                        TEXT,
   zip                          TEXT,
-  is_primary                   TEXT,
+  is_primary                   BOOLEAN,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -534,10 +543,10 @@ CREATE TABLE IF NOT EXISTS client_address_local (
   city                         TEXT,
   state                        TEXT,
   zip                          TEXT,
-  is_primary                   TEXT,
+  is_primary                   BOOLEAN,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false
@@ -640,7 +649,7 @@ CREATE TABLE IF NOT EXISTS trial_synced (
   estimated_value              NUMERIC,
   retainer_value               NUMERIC,
   daily_minimum_hours          NUMERIC,
-  bill_for_weekends            TEXT,
+  bill_for_weekends            BOOLEAN,
   won_date                     TEXT,
   lost_date                    TEXT,
   completion_type              TEXT,
@@ -648,7 +657,7 @@ CREATE TABLE IF NOT EXISTS trial_synced (
   updated_by                   TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -683,7 +692,7 @@ CREATE TABLE IF NOT EXISTS trial_local (
   estimated_value              NUMERIC,
   retainer_value               NUMERIC,
   daily_minimum_hours          NUMERIC,
-  bill_for_weekends            TEXT,
+  bill_for_weekends            BOOLEAN,
   won_date                     TEXT,
   lost_date                    TEXT,
   completion_type              TEXT,
@@ -691,7 +700,7 @@ CREATE TABLE IF NOT EXISTS trial_local (
   updated_by                   TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false
@@ -801,7 +810,7 @@ CREATE TABLE IF NOT EXISTS trial_segment_synced (
   notes                        TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -818,7 +827,7 @@ CREATE TABLE IF NOT EXISTS trial_segment_local (
   notes                        TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false
@@ -902,7 +911,7 @@ CREATE TABLE IF NOT EXISTS trial_service_synced (
   custom_description           TEXT,
   rate_type                    TEXT,
   rate                         NUMERIC,
-  travel_eligible              TEXT,
+  travel_eligible              BOOLEAN,
   display_order                INTEGER,
   final_billing_method         TEXT,
   split_billing_at_threshold   BOOLEAN,
@@ -919,7 +928,7 @@ CREATE TABLE IF NOT EXISTS trial_service_synced (
   updated_by                   TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -936,7 +945,7 @@ CREATE TABLE IF NOT EXISTS trial_service_local (
   custom_description           TEXT,
   rate_type                    TEXT,
   rate                         NUMERIC,
-  travel_eligible              TEXT,
+  travel_eligible              BOOLEAN,
   display_order                INTEGER,
   final_billing_method         TEXT,
   split_billing_at_threshold   BOOLEAN,
@@ -953,7 +962,7 @@ CREATE TABLE IF NOT EXISTS trial_service_local (
   updated_by                   TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false
@@ -1050,7 +1059,7 @@ CREATE TABLE IF NOT EXISTS trial_contact_synced (
   attorney_id                  TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -1063,7 +1072,7 @@ CREATE TABLE IF NOT EXISTS trial_contact_local (
   attorney_id                  TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false
@@ -1142,11 +1151,11 @@ CREATE TABLE IF NOT EXISTS trial_service_assignment_synced (
   google_calendar_event_id     TEXT,
   assigned_by                  TEXT,
   inactive_reason              TEXT,
-  is_subcontractor             TEXT,
+  is_subcontractor             BOOLEAN,
   status                       TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT
 );
@@ -1162,11 +1171,11 @@ CREATE TABLE IF NOT EXISTS trial_service_assignment_local (
   google_calendar_event_id     TEXT,
   assigned_by                  TEXT,
   inactive_reason              TEXT,
-  is_subcontractor             TEXT,
+  is_subcontractor             BOOLEAN,
   status                       TEXT,
   created_at                   TEXT,
   updated_at                   TEXT,
-  is_sample                    TEXT,
+  is_sample                    BOOLEAN,
   created_by_id                TEXT,
   created_by                   TEXT,
   is_deleted                   BOOLEAN NOT NULL DEFAULT false

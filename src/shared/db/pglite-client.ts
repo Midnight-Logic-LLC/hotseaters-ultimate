@@ -45,7 +45,7 @@ export type LocalDB = PGliteWorker &
  * stamps the latest supabase migration's timestamp prefix; whenever you
  * regenerate the SQL you also bump this constant.
  */
-export const BUNDLED_PGLITE_SCHEMA_VERSION = '20260525000004';
+export const BUNDLED_PGLITE_SCHEMA_VERSION = '20260526000001';
 
 export interface LocalDBBootResult {
   db: LocalDB;
@@ -157,11 +157,13 @@ async function dropTierATables(db: LocalDB): Promise<void> {
   const syncedTables = EMIT_ORDER.map((e) => `${e}_synced`);
   const localTables = EMIT_ORDER.map((e) => `${e}_local`);
   // Drop in reverse FK order (local first, then synced, then local_writes).
-  // Use CASCADE to handle any view/trigger dependencies.
+  // Also clear Electric's persisted shape offsets; otherwise recreated tables
+  // can resume from old offsets and miss the full initial row set.
   const dropStatements = [
     ...localTables.map((t) => `DROP TABLE IF EXISTS ${t} CASCADE;`),
     ...syncedTables.map((t) => `DROP TABLE IF EXISTS ${t} CASCADE;`),
     `DROP TABLE IF EXISTS local_writes CASCADE;`,
+    `DROP SCHEMA IF EXISTS electric CASCADE;`,
   ].join('\n');
   await db.exec(dropStatements);
 }

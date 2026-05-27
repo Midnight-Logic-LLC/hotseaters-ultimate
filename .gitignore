@@ -69,3 +69,5 @@ pnpm-debug.log*
 # removed and the package.json can switch to a semver dep — until then,
 # checking it in is intentional.
 .playwright-mcp/
+latest-data/
+HotSeatersMVP/

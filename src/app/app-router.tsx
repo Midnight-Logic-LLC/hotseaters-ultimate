@@ -49,6 +49,12 @@ import { HshDirectoryPage } from '@/features/hsh/pages/hsh-directory-page';
 import { HotSeatHubMarketingPage } from '@/features/hsh/pages/hot-seat-hub-marketing-page';
 import { ProjectionsPage } from '@/features/sales/pages/projections-page';
 import { UserManualPage } from '@/features/manual/pages/user-manual-page';
+import { ManualSalesPage } from '@/features/manual/pages/manual-sales-page';
+import { ManualOperationsPage } from '@/features/manual/pages/manual-operations-page';
+import { ManualTimeExpensesPage } from '@/features/manual/pages/manual-time-expenses-page';
+import { ManualBillingPage } from '@/features/manual/pages/manual-billing-page';
+import { ManualHshPage } from '@/features/manual/pages/manual-hsh-page';
+import { ManualCompanyPage } from '@/features/manual/pages/manual-company-page';
 import { SignDocumentPage } from '@/features/documents/pages/sign-document-page';
 import { ViewDocumentPage } from '@/features/documents/pages/view-document-page';
 
@@ -387,6 +393,14 @@ export function AppRouter() {
             {/* User Manual (bible: UserManual.jsx) */}
             <Route path="UserManual" element={<UserManualPage />} />
             <Route path="user-manual" element={<Navigate to="/UserManual" replace />} />
+
+            {/* Manual sub-pages (bible: ManualSales.jsx, ManualOperations.jsx, etc.) */}
+            <Route path="ManualSales" element={<ManualSalesPage />} />
+            <Route path="ManualOperations" element={<ManualOperationsPage />} />
+            <Route path="ManualTimeExpenses" element={<ManualTimeExpensesPage />} />
+            <Route path="ManualBilling" element={<ManualBillingPage />} />
+            <Route path="ManualHSH" element={<ManualHshPage />} />
+            <Route path="ManualCompany" element={<ManualCompanyPage />} />
 
             {/* Document signing / viewing — no RoleGuard; all authenticated users */}
             <Route path="SignDocument" element={<SignDocumentPage />} />

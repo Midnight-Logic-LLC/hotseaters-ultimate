@@ -1,0 +1,31 @@
+{
+  "phase": "hotseaters-page-parity-port",
+  "assessment_complete": true,
+  "plan_complete": true,
+  "execution_complete": true,
+  "reflection_complete": false,
+  "changes_total": 16,
+  "changes_completed": 16,
+  "change_backend": "openspec",
+  "last_updated": "2026-05-27",
+  "last_updated_by": "claude-code",
+  "changes": [
+    { "id": "change-S01", "title": "Settings tab registry + SettingsPage shell + route wiring", "change_state": "DONE" },
+    { "id": "change-S02", "title": "Register SettingsType entity in graph + fix use-settings-types hook", "change_state": "DONE" },
+    { "id": "change-S03", "title": "Company tab full parity (logo upload, all 22 fields, financial card)", "change_state": "DONE" },
+    { "id": "change-S04", "title": "Time Tracking tab full parity", "change_state": "DONE" },
+    { "id": "change-S05", "title": "Billing tab full parity (retainer formula, invoice period conditionals)", "change_state": "DONE" },
+    { "id": "change-S06", "title": "Services & Rates tab full parity (DnD categories, inline edit, deactivate flow)", "change_state": "DONE" },
+    { "id": "change-S07", "title": "Pipeline Stages tab full parity (DnD, color picker, delete-with-warning)", "change_state": "DONE" },
+    { "id": "change-S08", "title": "Tiers tab full parity", "change_state": "DONE" },
+    { "id": "change-S09", "title": "Templates tab — structure + list view (full editor deferred)", "change_state": "DONE" },
+    { "id": "change-S10", "title": "Theme tab full parity (all ~80 tokens, live preview, export/import)", "change_state": "DONE" },
+    { "id": "change-S11", "title": "Subscription tab + PolicyViewerModal", "change_state": "DONE" },
+    { "id": "change-S12", "title": "HotSeatHub/Marketplace tab (profit margin + decline prefs)", "change_state": "DONE" },
+    { "id": "change-S13", "title": "Database + Admin tabs (port structure, adapt to port architecture)", "change_state": "DONE" },
+    { "id": "change-S14", "title": "Feature registrations: wire all tabs into registry + app-providers boot", "change_state": "DONE" },
+    { "id": "change-S15", "title": "useEntitySetting hook + settings-store", "change_state": "DONE" },
+    { "id": "change-S16", "title": "Visual parity screenshots + VR baseline at 1440x900 + 375x667", "change_state": "DONE" }
+  ],
+  "notes": "Wave S (Settings) ships first per user direction. Settings infrastructure must exist before page parity waves W0-W8 because settings values are shared application-wide."
+}

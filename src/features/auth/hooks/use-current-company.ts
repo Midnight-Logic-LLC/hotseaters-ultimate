@@ -26,6 +26,7 @@ export interface CompanyRecord extends Record<string, unknown> {
   marketplace_post_jobs: boolean;
   marketplace_fill_jobs: boolean;
   has_hsh_addon: boolean;
+  approval_required: boolean;
   theme: Record<string, unknown> | null;
 }
 
