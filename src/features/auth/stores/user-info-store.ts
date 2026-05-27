@@ -17,9 +17,6 @@
 import { supabase } from '@/shared/db/supabase-client';
 import { useAuthSession } from '@/shared/db/auth-session';
 
-const USE_LEGACY_HOSTED_USER_INFO_SCHEMA =
-  import.meta.env.VITE_SUPABASE_URL === 'https://hotbase.prometheusags.ai';
-
 interface PatchPreferencesOptions {
   /**
    * The user_info row id to patch. Defaults to the current session's
@@ -47,7 +44,6 @@ export async function patchPreferences(
   options: PatchPreferencesOptions = {},
 ): Promise<void> {
   if (!patch || Object.keys(patch).length === 0) return;
-  if (USE_LEGACY_HOSTED_USER_INFO_SCHEMA) return;
 
   const userInfoId =
     options.userInfoId ??
