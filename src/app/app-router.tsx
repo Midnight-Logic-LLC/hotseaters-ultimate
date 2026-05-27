@@ -22,6 +22,9 @@ import { AcceptInvitePage } from '@/features/auth/pages/accept-invite-page';
 import { OnboardingPage } from '@/features/onboarding/pages/onboarding-page';
 import { PendingApprovalPage } from '@/features/auth/pages/pending-approval-page';
 import { AccountRejectedPage } from '@/features/auth/pages/account-rejected-page';
+import { AccountDeactivatedPage } from '@/features/auth/pages/account-deactivated-page';
+import { PaymentSuccessPage } from '@/features/marketing/pages/payment-success-page';
+import { PaymentCancelledPage } from '@/features/marketing/pages/payment-cancelled-page';
 import { SettingsPage } from '@/features/settings/pages/settings-page';
 import { TeamPage } from '@/features/company/pages/team-page';
 import { LandingPage } from '@/features/landing/pages/landing-page';
@@ -140,6 +143,12 @@ export function AppRouter() {
         <Route path="/Onboarding" element={<OnboardingPage />} />
         <Route path="/pending-approval" element={<PendingApprovalPage />} />
         <Route path="/account-rejected" element={<AccountRejectedPage />} />
+        <Route path="/account-deactivated" element={<AccountDeactivatedPage />} />
+        <Route path="/AccountDeactivated" element={<Navigate to="/account-deactivated" replace />} />
+        <Route path="/PaymentSuccess" element={<PaymentSuccessPage />} />
+        <Route path="/payment-success" element={<Navigate to="/PaymentSuccess" replace />} />
+        <Route path="/PaymentCancelled" element={<PaymentCancelledPage />} />
+        <Route path="/payment-cancelled" element={<Navigate to="/PaymentCancelled" replace />} />
 
         {/* Authenticated app shell — protected subtree */}
         <Route element={<AppShell />}>
