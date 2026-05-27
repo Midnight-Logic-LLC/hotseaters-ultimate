@@ -43,6 +43,11 @@ import { TimeAndExpensesPage } from '@/features/trials/pages/time-and-expenses-p
 import { InvoicesPage } from '@/features/invoices/pages/invoices-page';
 import { BillsPage } from '@/features/bills/pages/bills-page';
 import { CollectionsPage } from '@/features/collections/pages/collections-page';
+import { PotentialGigsPage } from '@/features/hsh/pages/potential-gigs-page';
+import { HelpWantedPage } from '@/features/hsh/pages/help-wanted-page';
+import { HshDirectoryPage } from '@/features/hsh/pages/hsh-directory-page';
+import { HotSeatHubMarketingPage } from '@/features/hsh/pages/hot-seat-hub-marketing-page';
+import { ProjectionsPage } from '@/features/sales/pages/projections-page';
 
 // Register feature entity schemas at module load — idempotent.
 registerClientEntities();
@@ -288,6 +293,47 @@ export function AppRouter() {
               element={<Navigate to="/DealTracker" replace />}
             />
 
+            {/* HotSeatHub — Potential Gigs + Help Wanted */}
+            <Route
+              path="PotentialGigs"
+              element={
+                <RoleGuard roles={OWNER_ADMIN}>
+                  <PotentialGigsPage />
+                </RoleGuard>
+              }
+            />
+            <Route path="potential-gigs" element={<Navigate to="/PotentialGigs" replace />} />
+            <Route
+              path="HelpWanted"
+              element={
+                <RoleGuard roles={OWNER_ADMIN}>
+                  <HelpWantedPage />
+                </RoleGuard>
+              }
+            />
+            <Route path="help-wanted" element={<Navigate to="/HelpWanted" replace />} />
+            <Route
+              path="HSHDirectory"
+              element={
+                <RoleGuard roles={OWNER_ADMIN}>
+                  <HshDirectoryPage />
+                </RoleGuard>
+              }
+            />
+            <Route path="hsh-directory" element={<Navigate to="/HSHDirectory" replace />} />
+            <Route
+              path="HotSeatHubMarketing"
+              element={
+                <RoleGuard roles={OWNER_ADMIN}>
+                  <HotSeatHubMarketingPage />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="hot-seat-hub-marketing"
+              element={<Navigate to="/HotSeatHubMarketing" replace />}
+            />
+
             {/* Trials (Change 7) */}
             <Route
               path="Trials"
@@ -326,7 +372,14 @@ export function AppRouter() {
               path="TimeAndExpenses"
               element={<TimeAndExpensesPage />}
             />
-            <Route path="Projections" element={<RoutePlaceholder name="Projections" />} />
+            <Route
+              path="Projections"
+              element={
+                <RoleGuard roles={OWNER_ADMIN}>
+                  <ProjectionsPage />
+                </RoleGuard>
+              }
+            />
 
             <Route path=":page" element={<RoutePlaceholder name="(placeholder)" />} />
             <Route path="*" element={<RoutePlaceholder name="Not found" />} />
