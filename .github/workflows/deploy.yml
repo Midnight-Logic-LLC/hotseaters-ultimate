@@ -149,6 +149,14 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.LATEST_DATA_DEPLOY_KEY }}
 
+      # actions/checkout@v4 with path: fails with ENOENT when the git index
+      # still has the submodule entry from the previous step. Remove any stale
+      # latest-data path and reset the git index so the checkout can mkdir.
+      - name: Clean stale latest-data path
+        run: |
+          rm -rf latest-data
+          git clean -ffdx latest-data 2>/dev/null || true
+
       - name: Checkout latest-data
         uses: actions/checkout@v4
         with:
