@@ -43,6 +43,15 @@ in CLAUDE.md applies to every agent.
      patch the symptom on each consuming page.
 1. **Self-hosted Supabase only.** `localhost:8000` or `hotbase.prometheusags.ai`.
    Never `*.supabase.co`.
+   - **THE SUPABASE CLI IS PERMANENTLY BANNED.** `supabase` CLI commands only
+     work with Supabase Cloud. Never run `supabase start`, `supabase link`,
+     `supabase db push`, `supabase gen types`, or any other `supabase` CLI
+     command. Never create a Supabase Cloud project.
+   - **THE SUPABASE MCP (`mcp__supabase-mcp-server__*`) IS BANNED.** It
+     connects to Supabase Cloud — not our self-hosted instance.
+   - **Apply SQL via `psql` directly:** `docker compose exec db psql -U postgres
+     -d postgres` (local) or `psql "$DATABASE_URL"` (hosted). See CLAUDE.md
+     RULE 1.2 for the exact commands.
 2. **HotSeatersMVP is the bible.** `midnight/hotseaters` is prior art only.
 3. **Components → hooks → stores → APIs.** Enforced by ESLint.
 4. **Tauri mobile is primary.** Touch ≥ 44pt, bottom-tab + drawer.

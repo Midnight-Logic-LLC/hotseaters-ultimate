@@ -115,7 +115,7 @@ wrong border tint, wrong focus ring — fix it in
 `src/components/ui/<primitive>.tsx` and/or `src/index.css`. Do not
 patch the symptom on each page. This is how "visual rot" creeps in.
 
-### RULE 1 — Self-hosted Supabase only
+### RULE 1 — Self-hosted Supabase only — NO CLI, NO MCP, NO CLOUD
 
 **Never** use Supabase Cloud (`*.supabase.co`, `app.supabase.com`).
 
@@ -129,6 +129,47 @@ Electric: `http://localhost:3133` (local) or `https://electricsql.prometheusags.
 
 The Vite config in `vite.config.ts` refuses to build if `VITE_SUPABASE_URL`
 matches `*.supabase.co`.
+
+#### RULE 1.1 — SUPABASE CLI IS BANNED (permanently)
+
+The `supabase` CLI (`supabase start`, `supabase db push`, `supabase migration run`,
+`supabase link`, `supabase gen types`, etc.) **only works with Supabase Cloud
+projects**. It cannot connect to our self-hosted docker-compose stack.
+
+**NEVER:**
+- Run `supabase start` or any `supabase` CLI command
+- Create a Supabase Cloud project (`app.supabase.com`)
+- Link a local project to Supabase Cloud via `supabase link`
+- Use `supabase gen types typescript` (cloud-only)
+- Use the `mcp__supabase-mcp-server__*` MCP tools (connect to Supabase Cloud —
+  banned for this project)
+
+**ALWAYS apply schema changes by:**
+1. Editing SQL directly in `legacy-sql/` or `/latest-data/supabase/migrations/` (if
+   that directory exists) 
+2. Running SQL via `psql` against `postgresql://postgres:postgres@localhost:5432/postgres`
+   (local) or the hosted DB connection string from `.env`
+3. Using `docker compose exec db psql -U postgres -d postgres -c "..."` for
+   one-off DDL against the local stack
+4. For the hosted DB (`hotbase.prometheusags.ai`): connect directly via `psql`
+   with the credentials from `.env` — never through Supabase CLI or MCP
+
+#### RULE 1.2 — How to execute SQL against self-hosted Supabase
+
+```bash
+# Local docker-compose stack
+docker compose -f /Users/gqadonis/Projects/midnight/latest-data/docker-compose.yaml \
+  exec db psql -U postgres -d postgres -c "SELECT 1;"
+
+# Or with a full psql connection string (local)
+psql "postgresql://postgres:postgres@localhost:5432/postgres" -c "SELECT 1;"
+
+# Apply a SQL file
+psql "postgresql://postgres:postgres@localhost:5432/postgres" \
+  -f /path/to/migration.sql
+```
+
+For the hosted instance, use the `DATABASE_URL` from `.env` directly with `psql`.
 
 ### RULE 2 — `HotSeatersMVP` is the BIBLE
 
