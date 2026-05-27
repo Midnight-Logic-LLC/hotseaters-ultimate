@@ -37,7 +37,9 @@ import { ApprovalsPage } from '@/features/approvals/pages/approvals-page';
 import { LeadRadarPage } from '@/features/lead-radar/pages/lead-radar-page';
 import { DealTrackerPage } from '@/features/deals/pages/deal-tracker-page';
 import { SalesPage } from '@/features/sales/pages/sales-page';
+import { TimelinePage } from '@/features/trials/pages/timeline-page';
 import { LastRouteTracker } from '@/app/last-route-tracker';
+import { TimeAndExpensesPage } from '@/features/trials/pages/time-and-expenses-page';
 
 // Register feature entity schemas at module load — idempotent.
 registerClientEntities();
@@ -316,10 +318,10 @@ export function AppRouter() {
                 </RoleGuard>
               }
             />
-            <Route path="Timeline" element={<RoutePlaceholder name="Trial Timeline" />} />
+            <Route path="Timeline" element={<TimelinePage />} />
             <Route
               path="TimeAndExpenses"
-              element={<RoutePlaceholder name="Time & Expenses" />}
+              element={<TimeAndExpensesPage />}
             />
             <Route path="Projections" element={<RoutePlaceholder name="Projections" />} />
 
