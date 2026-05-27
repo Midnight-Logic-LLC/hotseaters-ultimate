@@ -22,9 +22,13 @@ import { AcceptInvitePage } from '@/features/auth/pages/accept-invite-page';
 import { OnboardingPage } from '@/features/onboarding/pages/onboarding-page';
 import { PendingApprovalPage } from '@/features/auth/pages/pending-approval-page';
 import { AccountRejectedPage } from '@/features/auth/pages/account-rejected-page';
-import { CompanySettingsPage } from '@/features/company/pages/company-settings-page';
+import { SettingsPage } from '@/features/settings/pages/settings-page';
 import { TeamPage } from '@/features/company/pages/team-page';
 import { LandingPage } from '@/features/landing/pages/landing-page';
+import { PrivacyPolicyPage } from '@/features/marketing/pages/privacy-policy-page';
+import { TermsOfServicePage } from '@/features/marketing/pages/terms-of-service-page';
+import { PricingPage } from '@/features/marketing/pages/pricing-page';
+import { ReferralLandingPage } from '@/features/marketing/pages/referral-landing-page';
 import { ApprovalsPage } from '@/features/approvals/pages/approvals-page';
 import { LastRouteTracker } from '@/app/last-route-tracker';
 
@@ -35,7 +39,9 @@ registerLookupEntities();
 
 const CLIENTS_ROLES = ['Owner', 'Admin', 'Sales'] as const;
 const OWNER_ADMIN = ['Owner', 'Admin'] as const;
+// OWNER_ONLY — reserved for subscription-tab route guard (change-S11)
 const OWNER_ONLY = ['Owner'] as const;
+void OWNER_ONLY; // suppress unused-variable until the route lands
 const SALES_ROLES = ['Owner', 'Admin', 'Sales'] as const;
 const TRIALS_READ_ROLES = [
   'Owner',
@@ -113,6 +119,15 @@ export function AppRouter() {
         <Route path="/Landing" element={<LandingPage />} />
         <Route path="/landing" element={<Navigate to="/Landing" replace />} />
 
+        <Route path="/PrivacyPolicy" element={<PrivacyPolicyPage />} />
+        <Route path="/privacy-policy" element={<Navigate to="/PrivacyPolicy" replace />} />
+        <Route path="/TermsOfService" element={<TermsOfServicePage />} />
+        <Route path="/terms-of-service" element={<Navigate to="/TermsOfService" replace />} />
+        <Route path="/Pricing" element={<PricingPage />} />
+        <Route path="/pricing" element={<Navigate to="/Pricing" replace />} />
+        <Route path="/ReferralLanding" element={<ReferralLandingPage />} />
+        <Route path="/referral-landing" element={<Navigate to="/ReferralLanding" replace />} />
+
         <Route path="/ui-sandbox" element={<UiSandbox />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -158,12 +173,12 @@ export function AppRouter() {
               }
             />
 
-            {/* Company settings + team (Change 5) */}
+            {/* Settings shell — all tabs served by SettingsPage (change-S01) */}
             <Route
               path="settings/company"
               element={
                 <RoleGuard roles={OWNER_ADMIN}>
-                  <CompanySettingsPage />
+                  <SettingsPage />
                 </RoleGuard>
               }
             />
@@ -171,15 +186,7 @@ export function AppRouter() {
               path="Settings"
               element={
                 <RoleGuard roles={OWNER_ADMIN}>
-                  <CompanySettingsPage />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="settings/billing"
-              element={
-                <RoleGuard roles={OWNER_ONLY}>
-                  <RoutePlaceholder name="Billing settings" />
+                  <SettingsPage />
                 </RoleGuard>
               }
             />
