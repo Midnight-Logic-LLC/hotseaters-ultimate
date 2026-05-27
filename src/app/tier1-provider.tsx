@@ -58,6 +58,8 @@ export interface Tier1UserInfo {
   /** Display name fields surfaced from user_info row. */
   first_name?: string | null;
   last_name?: string | null;
+  /** Avatar URL — set by the new-member onboarding photo step. */
+  profile_photo?: string | null;
   /** Account status from user_info row. */
   account_status?: 'pending' | 'active' | 'rejected' | 'disabled' | null;
 }
@@ -210,6 +212,7 @@ export function Tier1Provider({ children }: PropsWithChildren) {
           // can show the user's real name without reaching into the graph.
           first_name: userInfo.first_name ?? null,
           last_name: userInfo.last_name ?? null,
+          profile_photo: userInfo.profile_photo ?? null,
           account_status: userInfo.account_status ?? null,
         }
       : null;

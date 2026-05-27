@@ -32,6 +32,7 @@ export interface UserInfoRecord extends Record<string, unknown> {
   is_sales: boolean;
   status: string | null;
   preferences: Record<string, unknown> | null;
+  profile_photo: string | null;
 }
 
 export interface UseCurrentUserResult {

@@ -23,6 +23,7 @@ import { OnboardingPage } from '@/features/onboarding/pages/onboarding-page';
 import { PendingApprovalPage } from '@/features/auth/pages/pending-approval-page';
 import { AccountRejectedPage } from '@/features/auth/pages/account-rejected-page';
 import { AccountDeactivatedPage } from '@/features/auth/pages/account-deactivated-page';
+import { MobileMorePage } from '@/features/mobile/pages/mobile-more-page';
 import { PaymentSuccessPage } from '@/features/marketing/pages/payment-success-page';
 import { PaymentCancelledPage } from '@/features/marketing/pages/payment-cancelled-page';
 import { SettingsPage } from '@/features/settings/pages/settings-page';
@@ -155,6 +156,10 @@ export function AppRouter() {
           <Route element={<AuthGate />}>
             <Route path="Dashboard" element={<DashboardPage />} />
             <Route path="dashboard" element={<Navigate to="/Dashboard" replace />} />
+
+            {/* Mobile overflow nav (bottom tab bar "More" tab) */}
+            <Route path="MobileMore" element={<MobileMorePage />} />
+            <Route path="mobile-more" element={<Navigate to="/MobileMore" replace />} />
 
             {/* Clients (Change 6) */}
             <Route
