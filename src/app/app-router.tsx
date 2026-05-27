@@ -48,6 +48,9 @@ import { HelpWantedPage } from '@/features/hsh/pages/help-wanted-page';
 import { HshDirectoryPage } from '@/features/hsh/pages/hsh-directory-page';
 import { HotSeatHubMarketingPage } from '@/features/hsh/pages/hot-seat-hub-marketing-page';
 import { ProjectionsPage } from '@/features/sales/pages/projections-page';
+import { UserManualPage } from '@/features/manual/pages/user-manual-page';
+import { SignDocumentPage } from '@/features/documents/pages/sign-document-page';
+import { ViewDocumentPage } from '@/features/documents/pages/view-document-page';
 
 // Register feature entity schemas at module load — idempotent.
 registerClientEntities();
@@ -380,6 +383,16 @@ export function AppRouter() {
                 </RoleGuard>
               }
             />
+
+            {/* User Manual (bible: UserManual.jsx) */}
+            <Route path="UserManual" element={<UserManualPage />} />
+            <Route path="user-manual" element={<Navigate to="/UserManual" replace />} />
+
+            {/* Document signing / viewing — no RoleGuard; all authenticated users */}
+            <Route path="SignDocument" element={<SignDocumentPage />} />
+            <Route path="sign-document" element={<Navigate to="/SignDocument" replace />} />
+            <Route path="ViewDocument" element={<ViewDocumentPage />} />
+            <Route path="view-document" element={<Navigate to="/ViewDocument" replace />} />
 
             <Route path=":page" element={<RoutePlaceholder name="(placeholder)" />} />
             <Route path="*" element={<RoutePlaceholder name="Not found" />} />
