@@ -40,6 +40,9 @@ import { SalesPage } from '@/features/sales/pages/sales-page';
 import { TimelinePage } from '@/features/trials/pages/timeline-page';
 import { LastRouteTracker } from '@/app/last-route-tracker';
 import { TimeAndExpensesPage } from '@/features/trials/pages/time-and-expenses-page';
+import { InvoicesPage } from '@/features/invoices/pages/invoices-page';
+import { BillsPage } from '@/features/bills/pages/bills-page';
+import { CollectionsPage } from '@/features/collections/pages/collections-page';
 
 // Register feature entity schemas at module load — idempotent.
 registerClientEntities();
@@ -224,7 +227,7 @@ export function AppRouter() {
               path="Invoices"
               element={
                 <RoleGuard roles={OWNER_ADMIN}>
-                  <RoutePlaceholder name="Invoices" />
+                  <InvoicesPage />
                 </RoleGuard>
               }
             />
@@ -232,7 +235,7 @@ export function AppRouter() {
               path="Collections"
               element={
                 <RoleGuard roles={OWNER_ADMIN}>
-                  <RoutePlaceholder name="Collections" />
+                  <CollectionsPage />
                 </RoleGuard>
               }
             />
@@ -240,7 +243,7 @@ export function AppRouter() {
               path="Bills"
               element={
                 <RoleGuard roles={OWNER_ADMIN}>
-                  <RoutePlaceholder name="Bills" />
+                  <BillsPage />
                 </RoleGuard>
               }
             />
