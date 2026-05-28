@@ -25,7 +25,7 @@ import {
 } from '@/features/dashboard/business-rules/team-performance';
 
 interface TimeEntryRow { id: string; user_id: string | null; start_time: string | null; end_time: string | null; duration_hours: number | null; amount: number | null; }
-interface SubcontractAssignmentRow { id: string; subcontractor_id: string | null; status: string | null; hours_per_week: number | null; rate: number | null; }
+interface SubcontractAssignmentRow { id: string; subcontractor_company_id: string | null; status: string | null; hours_per_week: number | null; rate: number | null; }
 
 export interface TeamMonthResult {
   stats: TeamMemberStat[];
@@ -70,7 +70,7 @@ export function useTeamMonth(opts: UseTeamMonthOptions = {}): TeamMonthResult {
   const { items: assignments, isLoading: assignmentsLoading } = useEntities<SubcontractAssignmentRow>('SubcontractAssignment', {
     filter: companyId
       ? [
-          { field: 'hired_by_id', op: 'eq', value: companyId },
+          { field: 'hiring_company_id', op: 'eq', value: companyId },
           { field: 'status', op: 'eq', value: 'active' },
         ]
       : null,

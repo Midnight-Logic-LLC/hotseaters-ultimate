@@ -34,7 +34,7 @@ import {
 interface InvoiceRow { id: string; status: string | null; total: number | null; }
 interface TimeEntryRow { id: string; start_time: string | null; end_time: string | null; duration_hours: number | null; }
 interface SubcontractRequestRow { id: string; status: string | null; }
-interface SubcontractAssignmentRow { id: string; status: string | null; subcontractor_id: string | null; }
+interface SubcontractAssignmentRow { id: string; status: string | null; subcontractor_company_id: string | null; }
 
 export interface QuickStatsResult {
   activeClients: number;
@@ -125,7 +125,7 @@ export function useQuickStats(opts: UseQuickStatsOptions = {}): QuickStatsResult
   const { items: activeGigs, isLoading: gigsLoading } = useEntities<SubcontractAssignmentRow>('SubcontractAssignment', {
     filter: companyId
       ? [
-          { field: 'subcontractor_id', op: 'eq', value: companyId },
+          { field: 'subcontractor_company_id', op: 'eq', value: companyId },
           { field: 'status', op: 'eq', value: 'active' },
         ]
       : null,
