@@ -46,6 +46,13 @@ vi.mock('@/shared/hooks/use-tier-a-query', () => ({
   }),
 }));
 
+// ── useSyncGateDb — mock to return a non-null sentinel so MetadataTypeSyncer
+// renders in tests (the actual db value doesn't matter — useMetadataTypeRows
+// is mocked above and never calls useLiveQuery).
+vi.mock('@/app/sync-gate', () => ({
+  useSyncGateDb: () => ({} as unknown),
+}));
+
 import { Tier1Provider, useTier1 } from '../tier1-provider';
 
 const COMPANY = 'co-current';

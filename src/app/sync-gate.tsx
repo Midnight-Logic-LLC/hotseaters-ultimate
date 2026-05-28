@@ -1,5 +1,7 @@
 import { PGliteProvider } from '@electric-sql/pglite-react';
 import {
+  createContext,
+  useContext,
   useEffect,
   useRef,
   useState,
@@ -19,6 +21,26 @@ import {
   type LocalDB,
 } from '@/shared/db/pglite-client';
 import { startWriteSync } from '@/shared/db/write-sync';
+
+/**
+ * SyncGateDbContext — exposes the active PGlite handle (or null) to all
+ * descendants of SyncGate without requiring them to be inside the conditional
+ * `<PGliteProvider>`. Tier1Provider reads this to guard MetadataTypeSyncer:
+ * it only renders that child component when db is non-null, which ensures
+ * useLiveQuery is never called without a PGliteProvider in the tree.
+ *
+ * The value is always in sync with boot.db — no Zustand batching races.
+ */
+const SyncGateDbContext = createContext<LocalDB | null>(null);
+
+/**
+ * Hook to read the current PGlite db handle from SyncGate.
+ * Returns null when PGlite is not yet initialized (before sign-in or during
+ * initial hydration).
+ */
+export function useSyncGateDb(): LocalDB | null {
+  return useContext(SyncGateDbContext);
+}
 
 /**
  * sync-gate.tsx — single orchestration point for local-first sync.
@@ -212,12 +234,15 @@ export function SyncGate({ children }: PropsWithChildren) {
     children
   );
 
+  // Wrap all renders in SyncGateDbContext so Tier1Provider (and any other
+  // component in the tree) can check whether PGlite is ready synchronously —
+  // always in sync with boot.db, no Zustand batching races.
   if (boot.phase === 'idle' || boot.phase === 'ready') {
     return (
-      <>
+      <SyncGateDbContext.Provider value={boot.db ?? null}>
         {content}
         {boot.phase === 'ready' ? <SyncStatusIndicator /> : null}
-      </>
+      </SyncGateDbContext.Provider>
     );
   }
 
@@ -226,18 +251,26 @@ export function SyncGate({ children }: PropsWithChildren) {
     // db is available here (set in Step 2 alongside phase='syncing'), so
     // useLiveQuery hooks in children get IDB rows on first render.
     return (
-      <>
+      <SyncGateDbContext.Provider value={boot.db ?? null}>
         {content}
         <SyncingBadge message={boot.message ?? 'Resuming sync…'} />
-      </>
+      </SyncGateDbContext.Provider>
     );
   }
 
   if (boot.phase === 'error') {
-    return <SyncErrorScreen message={boot.error ?? 'Unknown error'} />;
+    return (
+      <SyncGateDbContext.Provider value={null}>
+        <SyncErrorScreen message={boot.error ?? 'Unknown error'} />
+      </SyncGateDbContext.Provider>
+    );
   }
 
-  return <HydratingScreen message={boot.message ?? 'Loading…'} />;
+  return (
+    <SyncGateDbContext.Provider value={null}>
+      <HydratingScreen message={boot.message ?? 'Loading…'} />
+    </SyncGateDbContext.Provider>
+  );
 }
 
 // ─── UI bits ────────────────────────────────────────────────────────────────

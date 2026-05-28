@@ -36,9 +36,17 @@ export function AppProviders({ children }: PropsWithChildren) {
     applyThemeVars(DEFAULT_THEME);
   }, []);
 
+  // SyncGate is the outer provider: it boots PGlite + Electric and wraps
+  // children in <PGliteProvider> once the db handle is ready.
+  //
+  // Tier1Provider is INSIDE SyncGate so it always renders within the
+  // PGliteProvider subtree when db is available. MetadataTypeSyncer (inside
+  // Tier1Provider) guards on the pgliteDb Zustand store — it only calls
+  // useLiveQuery when PGlite is ready, preventing the "No PGlite instance
+  // found" crash on routes that render before sign-in.
   return (
-    <Tier1Provider>
-      <SyncGate>{children}</SyncGate>
-    </Tier1Provider>
+    <SyncGate>
+      <Tier1Provider>{children}</Tier1Provider>
+    </SyncGate>
   );
 }

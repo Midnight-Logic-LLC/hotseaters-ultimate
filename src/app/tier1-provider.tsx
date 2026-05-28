@@ -20,9 +20,11 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useState,
   type PropsWithChildren,
 } from 'react';
 import type { Role as LegacyRole, CompanyFlags } from '@/app/navigation';
@@ -32,6 +34,7 @@ import { useCurrentCompany } from '@/features/auth/hooks/use-current-company';
 import { applyThemeVars, type CompanyTheme } from '@/shared/lib/theme';
 import { toLegacyRole } from '@/shared/lib/role-mapping';
 import { useMetadataTypeRows } from '@/shared/hooks/use-tier-a-query';
+import { useSyncGateDb } from '@/app/sync-gate';
 import {
   selectClientTypesFromRows,
   selectConsultantTiersFromRows,
@@ -144,10 +147,51 @@ function buildTier1Company(
   return out;
 }
 
+/** Shape of a metadata_type row as read from PGlite. */
+interface MetadataRow {
+  id: string;
+  company_id: string | null;
+  scope: string | null;
+  name: string | null;
+  is_active: string | null;
+  order: number | null;
+  extra_schema: Record<string, unknown> | null;
+}
+
+/**
+ * MetadataTypeSyncer — isolated component that calls `useMetadataTypeRows`.
+ *
+ * `useMetadataTypeRows` calls `useLiveQuery` which calls `usePGlite()` —
+ * that throws unless `<PGliteProvider>` is an ancestor. By isolating the
+ * hook call here, `Tier1Provider` can conditionally render this component
+ * only when the PGlite handle is available, avoiding the crash on routes
+ * that render before the user signs in.
+ *
+ * Rules-of-hooks compliance: hooks inside this component are always called
+ * unconditionally. The parent's conditional render (`db && <MetadataTypeSyncer …>`)
+ * is what controls mounting, not a conditional inside the hook.
+ */
+function MetadataTypeSyncer({
+  companyId,
+  onRows,
+}: {
+  companyId: string | null;
+  onRows: (rows: MetadataRow[]) => void;
+}) {
+  const { rows } = useMetadataTypeRows<MetadataRow>(companyId);
+
+  useEffect(() => {
+    onRows(rows);
+  }, [rows, onRows]);
+
+  return null;
+}
+
 export function Tier1Provider({ children }: PropsWithChildren) {
   const { user, isLoading: authLoading } = useAuth();
   const { userInfo, isLoading: userInfoLoading } = useCurrentUser();
   const { company, isLoading: companyLoading } = useCurrentCompany();
+  const pgliteDb = useSyncGateDb();
 
   // Apply theme vars whenever company.theme changes. Falls back silently to
   // DEFAULT_THEME (already applied at app boot) when company.theme is null.
@@ -157,19 +201,16 @@ export function Tier1Provider({ children }: PropsWithChildren) {
     }
   }, [company?.theme]);
 
-  // Pattern 4: read MetadataType rows directly from PGlite unified view.
-  // metadata_type has company_id IS NULL (system rows) OR company_id = tenant.
-  // useMetadataTypeRows handles the OR clause correctly.
+  // Pattern 4: MetadataType rows are read from PGlite via MetadataTypeSyncer
+  // (a child component) — this avoids calling useLiveQuery before PGliteProvider
+  // is in the tree. When PGlite is not yet ready (pgliteDb === null), rows
+  // remain empty and lookups return empty arrays — no crash.
+  const [metadataTypeRows, setMetadataTypeRows] = useState<MetadataRow[]>([]);
+  const handleMetadataRows = useCallback((rows: MetadataRow[]) => {
+    setMetadataTypeRows(rows);
+  }, []);
+
   const companyIdForLookups = company?.id ?? null;
-  const { rows: metadataTypeRows } = useMetadataTypeRows<{
-    id: string;
-    company_id: string | null;
-    scope: string | null;
-    name: string | null;
-    is_active: string | null;
-    order: number | null;
-    extra_schema: Record<string, unknown> | null;
-  }>(companyIdForLookups);
 
   const pipelineStages = useMemo(
     () => selectPipelineStagesFromRows(metadataTypeRows, companyIdForLookups),
@@ -249,7 +290,19 @@ export function Tier1Provider({ children }: PropsWithChildren) {
     clientTypes,
   ]);
 
-  return <Tier1Context.Provider value={value}>{children}</Tier1Context.Provider>;
+  return (
+    <Tier1Context.Provider value={value}>
+      {/* MetadataTypeSyncer only renders when PGlite is ready — guards against
+          useLiveQuery throwing "No PGlite instance found" before sign-in. */}
+      {pgliteDb !== null && (
+        <MetadataTypeSyncer
+          companyId={companyIdForLookups}
+          onRows={handleMetadataRows}
+        />
+      )}
+      {children}
+    </Tier1Context.Provider>
+  );
 }
 
 export function useTier1(): Tier1Value {
