@@ -1,31 +1,40 @@
 /**
- * useTrialsList — subscribe to the company-scoped trial list.
+ * use-trials-list.ts — subscribe to the company-scoped trial list.
  *
- * Wraps `useEntityList` so components remain free of any store/PGlite/network
- * imports. The fetch callback delegates to the trials store (the only module
- * permitted to touch PGlite — RULE 3).
+ * Pattern 4 migration: reads directly from the PGlite `trial` unified view
+ * via `useTierAQuery` instead of the `useEntityList` REST-cache bridge.
+ * On browser refresh, IDB rows return immediately with zero network round-trips.
  *
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
-import { useEntityList } from '@prometheus-ags/prometheus-entity-management';
-import { fetchTrials } from '@/features/trials/stores/trials-store';
+
+import { useTierAQuery } from '@/shared/hooks/use-tier-a-query';
 import type { Trial } from '@/features/trials/entities';
 
 export interface UseTrialsListOptions {
   companyId: string | null | undefined;
 }
 
-export function useTrialsList(opts: UseTrialsListOptions) {
+export interface UseTrialsListResult {
+  items: Trial[];
+  isLoading: boolean;
+  /** No-op — kept for API compat. PGlite live queries auto-refresh. */
+  refetch: () => void;
+}
+
+export function useTrialsList(opts: UseTrialsListOptions): UseTrialsListResult {
   const { companyId } = opts;
-  return useEntityList<Trial, Trial>({
-    type: 'Trial',
-    queryKey: ['trials', { companyId }],
-    enabled: !!companyId,
-    fetch: async () => {
-      if (!companyId) return { items: [], total: 0 };
-      const items = await fetchTrials(companyId);
-      return { items, total: items.length };
+
+  const { rows, loading } = useTierAQuery<Trial>(
+    'trial',
+    companyId,
+  );
+
+  return {
+    items: rows,
+    isLoading: loading,
+    refetch: () => {
+      // useLiveQuery auto-updates on PGlite changes — nothing to do.
     },
-    normalize: (raw) => ({ id: raw.id, data: raw }),
-  });
+  };
 }

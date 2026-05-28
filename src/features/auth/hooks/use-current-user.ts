@@ -1,18 +1,15 @@
 /**
  * use-current-user.ts — live `user_info` row for the signed-in user.
  *
- * Reads the auth session through the auth-store re-export (no sibling-hook
- * imports — eslint `boundaries/element-types` does not allow feature-hook →
- * feature-hook).
+ * Pattern 4 migration: reads directly from the PGlite `user_info` unified
+ * view via `useTierAById` instead of firing a REST fetch. On browser refresh,
+ * the IDB row is returned immediately with zero network round-trips.
  *
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
 
-import { useEntity } from '@prometheus-ags/prometheus-entity-management';
-import {
-  useAuthSession,
-  fetchUserInfoById,
-} from '@/features/auth/stores/auth-store';
+import { useAuthSession } from '@/features/auth/stores/auth-store';
+import { useTierAById } from '@/shared/hooks/use-tier-a-query';
 
 export interface UserInfoRecord extends Record<string, unknown> {
   id: string;
@@ -44,16 +41,12 @@ export function useCurrentUser(): UseCurrentUserResult {
   const userInfoId = useAuthSession((s) => s.currentUserInfoId);
   const authLoading = useAuthSession((s) => s.isLoading);
 
-  const { data, isLoading } = useEntity<UserInfoRecord, UserInfoRecord>({
-    type: 'UserInfo',
-    id: userInfoId ?? '',
-    enabled: !!userInfoId,
-    fetch: (id) => fetchUserInfoById(String(id)) as Promise<UserInfoRecord>,
-    normalize: (raw) => raw,
-  });
+  // Pattern 4: read directly from PGlite user_info unified view.
+  // On refresh this returns the IDB row immediately — no REST fetch.
+  const { row, loading } = useTierAById<UserInfoRecord>('user_info', userInfoId);
 
   return {
-    userInfo: userInfoId ? data : null,
-    isLoading: authLoading || (!!userInfoId && isLoading),
+    userInfo: userInfoId ? row : null,
+    isLoading: authLoading || (!!userInfoId && loading),
   };
 }

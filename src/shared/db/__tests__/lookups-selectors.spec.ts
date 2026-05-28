@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   selectClientTypes,
+  selectClientTypesFromRows,
   selectConsultantTiers,
+  selectConsultantTiersFromRows,
   selectPipelineStages,
+  selectPipelineStagesFromRows,
   selectServiceCategories,
+  selectServiceCategoriesFromRows,
   type EntitiesSlice,
 } from '../lookups-selectors';
 
@@ -144,6 +148,117 @@ describe('selectClientTypes', () => {
       },
     ]);
     const r = selectClientTypes(entities, COMPANY);
+    expect(r[0]?.multiplier).toBe(0.85);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pattern 4 variants — flat row arrays from useLiveQuery / PGlite
+// ---------------------------------------------------------------------------
+
+function makeRows(rows: RawRow[]): Array<Record<string, unknown>> {
+  return rows.map((r) => ({
+    id: r.id,
+    scope: r.scope,
+    name: r.name,
+    order: r.order ?? 0,
+    is_active: r.is_active ?? 'true',
+    extra_schema: r.extra_schema ?? null,
+    company_id: r.company_id ?? null,
+  }));
+}
+
+describe('selectPipelineStagesFromRows (Pattern 4)', () => {
+  it('returns empty when rows array is empty', () => {
+    expect(selectPipelineStagesFromRows([], COMPANY)).toEqual([]);
+  });
+
+  it('filters by scope, tenant, and active state; sorts by (order, name)', () => {
+    const rows = makeRows([
+      { id: 'a', scope: 'pipeline_stage', name: 'Closed Won', order: 3, company_id: null },
+      { id: 'b', scope: 'pipeline_stage', name: 'Prospect', order: 1, company_id: COMPANY },
+      { id: 'c', scope: 'pipeline_stage', name: 'Qualification', order: 2, company_id: null },
+      { id: 'd', scope: 'pipeline_stage', name: 'Other Co', order: 1, company_id: OTHER },
+      { id: 'e', scope: 'service_category', name: 'SC', order: 1, company_id: null },
+      { id: 'f', scope: 'pipeline_stage', name: 'Dropped', order: 4, is_active: 'false', company_id: null },
+    ]);
+    const r = selectPipelineStagesFromRows(rows, COMPANY);
+    expect(r.map((row) => row.id)).toEqual(['b', 'c', 'a']);
+    expect(r.find((row) => row.id === 'd')).toBeUndefined();
+    expect(r.find((row) => row.id === 'f')).toBeUndefined();
+  });
+
+  it('lifts type and revenue_probability from extra_schema', () => {
+    const rows = makeRows([
+      {
+        id: 'sales-1',
+        scope: 'pipeline_stage',
+        name: 'Prospect',
+        order: 1,
+        extra_schema: { type: 'sales', revenue_probability: 0.4 },
+      },
+      {
+        id: 'ops-1',
+        scope: 'pipeline_stage',
+        name: 'Trial',
+        order: 2,
+        extra_schema: { type: 'operations' },
+      },
+      {
+        id: 'unknown-1',
+        scope: 'pipeline_stage',
+        name: 'No Extras',
+        order: 3,
+        extra_schema: null,
+      },
+    ]);
+    const r = selectPipelineStagesFromRows(rows, COMPANY);
+    expect(r[0]).toMatchObject({ id: 'sales-1', type: 'sales', revenue_probability: 0.4 });
+    expect(r[1]).toMatchObject({ id: 'ops-1', type: 'operations', revenue_probability: 1 });
+    expect(r[2]).toMatchObject({ id: 'unknown-1', type: '', revenue_probability: 1 });
+  });
+});
+
+describe('selectServiceCategoriesFromRows (Pattern 4)', () => {
+  it('filters by scope and tenant; sorts by (order, name)', () => {
+    const rows = makeRows([
+      { id: 's1', scope: 'service_category', name: 'Strategy', order: 2, company_id: null },
+      { id: 's2', scope: 'service_category', name: 'Trial Tech', order: 1, company_id: COMPANY },
+      { id: 's3', scope: 'pipeline_stage', name: 'Not a Cat', order: 1 },
+    ]);
+    const r = selectServiceCategoriesFromRows(rows, COMPANY);
+    expect(r.map((row) => row.id)).toEqual(['s2', 's1']);
+  });
+});
+
+describe('selectConsultantTiersFromRows (Pattern 4)', () => {
+  it('lifts multiplier from extra_schema', () => {
+    const rows = makeRows([
+      {
+        id: 'tier-1',
+        scope: 'consultant_tier',
+        name: 'Senior',
+        extra_schema: { multiplier: 1.25 },
+      },
+      { id: 'tier-2', scope: 'consultant_tier', name: 'Junior' },
+    ]);
+    const r = selectConsultantTiersFromRows(rows, COMPANY);
+    expect(r.find((row) => row.id === 'tier-1')?.multiplier).toBe(1.25);
+    expect(r.find((row) => row.id === 'tier-2')?.multiplier).toBeUndefined();
+  });
+});
+
+describe('selectClientTypesFromRows (Pattern 4)', () => {
+  it('lifts string multiplier from extra_schema', () => {
+    const rows = makeRows([
+      {
+        id: 'ct-1',
+        scope: 'client_type',
+        name: 'Law Firm',
+        extra_schema: { multiplier: '0.85' },
+      },
+    ]);
+    const r = selectClientTypesFromRows(rows, COMPANY);
     expect(r[0]?.multiplier).toBe(0.85);
   });
 });

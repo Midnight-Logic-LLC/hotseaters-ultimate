@@ -1,15 +1,18 @@
 /**
- * Tier1Provider tests — assert that the four new lookup arrays
+ * Tier1Provider tests — assert that the four lookup arrays
  * (pipelineStages, serviceCategories, consultantTiers, clientTypes)
- * surface from the graph store, update when MetadataType rows change,
- * and preserve referential identity across unrelated graph mutations.
+ * surface from PGlite MetadataType rows (Pattern 4), update when rows
+ * change, and preserve referential identity across unrelated mutations.
+ *
+ * Pattern 4: MetadataType is now read via `useMetadataTypeRows` (useLiveQuery
+ * from PGlite), not from the Zustand entity graph. Tests mock the hook.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, render, renderHook } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
 
-// Mock the auth hooks BEFORE importing the provider.
+// ── Auth hook mocks ──────────────────────────────────────────────────────────
 const mockUseAuth = vi.fn();
 const mockUseCurrentUser = vi.fn();
 const mockUseCurrentCompany = vi.fn();
@@ -31,7 +34,18 @@ vi.mock('@/shared/lib/theme', () => ({
   applyThemeVars: vi.fn(),
 }));
 
-import { useGraphStore } from '@prometheus-ags/prometheus-entity-management';
+// ── Pattern 4: mock useMetadataTypeRows instead of Zustand graph ─────────────
+// Tier1Provider reads MetadataType via PGlite live query (Pattern 4).
+// We mock the hook so tests can supply any row set without a real PGlite DB.
+let mockMetadataRows: Array<Record<string, unknown>> = [];
+
+vi.mock('@/shared/hooks/use-tier-a-query', () => ({
+  useMetadataTypeRows: () => ({
+    rows: mockMetadataRows,
+    loading: false,
+  }),
+}));
+
 import { Tier1Provider, useTier1 } from '../tier1-provider';
 
 const COMPANY = 'co-current';
@@ -42,48 +56,11 @@ function Wrapper({ children }: PropsWithChildren) {
 }
 
 function seedMetadataType(rows: Array<Record<string, unknown>>): void {
-  const map: Record<string, unknown> = {};
-  for (const r of rows) {
-    const id = r.id as string;
-    map[id] = r;
-  }
-  useGraphStore.setState((prev) => ({
-    entities: {
-      ...prev.entities,
-      MetadataType: map,
-    },
-  }));
-}
-
-function upsertMetadataType(row: Record<string, unknown>): void {
-  const id = row.id as string;
-  useGraphStore.setState((prev) => {
-    const slice = (prev.entities as Record<string, Record<string, unknown>>).MetadataType ?? {};
-    return {
-      entities: {
-        ...prev.entities,
-        MetadataType: { ...slice, [id]: row },
-      },
-    };
-  });
-}
-
-function upsertOtherEntityType(): void {
-  useGraphStore.setState((prev) => ({
-    entities: {
-      ...prev.entities,
-      Trial: { 't-1': { id: 't-1', case_name: 'Acme v. Doe' } },
-    },
-  }));
+  mockMetadataRows = rows;
 }
 
 function clearMetadataType(): void {
-  useGraphStore.setState((prev) => ({
-    entities: {
-      ...prev.entities,
-      MetadataType: {},
-    },
-  }));
+  mockMetadataRows = [];
 }
 
 beforeEach(() => {
@@ -105,7 +82,7 @@ beforeEach(() => {
   });
 });
 
-describe('Tier1Provider — lookups', () => {
+describe('Tier1Provider — lookups (Pattern 4 / PGlite)', () => {
   it('exposes pipelineStages projected from MetadataType + scope filter', () => {
     seedMetadataType([
       {
@@ -144,7 +121,7 @@ describe('Tier1Provider — lookups', () => {
     });
   });
 
-  it('updates pipelineStages when a new MetadataType row is upserted', () => {
+  it('updates pipelineStages when mock rows change and component re-renders', () => {
     seedMetadataType([
       {
         id: 'p1',
@@ -156,25 +133,29 @@ describe('Tier1Provider — lookups', () => {
         company_id: null,
       },
     ]);
-    const { result } = renderHook(() => useTier1(), { wrapper: Wrapper });
+    const { result, rerender } = renderHook(() => useTier1(), { wrapper: Wrapper });
     expect(result.current.pipelineStages).toHaveLength(1);
 
     act(() => {
-      upsertMetadataType({
-        id: 'p2',
-        scope: 'pipeline_stage',
-        name: 'Won',
-        order: 2,
-        is_active: 'true',
-        extra_schema: null,
-        company_id: null,
-      });
+      mockMetadataRows = [
+        ...mockMetadataRows,
+        {
+          id: 'p2',
+          scope: 'pipeline_stage',
+          name: 'Won',
+          order: 2,
+          is_active: 'true',
+          extra_schema: null,
+          company_id: null,
+        },
+      ];
     });
+    rerender();
     expect(result.current.pipelineStages).toHaveLength(2);
     expect(result.current.pipelineStages.map((s) => s.id)).toEqual(['p1', 'p2']);
   });
 
-  it('preserves referential identity when an unrelated entity type changes', () => {
+  it('preserves referential identity when rows array reference is unchanged', () => {
     seedMetadataType([
       {
         id: 'p1',
@@ -186,17 +167,16 @@ describe('Tier1Provider — lookups', () => {
         company_id: null,
       },
     ]);
-    const { result } = renderHook(() => useTier1(), { wrapper: Wrapper });
+    const { result, rerender } = renderHook(() => useTier1(), { wrapper: Wrapper });
     const firstRef = result.current.pipelineStages;
 
-    act(() => {
-      upsertOtherEntityType();
-    });
+    // Re-render without changing mockMetadataRows — memoization must hold.
+    rerender();
 
     expect(result.current.pipelineStages).toBe(firstRef);
   });
 
-  it('exposes serviceCategories, consultantTiers, clientTypes from the same slice', () => {
+  it('exposes serviceCategories, consultantTiers, clientTypes from the same rows', () => {
     seedMetadataType([
       {
         id: 'sc-1',

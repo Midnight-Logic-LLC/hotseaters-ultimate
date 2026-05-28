@@ -211,3 +211,94 @@ function selectGenericLookup(
   out.sort(compareByOrderThenName);
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Pattern 4 variants — operate on flat arrays from useLiveQuery / PGlite
+// ---------------------------------------------------------------------------
+// These are used by tier1-provider.tsx when MetadataType rows come directly
+// from PGlite (useTierAQuery) rather than the Zustand entity graph.
+
+function rowsByScopeFromArray(
+  rows: MetadataTypeRow[],
+  scope: string,
+  companyId: string | null,
+): MetadataTypeRow[] {
+  return rows.filter(
+    (row) => row.scope === scope && isTenantVisible(row, companyId),
+  );
+}
+
+/**
+ * Pipeline stages from a flat PGlite result array.
+ * Replaces `selectPipelineStages(entitiesSlice, companyId)` for Pattern 4 reads.
+ */
+export function selectPipelineStagesFromRows(
+  rows: MetadataTypeRow[],
+  companyId: string | null,
+): PipelineStage[] {
+  const projected: PipelineStage[] = [];
+  for (const row of rowsByScopeFromArray(rows, 'pipeline_stage', companyId)) {
+    if (!row.id || !isActive(row)) continue;
+    const extra = row.extra_schema ?? {};
+    const probability = readNumber(extra.revenue_probability);
+    projected.push({
+      id: row.id,
+      name: row.name ?? '',
+      type: readPipelineType(extra.type),
+      revenue_probability: probability ?? 1,
+      is_active: true,
+      order: row.order ?? 0,
+      company_id: row.company_id ?? null,
+    });
+  }
+  projected.sort(compareByOrderThenName);
+  return projected;
+}
+
+/** Service categories from a flat PGlite result array. */
+export function selectServiceCategoriesFromRows(
+  rows: MetadataTypeRow[],
+  companyId: string | null,
+): LookupRow[] {
+  return selectGenericLookupFromRows(rows, 'service_category', companyId);
+}
+
+/** Consultant tiers from a flat PGlite result array. */
+export function selectConsultantTiersFromRows(
+  rows: MetadataTypeRow[],
+  companyId: string | null,
+): LookupRow[] {
+  return selectGenericLookupFromRows(rows, 'consultant_tier', companyId);
+}
+
+/** Client types from a flat PGlite result array. */
+export function selectClientTypesFromRows(
+  rows: MetadataTypeRow[],
+  companyId: string | null,
+): LookupRow[] {
+  return selectGenericLookupFromRows(rows, 'client_type', companyId);
+}
+
+function selectGenericLookupFromRows(
+  rows: MetadataTypeRow[],
+  scope: string,
+  companyId: string | null,
+): LookupRow[] {
+  const out: LookupRow[] = [];
+  for (const row of rowsByScopeFromArray(rows, scope, companyId)) {
+    if (!row.id || !isActive(row)) continue;
+    const extra = row.extra_schema ?? null;
+    const multiplier = readNumber(extra?.multiplier);
+    out.push({
+      id: row.id,
+      name: row.name ?? '',
+      is_active: true,
+      order: row.order ?? 0,
+      company_id: row.company_id ?? null,
+      extra_schema: extra,
+      ...(multiplier !== undefined ? { multiplier } : {}),
+    });
+  }
+  out.sort(compareByOrderThenName);
+  return out;
+}

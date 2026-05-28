@@ -148,7 +148,8 @@ export default tseslint.config(
                 'RULE 3: Components must not import PGlite/Electric/Supabase or entity-management graph/engine/adapters. Use a hook.',
             },
             {
-              from: ['feature-hook', 'shared-hooks'],
+              // feature-hooks: cannot import Electric/PGlite/Supabase at all — use a store.
+              from: ['feature-hook'],
               disallow: [
                 '@electric-sql/*',
                 '@supabase/*',
@@ -157,7 +158,24 @@ export default tseslint.config(
                 '@prometheus-ags/prometheus-entity-management/adapters/*',
               ],
               message:
-                'RULE 3: Hooks must not import PGlite/Electric/Supabase or entity-management graph/engine/adapters. Use a store.',
+                'RULE 3: Feature hooks must not import PGlite/Electric/Supabase or entity-management graph/engine/adapters. Use a store.',
+            },
+            {
+              // shared-hooks: Pattern 4 allows @electric-sql/pglite-react (useLiveQuery).
+              // The use-tier-a-query hook IS the abstraction boundary — it is the store
+              // equivalent for Tier-A PGlite reads. All other Electric/Supabase imports
+              // still route through shared-db.
+              from: ['shared-hooks'],
+              disallow: [
+                '@electric-sql/electric-client',
+                '@electric-sql/client',
+                '@supabase/*',
+                '@prometheus-ags/prometheus-entity-management/graph',
+                '@prometheus-ags/prometheus-entity-management/engine',
+                '@prometheus-ags/prometheus-entity-management/adapters/*',
+              ],
+              message:
+                'RULE 3: Shared hooks must not import PGlite/Electric/Supabase directly. Use shared-db or the Pattern 4 useLiveQuery wrapper.',
             },
             {
               from: ['feature-business', 'feature-entities'],

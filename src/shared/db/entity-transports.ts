@@ -1,5 +1,5 @@
 /**
- * entity-transports.ts — process-global transport registry for 2.0.
+ * entity-transports.ts — process-global transport registry for entity-management 2.0.
  *
  * RULE 3: Only `shared/db` may import `@supabase/supabase-js` or touch the
  * Supabase client. This file is the ONE place that wires the entity-management
@@ -9,13 +9,12 @@
  * before any hook renders. The registry is idempotent — re-registering a type
  * replaces the prior transport (useful in tests).
  *
- * Transport tiers:
- *   `authoritative: true`  — Tier-A entities. Electric syncs them into PGlite;
- *                            `pglite-graph-bridge` watches the `*_synced` tables
- *                            and upserts rows into the entity graph in real time.
- *                            staleTime is intentionally large (24h): the bridge
- *                            keeps the graph fresh, so the REST fallback only fires
- *                            on the very first mount (before the bridge has run).
+ * Pattern 4 architecture:
+ *   Tier-A entities (company, user_info, client, trial, metadata_type, etc.)
+ *   are now read via `useLiveQuery` directly from PGlite — they no longer need
+ *   a REST transport registration. Only Tier-C (server-only) entities are
+ *   registered here.
+ *
  *   `authoritative: false` — Tier-C entities: server-only, REST-only.
  *                            These will never live in PGlite; 30 s default.
  *
@@ -56,14 +55,6 @@ function reg<T extends object>(
   );
 }
 
-// ---------------------------------------------------------------------------
-// Tier-A — synced into PGlite.  `authoritative: true`, short staleTime.
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Tier-C — server-only REST.  `authoritative: false`, default staleTime.
-// ---------------------------------------------------------------------------
-
 /**
  * Register ALL entity transports at app boot.
  *
@@ -71,29 +62,11 @@ function reg<T extends object>(
  * Re-registering a type replaces the prior transport without error (tests rely
  * on this; production code should only call it once).
  *
- * Order: Tier-A first (FK-dependency order), then Tier-C.
+ * Tier-A entities are NOT registered here — they are read directly from PGlite
+ * via `useLiveQuery` (Pattern 4). Only Tier-C (server-only REST) entities need
+ * a transport registration.
  */
-// 24 hours in ms — Tier-A staleTime. The pglite-graph-bridge keeps the graph
-// current via PGlite live queries, so the REST transport is only a fallback for
-// the very first mount (before the bridge's live query has fired).
-const TIER_A_STALE_TIME = 24 * 60 * 60 * 1_000;
-
 export function registerAllTransports(): void {
-  // Tier-A — synced via Electric + pglite-graph-bridge keeps graph current.
-  // Long staleTime: bridge is the reactivity mechanism; REST is the fallback.
-  reg('Company',                 'company',                    true,  TIER_A_STALE_TIME);
-  reg('UserInfo',                'user_info',                  true,  TIER_A_STALE_TIME);
-  reg('MetadataType',            'metadata_type',              true,  TIER_A_STALE_TIME);
-  reg('EntityMetadata',          'entity_metadata',            true,  TIER_A_STALE_TIME);
-  reg('Client',                  'client',                     true,  TIER_A_STALE_TIME);
-  reg('ClientAddress',           'client_address',             true,  TIER_A_STALE_TIME);
-  reg('ClientServiceOverride',   'client_service_override',    true,  TIER_A_STALE_TIME);
-  reg('Trial',                   'trial',                      true,  TIER_A_STALE_TIME);
-  reg('TrialService',            'trial_service',              true,  TIER_A_STALE_TIME);
-  reg('TrialContact',            'trial_contact',              true,  TIER_A_STALE_TIME);
-  reg('TrialSegment',            'trial_segment',              true,  TIER_A_STALE_TIME);
-  reg('TrialServiceAssignment',  'trial_service_assignment',   true,  TIER_A_STALE_TIME);
-
   // Tier-C — server-only REST, no local PGlite copy.
   reg('Invoice',                 'invoice',                    false);
   reg('TimeEntry',               'time_entry',                 false);

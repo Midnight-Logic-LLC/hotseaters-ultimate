@@ -1,4 +1,4 @@
-import { useGraphSyncStatus } from '@prometheus-ags/prometheus-entity-management';
+import { PGliteProvider } from '@electric-sql/pglite-react';
 import {
   useEffect,
   useRef,
@@ -8,10 +8,6 @@ import {
 
 import { useAuthSession } from '@/shared/db/auth-session';
 import {
-  bootstrapEntityGraph,
-  type EntityGraphHandle,
-} from '@/shared/db/entity-graph-bootstrap';
-import {
   startTenantSync,
   type TenantSyncResult,
 } from '@/shared/db/electric-sync';
@@ -20,11 +16,8 @@ import {
   clearLocalTenantData,
   getSyncMeta,
   markHydrated,
+  type LocalDB,
 } from '@/shared/db/pglite-client';
-import {
-  startGraphBridge,
-  type GraphBridgeHandle,
-} from '@/shared/db/pglite-graph-bridge';
 import { startWriteSync } from '@/shared/db/write-sync';
 
 /**
@@ -35,7 +28,12 @@ import { startWriteSync } from '@/shared/db/write-sync';
  *   1. Per-user PGlite boot (`openForUser`) — also surfaces `didMigrate`.
  *   2. The Electric tenant sync (`startTenantSync`).
  *   3. The write-path drain (`startWriteSync`).
- *   4. The entity-graph local-first runtime (`bootstrapEntityGraph`).
+ *
+ * Pattern 4 ("Through-the-Database"): children are wrapped in
+ * `<PGliteProvider>` as soon as PGlite opens. All Tier-A reads flow through
+ * `useLiveQuery` — no entity-graph bootstrap or graph-bridge needed for
+ * Tier-A data. The entity-management graph is retained for Tier-C writes/
+ * server-only entities (invoices, time entries, etc.).
  *
  * State machine:
  *
@@ -52,8 +50,8 @@ import { startWriteSync } from '@/shared/db/write-sync';
  *   user never sees the previous tenant's rows.
  *
  * Sign-out:
- *   Stops sync, disposes the graph runtime, clears local data.
- *   `closeForUser` + `resetGraph` are called by `auth-session.ts → signOut`.
+ *   Stops sync, clears local data.
+ *   `closeForUser` is called by `auth-session.ts → signOut`.
  */
 
 type Phase = 'idle' | 'hydrating' | 'syncing' | 'ready' | 'error';
@@ -64,6 +62,8 @@ interface BootState {
   error?: string;
   didMigrate?: boolean;
   isFirstLogin?: boolean;
+  /** PGlite instance — available once openForUser resolves */
+  db?: LocalDB;
 }
 
 export function SyncGate({ children }: PropsWithChildren) {
@@ -76,8 +76,6 @@ export function SyncGate({ children }: PropsWithChildren) {
   // Hold handles so we can dispose on sign-out / tenant switch.
   const handlesRef = useRef<{
     tenantSync?: TenantSyncResult;
-    graph?: EntityGraphHandle;
-    graphBridge?: GraphBridgeHandle;
     stopWriteSync?: () => Promise<void>;
     activeCompanyId?: string;
   }>({});
@@ -90,14 +88,11 @@ export function SyncGate({ children }: PropsWithChildren) {
     // Sign-out path: tear down anything that's running.
     if (!session || !companyId || !userId) {
       void (async () => {
-        const { tenantSync, graph, graphBridge, stopWriteSync, activeCompanyId } =
-          handlesRef.current;
+        const { tenantSync, stopWriteSync, activeCompanyId } = handlesRef.current;
         if (activeCompanyId) {
           try {
-            await graphBridge?.stop();
             await tenantSync?.unsubscribe();
             await stopWriteSync?.();
-            graph?.dispose();
             // clearLocalTenantData is called by auth-session.ts → signOut
             // (via closeForUser). Belt-and-suspenders: if userId was somehow
             // lost, skip the PGlite call here.
@@ -142,6 +137,10 @@ export function SyncGate({ children }: PropsWithChildren) {
         }
 
         // ── Step 2: Electric shapes ─────────────────────────────────────────
+        // Pass db into boot state so PGliteProvider can wrap children before
+        // Electric shapes / graph bootstrap run. This is the Pattern 4 fix:
+        // useLiveQuery hooks mount against the live IDB instance immediately,
+        // so no REST fetch fires for already-synced Tier-A data.
         setBoot({
           phase: isFirstLogin ? 'hydrating' : 'syncing',
           message: isFirstLogin
@@ -151,6 +150,7 @@ export function SyncGate({ children }: PropsWithChildren) {
             : 'Resuming sync…',
           didMigrate: bootRes.didMigrate,
           isFirstLogin,
+          db: bootRes.db,
         });
 
         const tenantSync = await startTenantSync(userId, companyId, isFirstLogin);
@@ -170,37 +170,8 @@ export function SyncGate({ children }: PropsWithChildren) {
           return;
         }
 
-        // ── Step 4: entity-graph runtime ────────────────────────────────────
-        const graph = await bootstrapEntityGraph({
-          pglite: bootRes.db,
-          companyId,
-          isFirstLogin,
-        });
-        if (cancelled) {
-          graph.dispose();
-          await tenantSync.unsubscribe();
-          await stopWriteSync();
-          return;
-        }
-
-        // ── Step 5: Electric→graph bridge ────────────────────────────────────
-        // Watches each Tier-A *_synced table with a PGlite live query.
-        // When Electric writes a row, the bridge upserts it directly into the
-        // entity graph so subsequent navigation skips the REST round-trip.
-        // This is what makes "local-first" mean "instant on return visit".
-        const graphBridge = await startGraphBridge(userId, companyId);
-        if (cancelled) {
-          await graphBridge.stop();
-          graph.dispose();
-          await tenantSync.unsubscribe();
-          await stopWriteSync();
-          return;
-        }
-
         handlesRef.current = {
           tenantSync,
-          graph,
-          graphBridge,
           stopWriteSync,
           activeCompanyId: companyId,
         };
@@ -209,6 +180,7 @@ export function SyncGate({ children }: PropsWithChildren) {
           phase: 'ready',
           isFirstLogin,
           didMigrate: bootRes.didMigrate,
+          db: bootRes.db,
         });
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -226,10 +198,24 @@ export function SyncGate({ children }: PropsWithChildren) {
   }, [session, companyId, isLoading]);
 
   // ── Render state machine ────────────────────────────────────────────────
+  //
+  // Pattern 4: wrap children in PGliteProvider whenever the db handle is
+  // available. This ensures useLiveQuery hooks immediately see the live IDB
+  // instance and serve Tier-A data from PGlite without any REST round-trip.
+  //
+  // db is set as soon as openForUser() resolves (Step 1 of boot), which is
+  // before Electric shapes attach or the graph bootstrap runs — so children
+  // that render in 'syncing' phase already have PGlite context.
+  const content = boot.db ? (
+    <PGliteProvider db={boot.db}>{children}</PGliteProvider>
+  ) : (
+    children
+  );
+
   if (boot.phase === 'idle' || boot.phase === 'ready') {
     return (
       <>
-        {children}
+        {content}
         {boot.phase === 'ready' ? <SyncStatusIndicator /> : null}
       </>
     );
@@ -237,9 +223,11 @@ export function SyncGate({ children }: PropsWithChildren) {
 
   if (boot.phase === 'syncing') {
     // Returning user — render the app immediately with a small status dot.
+    // db is available here (set in Step 2 alongside phase='syncing'), so
+    // useLiveQuery hooks in children get IDB rows on first render.
     return (
       <>
-        {children}
+        {content}
         <SyncingBadge message={boot.message ?? 'Resuming sync…'} />
       </>
     );
@@ -348,13 +336,7 @@ function SyncingBadge({ message }: { message: string }) {
 }
 
 function SyncStatusIndicator() {
-  const status = useGraphSyncStatus();
-  if (status.phase === 'ready' || status.phase === 'idle') return null;
-  if (status.phase === 'error') {
-    return <SyncingBadge message={`Sync error: ${status.error ?? ''}`} />;
-  }
-  if (!status.isOnline) {
-    return <SyncingBadge message="Offline — changes will sync on reconnect" />;
-  }
+  // Placeholder: no badge in 'ready' state for Pattern 4 builds.
+  // A future change can wire navigator.onLine / Electric sync status here.
   return null;
 }

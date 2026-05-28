@@ -25,19 +25,18 @@ import {
   useMemo,
   type PropsWithChildren,
 } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import { useGraphStore } from '@prometheus-ags/prometheus-entity-management';
 import type { Role as LegacyRole, CompanyFlags } from '@/app/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
 import { useCurrentCompany } from '@/features/auth/hooks/use-current-company';
 import { applyThemeVars, type CompanyTheme } from '@/shared/lib/theme';
 import { toLegacyRole } from '@/shared/lib/role-mapping';
+import { useMetadataTypeRows } from '@/shared/hooks/use-tier-a-query';
 import {
-  selectClientTypes,
-  selectConsultantTiers,
-  selectPipelineStages,
-  selectServiceCategories,
+  selectClientTypesFromRows,
+  selectConsultantTiersFromRows,
+  selectPipelineStagesFromRows,
+  selectServiceCategoriesFromRows,
   type LookupRow,
   type PipelineStage,
 } from '@/shared/db/lookups-selectors';
@@ -158,31 +157,35 @@ export function Tier1Provider({ children }: PropsWithChildren) {
     }
   }, [company?.theme]);
 
-  // Subscribe to the MetadataType slice of the entity graph. useShallow keeps
-  // reference identity stable when other entity types (Client, Trial, etc.)
-  // change — the bible's Tier1DataContext.jsx pattern (lines 63-73).
-  const metadataTypeSlice = useGraphStore(
-    useShallow(
-      (s) => (s.entities as Record<string, Record<string, unknown>>).MetadataType,
-    ),
-  );
-
+  // Pattern 4: read MetadataType rows directly from PGlite unified view.
+  // metadata_type has company_id IS NULL (system rows) OR company_id = tenant.
+  // useMetadataTypeRows handles the OR clause correctly.
   const companyIdForLookups = company?.id ?? null;
+  const { rows: metadataTypeRows } = useMetadataTypeRows<{
+    id: string;
+    company_id: string | null;
+    scope: string | null;
+    name: string | null;
+    is_active: string | null;
+    order: number | null;
+    extra_schema: Record<string, unknown> | null;
+  }>(companyIdForLookups);
+
   const pipelineStages = useMemo(
-    () => selectPipelineStages(metadataTypeSlice, companyIdForLookups),
-    [metadataTypeSlice, companyIdForLookups],
+    () => selectPipelineStagesFromRows(metadataTypeRows, companyIdForLookups),
+    [metadataTypeRows, companyIdForLookups],
   );
   const serviceCategories = useMemo(
-    () => selectServiceCategories(metadataTypeSlice, companyIdForLookups),
-    [metadataTypeSlice, companyIdForLookups],
+    () => selectServiceCategoriesFromRows(metadataTypeRows, companyIdForLookups),
+    [metadataTypeRows, companyIdForLookups],
   );
   const consultantTiers = useMemo(
-    () => selectConsultantTiers(metadataTypeSlice, companyIdForLookups),
-    [metadataTypeSlice, companyIdForLookups],
+    () => selectConsultantTiersFromRows(metadataTypeRows, companyIdForLookups),
+    [metadataTypeRows, companyIdForLookups],
   );
   const clientTypes = useMemo(
-    () => selectClientTypes(metadataTypeSlice, companyIdForLookups),
-    [metadataTypeSlice, companyIdForLookups],
+    () => selectClientTypesFromRows(metadataTypeRows, companyIdForLookups),
+    [metadataTypeRows, companyIdForLookups],
   );
 
   const value = useMemo<Tier1Value>(() => {

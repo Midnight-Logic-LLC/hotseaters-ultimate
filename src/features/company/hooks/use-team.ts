@@ -1,18 +1,23 @@
 /**
- * use-team.ts — list of team members (`user_info` rows) for the current
- * tenant.
+ * use-team.ts — list of team members (`user_info` rows) for the current tenant.
+ *
+ * Pattern 4 migration: reads directly from the PGlite `user_info` unified
+ * view via `useTierAQuery` instead of the `useEntityList` REST-cache bridge.
+ * On browser refresh, IDB rows return immediately with zero network round-trips.
+ *
+ * Mutations (invite, updateMember) still route through the company-store which
+ * calls Supabase REST — the write path is unchanged.
  *
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
 
-import { useEntityList } from '@prometheus-ags/prometheus-entity-management';
+import { useMemo, useState } from 'react';
+import { useTierAQuery } from '@/shared/hooks/use-tier-a-query';
 import {
-  fetchTeamForCompany,
   sendInvitation as sendInvitationAction,
   updateUserInfo,
   type SendInvitationPayload,
 } from '@/features/company/stores/company-store';
-import { useMemo, useState } from 'react';
 
 export interface TeamMember extends Record<string, unknown> {
   id: string;
@@ -28,6 +33,7 @@ export interface UseTeamResult {
   members: TeamMember[];
   isLoading: boolean;
   total: number | null;
+  /** No-op — kept for API compat. PGlite live queries auto-refresh. */
   refetch: () => void;
   invite: (payload: SendInvitationPayload) => Promise<void>;
   invitePending: boolean;
@@ -36,33 +42,10 @@ export interface UseTeamResult {
 }
 
 export function useTeam(companyId: string | null): UseTeamResult {
-  const list = useEntityList<TeamMember, TeamMember>({
-    type: 'UserInfo',
-    queryKey: ['team', companyId ?? 'none'],
-    enabled: !!companyId,
-    fetch: async () => {
-      const res = await fetchTeamForCompany(companyId ?? '');
-      return {
-        items: res.items as TeamMember[],
-        total: res.total,
-        nextCursor: res.nextCursor,
-      };
-    },
-    normalize: (raw) => ({ id: String(raw.id), data: raw }),
-  });
-  // Stabilize the destructured shape so consumers of useTeam (which is read
-  // through useSyncExternalStore-backed selectors downstream) don't trigger
-  // React 19's "getSnapshot should be cached to avoid an infinite loop"
-  // warning. The underlying library currently returns a fresh result object
-  // per render; memoising the destructure pins the identity.
-  const { items, isLoading, total, refetch } = useMemo(
-    () => ({
-      items: list.items,
-      isLoading: list.isLoading,
-      total: list.total,
-      refetch: list.refetch,
-    }),
-    [list.items, list.isLoading, list.total, list.refetch],
+  // Pattern 4: read directly from PGlite user_info unified view.
+  const { rows, loading } = useTierAQuery<TeamMember>(
+    'user_info',
+    companyId,
   );
 
   const [invitePending, setInvitePending] = useState(false);
@@ -73,7 +56,7 @@ export function useTeam(companyId: string | null): UseTeamResult {
     setInviteError(null);
     try {
       await sendInvitationAction(payload);
-      refetch();
+      // useLiveQuery auto-updates when the new user_info row syncs back via Electric.
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not send invitation';
       setInviteError(msg);
@@ -85,17 +68,23 @@ export function useTeam(companyId: string | null): UseTeamResult {
 
   const updateMember = async (memberId: string, patch: Partial<TeamMember>) => {
     await updateUserInfo(memberId, patch);
-    refetch();
+    // useLiveQuery auto-updates when the updated user_info row syncs back.
   };
 
-  return {
-    members: items,
-    isLoading,
-    total,
-    refetch,
-    invite,
-    invitePending,
-    inviteError,
-    updateMember,
-  };
+  return useMemo(
+    () => ({
+      members: rows,
+      isLoading: loading,
+      total: rows.length,
+      refetch: () => {
+        // useLiveQuery auto-updates on PGlite changes — nothing to do.
+      },
+      invite,
+      invitePending,
+      inviteError,
+      updateMember,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, loading, invitePending, inviteError],
+  );
 }
