@@ -234,14 +234,14 @@ body,
    - Body inherits Montserrat via --font-sans.
    - Headings use the display font (Zen Dots) per bible's
      `@apply font-display tracking-tight font-semibold`.
-   - Pointer cursor on every clickable. The bible relies on browsers
-     defaulting <button>/<a> to pointer, but in our Base UI v1 build
-     the primitive renders a native <button> whose UA stylesheet sets
-     `cursor: default`. We make the intent explicit here so every
-     clickable surface — Button, Tab, Dialog trigger, footer link
-     button, label[for=…], summary, range/checkbox/radio — shows the
-     hand pointer. No `!important` needed because Tailwind utility
-     `cursor-*` lives in @layer utilities (later cascade). */
+   - Pointer cursor on every clickable + text caret on every input.
+     Base UI v1 primitives render native <button> elements whose UA
+     stylesheet sets `cursor: default`, overriding our @layer base rules.
+     `!important` is required to win against component-level inline styles
+     and UA stylesheet specificity without needing per-component overrides.
+   - Text inputs/textareas get `cursor: text !important` so the caret
+     appears on hover — browsers default to `cursor: default` on these
+     when they are inside a component that resets styles. */
 @layer base {
   body {
     font-family: var(--font-sans);
@@ -251,6 +251,8 @@ body,
     letter-spacing: -0.01em;
     font-weight: 600;
   }
+
+  /* ── Pointer: all interactive surfaces ── */
   button:not(:disabled),
   [role='button']:not(:disabled),
   a[href],
@@ -262,11 +264,26 @@ body,
   input[type='checkbox']:not(:disabled),
   input[type='radio']:not(:disabled),
   select:not(:disabled) {
-    cursor: pointer;
+    cursor: pointer !important;
   }
+
+  /* ── Text caret: all text-entry surfaces ── */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not(:disabled),
+  textarea:not(:disabled),
+  [contenteditable='true'],
+  [data-slot='input']:not(:disabled) {
+    cursor: text !important;
+  }
+
+  /* ── Disabled: always not-allowed ── */
   button:disabled,
-  [role='button'][aria-disabled='true'] {
-    cursor: not-allowed;
+  input:disabled,
+  textarea:disabled,
+  select:disabled,
+  [role='button'][aria-disabled='true'],
+  [data-slot='button'][disabled],
+  [data-slot='input'][disabled] {
+    cursor: not-allowed !important;
   }
 }
 
