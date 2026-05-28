@@ -59,5 +59,11 @@ export function OnboardingPage() {
     return <Navigate to="/Dashboard" replace />;
   }
 
+  // Don't mount the wizard until auth has resolved — avoids triggering
+  // bootstrap() while isAuthenticated/companyId are still unknown.
+  if (isLoading) {
+    return null;
+  }
+
   return <OnboardingWizard />;
 }
