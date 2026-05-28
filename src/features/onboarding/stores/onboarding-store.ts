@@ -240,6 +240,7 @@ interface OnboardingState {
   finalizeError: string | null;
 
   // actions
+  clearBooting: () => void;
   setStep: (s: number) => void;
   goNext: () => void;
   goBack: () => void;
@@ -321,6 +322,7 @@ export const useOnboardingStore = create<OnboardingState>()(
       complete: false,
       finalizeError: null,
 
+      clearBooting: () => set({ isBooting: false, bootError: null }),
       setStep: (s) => set((st) => ({ step: s, highestStep: Math.max(st.highestStep, s) })),
       goNext: () => {
         const s = get().step;

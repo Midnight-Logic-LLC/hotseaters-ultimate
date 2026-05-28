@@ -10,13 +10,15 @@ export function useOnboardingWizard() {
   const store = useOnboardingStore();
 
   // Auto-bootstrap on first mount.
+  // If snapshotVersion is already persisted the snapshot was fetched in a prior
+  // session — skip the Edge Function call but MUST clear isBooting (it initialises
+  // to `true` from the Zustand default and nothing else clears it on this path).
   useEffect(() => {
-    if (
-      store.isBooting &&
-      !store.bootError &&
-      store.snapshotVersion === null
-    ) {
+    if (!store.isBooting || store.bootError) return;
+    if (store.snapshotVersion === null) {
       void store.bootstrap();
+    } else {
+      store.clearBooting();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
