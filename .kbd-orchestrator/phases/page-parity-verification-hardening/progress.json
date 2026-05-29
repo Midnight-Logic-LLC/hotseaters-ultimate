@@ -13,27 +13,98 @@
   "assessment_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/assessment.md",
   "plan_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/plan.md",
   "changes": [
-    { "id": "change-V01", "title": "VR harness consolidation: extend bible-vs-port PATHS + RUNBOOK + pre-commit", "change_state": "DONE" },
-    { "id": "change-V02", "title": "Per-page RULE-0 audit template + audit ledger + W1-W8 inventory reconcile", "change_state": "DONE" },
-    { "id": "change-V03", "title": "Public/marketing surface — audit + extend bible-vs-port", "change_state": "PENDING" },
-    { "id": "change-V04", "title": "Auth/payment surface — audit + VR", "change_state": "PENDING" },
-    { "id": "change-V05", "title": "App core — audit + authed VR (Dashboard, MobileMore, Settings)", "change_state": "PENDING" },
-    { "id": "change-V06", "title": "Sales — audit + authed VR", "change_state": "PENDING" },
-    { "id": "change-V07", "title": "Operations — audit + authed VR", "change_state": "PENDING" },
-    { "id": "change-V08", "title": "Billing — audit + authed VR", "change_state": "PENDING" },
-    { "id": "change-V09", "title": "HotSeatHub — audit + authed VR", "change_state": "PENDING" },
-    { "id": "change-V10", "title": "Documents + Manual — audit + VR", "change_state": "PENDING" },
-    { "id": "change-V11", "title": "Drift remediation (fix systemic bugs in primitives — RULE 0.3)", "change_state": "PENDING" },
-    { "id": "change-V12", "title": "Pay down react-hooks/exhaustive-deps warnings", "change_state": "PENDING" },
-    { "id": "change-V13", "title": "Final gate: trio + full VR diff + Lighthouse a11y", "change_state": "PENDING" }
+    {
+      "id": "change-V01",
+      "title": "VR harness consolidation: extend bible-vs-port PATHS + RUNBOOK + pre-commit",
+      "change_state": "DONE"
+    },
+    {
+      "id": "change-V02",
+      "title": "Per-page RULE-0 audit template + audit ledger + W1-W8 inventory reconcile",
+      "change_state": "DONE"
+    },
+    {
+      "id": "change-V03",
+      "title": "Public/marketing surface — audit + extend bible-vs-port",
+      "change_state": "IN_PROGRESS"
+    },
+    {
+      "id": "change-V04",
+      "title": "Auth/payment surface — audit + VR",
+      "change_state": "PENDING"
+    },
+    {
+      "id": "change-V05",
+      "title": "App core — audit + authed VR (Dashboard, MobileMore, Settings)",
+      "change_state": "PENDING"
+    },
+    {
+      "id": "change-V06",
+      "title": "Sales — audit + authed VR",
+      "change_state": "PENDING"
+    },
+    {
+      "id": "change-V07",
+      "title": "Operations — audit + authed VR",
+      "change_state": "PENDING"
+    },
+    {
+      "id": "change-V08",
+      "title": "Billing — audit + authed VR",
+      "change_state": "PENDING"
+    },
+    {
+      "id": "change-V09",
+      "title": "HotSeatHub — audit + authed VR",
+      "change_state": "PENDING"
+    },
+    {
+      "id": "change-V10",
+      "title": "Documents + Manual — audit + VR",
+      "change_state": "PENDING"
+    },
+    {
+      "id": "change-V11",
+      "title": "Drift remediation (fix systemic bugs in primitives — RULE 0.3)",
+      "change_state": "PENDING"
+    },
+    {
+      "id": "change-V12",
+      "title": "Pay down react-hooks/exhaustive-deps warnings",
+      "change_state": "PENDING"
+    },
+    {
+      "id": "change-V13",
+      "title": "Final gate: trio + full VR diff + Lighthouse a11y",
+      "change_state": "PENDING"
+    }
   ],
   "execution_order": [
-    ["change-V01", "change-V02"],
-    ["change-V03", "change-V04"],
-    ["change-V05", "change-V06", "change-V07", "change-V08", "change-V09", "change-V10"],
-    ["change-V11"],
-    ["change-V12"],
-    ["change-V13"]
+    [
+      "change-V01",
+      "change-V02"
+    ],
+    [
+      "change-V03",
+      "change-V04"
+    ],
+    [
+      "change-V05",
+      "change-V06",
+      "change-V07",
+      "change-V08",
+      "change-V09",
+      "change-V10"
+    ],
+    [
+      "change-V11"
+    ],
+    [
+      "change-V12"
+    ],
+    [
+      "change-V13"
+    ]
   ],
   "notes": "VR harness already exists (bible-vs-port deployed-vs-deployed drift + per-page toHaveScreenshot). Phase EXTENDS it, does not rebuild. Unauth-surface drift path has no blocker; authed-surface baselines need bible app run locally once."
 }
