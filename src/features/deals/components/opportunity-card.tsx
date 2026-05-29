@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { Trial } from '@/features/trials/entities';
 import { stageColorToCss } from '@/features/deals/business-rules/deal-kanban-buckets';
+import { isOwnerOrAdmin } from '@/shared/lib/role-mapping';
 import { useSalesActivities } from '@/features/deals/hooks/use-sales-activities';
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
 import { useTier1 } from '@/app/tier1-provider';
@@ -719,6 +720,7 @@ export function OpportunityCard({
           entityName={deal.case_name ?? 'this deal'}
           onDeleteTrial={onDeleteTrial}
           onDeleteTrialChildren={onDeleteTrialChildren}
+          isAdminOrOwner={isOwnerOrAdmin(userInfo?.company_role)}
         />
       )}
     </motion.div>

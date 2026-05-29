@@ -32,6 +32,18 @@ export function toLegacyRole(role: SchemaRole | string | null | undefined): Lega
   }
 }
 
+/**
+ * True when the role is owner/admin in EITHER casing — the schema's TitleCase
+ * (`'Owner'`/`'Admin'`) or the legacy lowercase (`'owner'`/`'admin'`). Use this
+ * everywhere an owner/admin RBAC gate is needed so the convention is consistent
+ * regardless of which casing the calling surface happens to hold.
+ */
+export function isOwnerOrAdmin(role: string | null | undefined): boolean {
+  return (
+    role === 'Owner' || role === 'Admin' || role === 'owner' || role === 'admin'
+  );
+}
+
 export function toSchemaRole(role: LegacyRole | string | null | undefined): SchemaRole | null {
   switch (role) {
     case 'owner':

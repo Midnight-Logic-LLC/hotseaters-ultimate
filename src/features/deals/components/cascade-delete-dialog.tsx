@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Loader2, AlertTriangle, Trash2 } from 'lucide-react';
+import { Loader2, AlertTriangle, ShieldAlert, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -57,6 +57,12 @@ interface CascadeDeleteDialogProps {
   onDeleteTrial: (id: string) => Promise<void>;
   /** Delete the trial's child rows the trials-store owns. */
   onDeleteTrialChildren: (id: string) => Promise<void>;
+  /**
+   * Whether the acting user is an owner or admin. Bible RBAC parity: when a deal
+   * has dependent records, only an owner/admin may delete it — non-admins see a
+   * "ask an admin" notice instead of the Delete button.
+   */
+  isAdminOrOwner: boolean;
   onSuccess?: () => void;
 }
 
@@ -73,6 +79,7 @@ export function CascadeDeleteDialog({
   entityName,
   onDeleteTrial,
   onDeleteTrialChildren,
+  isAdminOrOwner,
   onSuccess,
 }: CascadeDeleteDialogProps) {
   const { countSalesActivitiesForTrial, deleteSalesActivitiesForTrial } = useSalesActivities();
@@ -141,6 +148,9 @@ export function CascadeDeleteDialog({
     ? (Object.entries(counts) as Array<[keyof DependentCounts, number]>).filter(([, c]) => c > 0)
     : [];
   const hasDependents = dependentEntries.length > 0;
+  // Bible RBAC parity: a deal with dependent records can only be deleted by an
+  // owner or admin. Non-admins see an "ask an admin" notice, no Delete button.
+  const blockedForNonAdmin = hasDependents && !isAdminOrOwner;
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -158,7 +168,7 @@ export function CascadeDeleteDialog({
                 Permanently delete <strong>{entityName}</strong>? This action cannot be undone.
               </>
             )}
-            {!loading && !loadError && counts && hasDependents && (
+            {!loading && !loadError && counts && hasDependents && !blockedForNonAdmin && (
               <>
                 Deleting <strong>{entityName}</strong> will also remove the dependent records listed
                 below. This action cannot be undone.
@@ -176,10 +186,20 @@ export function CascadeDeleteDialog({
           )}
           {!loading && !loadError && counts && hasDependents && (
             <div className="space-y-3">
-              <div className="flex items-start gap-2 p-3 rounded-md bg-red-50 border border-red-200">
-                <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-red-900">This cannot be undone.</div>
-              </div>
+              {blockedForNonAdmin ? (
+                <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 border border-amber-200">
+                  <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-amber-900">
+                    <strong>{entityName}</strong> has dependent records. Only an owner or admin can
+                    delete it. Please ask an admin for help.
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 p-3 rounded-md bg-red-50 border border-red-200">
+                  <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-red-900">This cannot be undone.</div>
+                </div>
+              )}
               <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2">
                 <div className="text-xs font-semibold text-stone-700 mb-1.5">Dependent records:</div>
                 <ul className="text-xs text-stone-700 space-y-0.5">
@@ -196,7 +216,7 @@ export function CascadeDeleteDialog({
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-          {!loading && !loadError && counts && (
+          {!loading && !loadError && counts && !blockedForNonAdmin && (
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();

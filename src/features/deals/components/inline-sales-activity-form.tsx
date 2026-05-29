@@ -40,8 +40,13 @@ import {
 } from '@/components/ui/alert-dialog';
 
 import { useSalesActivities, type SalesActivityRow } from '@/features/deals/hooks/use-sales-activities';
-import { QuickPickDateChips } from './quick-pick-date-chips';
+import { isOwnerOrAdmin } from '@/shared/lib/role-mapping';
+import {
+  formatPickedDateForUtcStorage,
+  parseStoredDateForLocalPicker,
+} from '@/features/deals/business-rules/activity-date-utils';
 import { NoNextStepConfirmModal } from './no-next-step-confirm-modal';
+import { CompleteActivitySteps } from './complete-activity-steps';
 
 type ActivityType = 'Call' | 'Email' | 'Meeting' | 'Note';
 
@@ -57,22 +62,6 @@ const ACTIVITY_TYPES: Array<{
   { value: 'Meeting', icon: Users, color: 'text-green-600', activeBg: 'bg-green-100', border: 'border-green-300' },
   { value: 'Note', icon: StickyNote, color: 'text-stone-500', activeBg: 'bg-stone-100', border: 'border-stone-300' },
 ];
-
-// Store date-only values as UTC-safe yyyy-MM-dd strings, but hydrate them into
-// the calendar as LOCAL dates so the picked day never shifts.
-function parseStoredDateForLocalPicker(dateStr: string): Date | undefined {
-  if (!dateStr) return undefined;
-  const [year, month, day] = dateStr.slice(0, 10).split('-').map(Number);
-  if (year == null || month == null || day == null) return undefined;
-  return new Date(year, month - 1, day);
-}
-
-function formatPickedDateForUtcStorage(dateObj: Date): string {
-  const year = dateObj.getFullYear();
-  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const day = String(dateObj.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 export type InlineFormMode = 'new' | 'edit' | 'complete';
 
@@ -419,208 +408,33 @@ export function InlineSalesActivityForm({
       )}
 
       {mode === 'complete' && (
-        <div className="space-y-2">
-          {/* Step 1 — What happened? */}
-          <div className="flex gap-2">
-            <div className="flex-col items-center pt-0.5 hidden sm:flex">
-              <div
-                className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-                style={{ backgroundColor: 'var(--theme-brand-primary)', color: 'white' }}
-              >
-                1
-              </div>
-              {wantsNext && (
-                <div className="w-px flex-1 mt-1" style={{ backgroundColor: 'var(--theme-stone-200)' }} />
-              )}
-            </div>
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <div
-                  className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 sm:hidden"
-                  style={{ backgroundColor: 'var(--theme-brand-primary)', color: 'white' }}
-                >
-                  1
-                </div>
-                <span
-                  className="text-[11px] font-semibold uppercase tracking-wider"
-                  style={{ color: 'var(--theme-stone-500)' }}
-                >
-                  What happened?
-                </span>
-              </div>
-              {activity?.content && (
-                <div
-                  className="text-xs px-2.5 py-2 rounded-md border-l-2 italic"
-                  style={{
-                    borderColor: 'var(--theme-stone-300)',
-                    backgroundColor: 'var(--theme-stone-50, #fafaf9)',
-                    color: 'var(--theme-stone-600)',
-                  }}
-                >
-                  <span className="not-italic font-medium" style={{ color: 'var(--theme-stone-500)' }}>
-                    Planned:{' '}
-                  </span>
-                  {activity.content}
-                </div>
-              )}
-              <Textarea
-                value={completionNote}
-                onChange={(e) => setCompletionNote(e.target.value)}
-                placeholder="Notes on what happened (optional)..."
-                rows={2}
-                autoFocus
-                className="text-xs"
-                style={{
-                  borderRadius: 'var(--theme-input-radius)',
-                  borderWidth: 'var(--theme-input-border)',
-                  backgroundColor: 'var(--theme-input-bg)',
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Step 2 — What's next? */}
-          <div className="flex gap-2">
-            <div className="flex-col items-center pt-0.5 hidden sm:flex">
-              <div
-                className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-                style={{
-                  backgroundColor: wantsNext ? 'var(--theme-brand-primary)' : 'var(--theme-stone-300)',
-                  color: 'white',
-                }}
-              >
-                2
-              </div>
-            </div>
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <div
-                    className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 sm:hidden"
-                    style={{
-                      backgroundColor: wantsNext ? 'var(--theme-brand-primary)' : 'var(--theme-stone-300)',
-                      color: 'white',
-                    }}
-                  >
-                    2
-                  </div>
-                  <span
-                    className="text-[11px] font-semibold uppercase tracking-wider"
-                    style={{ color: 'var(--theme-stone-500)' }}
-                  >
-                    What&apos;s next?
-                  </span>
-                </div>
-                {wantsNext ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWantsNext(false);
-                      setNextDateError(false);
-                      setNextNotesError(false);
-                    }}
-                    className="text-[11px] underline hover:no-underline"
-                    style={{ color: 'var(--theme-stone-500)' }}
-                  >
-                    Skip — no next step
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setWantsNext(true)}
-                    className="text-[11px] underline hover:no-underline"
-                    style={{ color: 'var(--theme-brand-primary)' }}
-                  >
-                    + Schedule next step
-                  </button>
-                )}
-              </div>
-              {wantsNext && (
-                <div className="space-y-1.5">
-                  {renderTypePicker(nextType, setNextType, true)}
-                  <QuickPickDateChips
-                    value={nextDate}
-                    onPick={(v) => {
-                      setNextDate(v);
-                      setNextDateError(false);
-                    }}
-                  />
-                  <Popover>
-                    <PopoverTrigger
-                      render={
-                        <Button
-                          variant="outline"
-                          className="text-xs h-8 w-32 px-2 justify-between"
-                          style={{
-                            borderRadius: 'var(--theme-input-radius)',
-                            borderWidth: 'var(--theme-input-border)',
-                            backgroundColor: 'var(--theme-input-bg)',
-                            borderColor: nextDateError ? '#dc2626' : undefined,
-                            color: nextDate ? 'var(--theme-stone-700)' : 'var(--theme-stone-400)',
-                          }}
-                        >
-                          <span>{nextDate || 'Pick date'}</span>
-                          <CalendarIcon className="w-3.5 h-3.5" />
-                        </Button>
-                      }
-                    />
-                    <PopoverContent className="w-auto p-0" align="end">
-                      <Calendar
-                        mode="single"
-                        {...(() => {
-                          const sel = parseStoredDateForLocalPicker(nextDate);
-                          return sel ? { selected: sel } : {};
-                        })()}
-                        onSelect={(selectedDate) => {
-                          if (selectedDate) {
-                            setNextDate(formatPickedDateForUtcStorage(selectedDate));
-                            setNextDateError(false);
-                          }
-                        }}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  {nextDateError && (
-                    <p className="text-[11px]" style={{ color: '#dc2626' }}>
-                      Pick a date for the next step.
-                    </p>
-                  )}
-                  <Textarea
-                    value={nextNotes}
-                    onChange={(e) => {
-                      setNextNotes(e.target.value);
-                      setNextNotesError(false);
-                    }}
-                    placeholder="Next step notes..."
-                    rows={2}
-                    className="text-xs"
-                    style={{
-                      borderRadius: 'var(--theme-input-radius)',
-                      borderWidth: 'var(--theme-input-border)',
-                      backgroundColor: 'var(--theme-input-bg)',
-                      borderColor: nextNotesError ? '#dc2626' : undefined,
-                    }}
-                  />
-                  {nextNotesError && (
-                    <p className="text-[11px]" style={{ color: '#dc2626' }}>
-                      Add a note for the next step.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <CompleteActivitySteps
+          plannedContent={activity?.content}
+          completionNote={completionNote}
+          onCompletionNoteChange={setCompletionNote}
+          wantsNext={wantsNext}
+          onWantsNextChange={setWantsNext}
+          nextType={nextType}
+          onNextTypeChange={setNextType}
+          nextDate={nextDate}
+          onNextDateChange={setNextDate}
+          nextNotes={nextNotes}
+          onNextNotesChange={setNextNotes}
+          nextDateError={nextDateError}
+          onNextDateErrorChange={setNextDateError}
+          nextNotesError={nextNotesError}
+          onNextNotesErrorChange={setNextNotesError}
+          renderTypePicker={renderTypePicker}
+        />
       )}
 
       {/* Submit area — varies by mode + selected date */}
       <div className="flex items-center gap-1.5 pt-1 flex-wrap">
         {mode === 'edit' && activity?.id && (() => {
           const isCompleted = activity.status === 'done';
-          const role = userInfo?.company_role;
-          const isOwnerOrAdmin = role === 'Owner' || role === 'Admin' || role === 'owner' || role === 'admin';
+          const ownerOrAdmin = isOwnerOrAdmin(userInfo?.company_role);
           const isAuthor = activity.author_id === userInfo?.id;
-          const canDelete = isCompleted ? isOwnerOrAdmin : isAuthor || isOwnerOrAdmin;
+          const canDelete = isCompleted ? ownerOrAdmin : isAuthor || ownerOrAdmin;
           if (!canDelete) return null;
           return (
             <Button

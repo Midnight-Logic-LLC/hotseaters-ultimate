@@ -66,7 +66,7 @@ type PhaseGridProps =
       removeInstance: (id: number | string) => void;
     };
 
-type WizardServicesGridProps = SharedGridProps & PhaseGridProps;
+export type WizardServicesGridProps = SharedGridProps & PhaseGridProps;
 
 export function WizardServicesGrid(props: WizardServicesGridProps) {
   const {
