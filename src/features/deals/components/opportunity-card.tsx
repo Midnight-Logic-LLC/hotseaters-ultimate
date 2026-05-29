@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { Trial } from '@/features/trials/entities';
 import { stageColorToCss } from '@/features/deals/business-rules/deal-kanban-buckets';
+import { getDaysLabel } from '@/features/deals/business-rules/activity-date-utils';
 import { isOwnerOrAdmin } from '@/shared/lib/role-mapping';
 import { useSalesActivities } from '@/features/deals/hooks/use-sales-activities';
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
@@ -116,7 +117,7 @@ export function OpportunityCard({
   const salesLead = deal
     ? consultants.find((c) => c.id === deal.consultant_id) ?? null
     : client
-      ? consultants.find((c) => c.id === (client as unknown as { sales_lead?: string }).sales_lead) ?? null
+      ? consultants.find((c) => c.id === client.sales_lead) ?? null
       : null;
 
   const openDetails = () => {
@@ -144,16 +145,7 @@ export function OpportunityCard({
     : undefined;
   const ActIcon = actInfo?.icon;
 
-  const getDaysLabel = (): string | null => {
-    if (!fuDate) return null;
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const target = new Date(`${fuDate}T00:00:00`);
-    const diff = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    if (diff < 0) return `${Math.abs(diff)}d overdue`;
-    if (diff === 0) return 'Today';
-    return `in ${diff}d`;
-  };
-  const daysLabel = getDaysLabel();
+  const daysLabel = getDaysLabel(fuDate);
 
   // ── Urgency styling (deal-attached only) ───────────────────────────────
   const days = deal?.daysUntilTrial ?? null;

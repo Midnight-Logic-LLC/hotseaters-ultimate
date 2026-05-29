@@ -10,6 +10,8 @@
  * Pure — no I/O. HotSeatersMVP is the bible.
  */
 
+import { differenceInCalendarDays } from 'date-fns';
+
 /**
  * Parse a stored `yyyy-MM-dd` (date-only) string into a LOCAL `Date` so the
  * calendar highlights the exact stored day, never the day before/after due to
@@ -31,4 +33,22 @@ export function formatPickedDateForUtcStorage(dateObj: Date): string {
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
   const day = String(dateObj.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * Relative-day label for a scheduled `yyyy-MM-dd` follow-up date, computed
+ * against today (calendar days, timezone-stable). Returns:
+ *   • `"<n>d overdue"` when the date is in the past,
+ *   • `"Today"` when it is today,
+ *   • `"in <n>d"` when it is in the future,
+ *   • `null` when no date is supplied.
+ */
+export function getDaysLabel(dateStr: string | null | undefined): string | null {
+  if (!dateStr) return null;
+  const target = parseStoredDateForLocalPicker(dateStr);
+  if (!target) return null;
+  const diff = differenceInCalendarDays(target, new Date());
+  if (diff < 0) return `${Math.abs(diff)}d overdue`;
+  if (diff === 0) return 'Today';
+  return `in ${diff}d`;
 }

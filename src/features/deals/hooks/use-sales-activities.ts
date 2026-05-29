@@ -24,16 +24,23 @@ import {
 import {
   fetchSalesActivitiesForCompany,
   fetchAttorneysForCompany,
+  fetchSalesActivitiesForTrial,
+  fetchSalesActivitiesForAttorney,
   createSalesActivity,
   updateSalesActivity,
   deleteSalesActivity,
   getAttorney,
   setAttorneyProspectStatus,
+  createAttorney,
+  createClient,
   countSalesActivitiesForTrial,
   deleteSalesActivitiesForTrial,
   type SalesActivityRow,
   type AttorneyRecord,
   type SalesActivityInsert,
+  type AttorneyInsert,
+  type ClientInsert,
+  type ClientRecord,
 } from '@/features/deals/stores/sales-activity-store';
 
 export type { SalesActivityRow, AttorneyRecord };
@@ -63,8 +70,16 @@ export interface UseSalesActivitiesResult {
     clientIdHint?: string | null,
   ) => Promise<SalesActivityAnchors>;
 
-  // ── attorney writes ──
+  // ── attorney / client writes (contact-wizard create paths) ──
   setAttorneyProspectStatus: (id: string, isActive: boolean) => Promise<void>;
+  createAttorney: (input: AttorneyInsert) => Promise<AttorneyRecord>;
+  createClient: (input: ClientInsert) => Promise<ClientRecord>;
+
+  // ── activity-history reads (deal or contact) ──
+  fetchActivitiesFor: (args: {
+    trialId?: string | null | undefined;
+    attorneyId?: string | null | undefined;
+  }) => Promise<SalesActivityRow[]>;
 
   // ── deal cascade-delete child cleanup ──
   countSalesActivitiesForTrial: (trialId: string) => Promise<number>;
@@ -166,6 +181,39 @@ export function useSalesActivities(): UseSalesActivitiesResult {
     [reload],
   );
 
+  const doCreateAttorney = useCallback(
+    async (input: AttorneyInsert): Promise<AttorneyRecord> => {
+      const created = await createAttorney(input);
+      reload();
+      return created;
+    },
+    [reload],
+  );
+
+  const doCreateClient = useCallback(
+    async (input: ClientInsert): Promise<ClientRecord> => {
+      const created = await createClient(input);
+      reload();
+      return created;
+    },
+    [reload],
+  );
+
+  const doFetchActivitiesFor = useCallback(
+    ({
+      trialId,
+      attorneyId,
+    }: {
+      trialId?: string | null | undefined;
+      attorneyId?: string | null | undefined;
+    }): Promise<SalesActivityRow[]> => {
+      if (trialId) return fetchSalesActivitiesForTrial(trialId);
+      if (attorneyId) return fetchSalesActivitiesForAttorney(attorneyId);
+      return Promise.resolve([]);
+    },
+    [],
+  );
+
   const prospects = useMemo(
     () => attorneys.filter((a) => a.is_active_prospect === true),
     [attorneys],
@@ -184,6 +232,9 @@ export function useSalesActivities(): UseSalesActivitiesResult {
       deleteSalesActivity: doDelete,
       resolveAnchors,
       setAttorneyProspectStatus: doSetProspect,
+      createAttorney: doCreateAttorney,
+      createClient: doCreateClient,
+      fetchActivitiesFor: doFetchActivitiesFor,
       countSalesActivitiesForTrial,
       deleteSalesActivitiesForTrial,
     }),
@@ -199,6 +250,9 @@ export function useSalesActivities(): UseSalesActivitiesResult {
       doDelete,
       resolveAnchors,
       doSetProspect,
+      doCreateAttorney,
+      doCreateClient,
+      doFetchActivitiesFor,
     ],
   );
 }

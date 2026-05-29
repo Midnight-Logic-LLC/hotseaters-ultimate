@@ -23,6 +23,7 @@ import {
   CalendarPlus, Calendar as CalendarIcon,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -237,6 +238,9 @@ export function InlineSalesActivityForm({
         // TODO: Google Tasks sync (backend automation, not ported).
       }
       onDone?.();
+    } catch (err: unknown) {
+      // Surface create/update/anchor failures; do NOT close the form on error.
+      toast.error(err instanceof Error ? err.message : 'Failed to save activity.');
     } finally {
       setIsPending(false);
     }

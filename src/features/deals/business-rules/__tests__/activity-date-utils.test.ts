@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   formatPickedDateForUtcStorage,
+  getDaysLabel,
   parseStoredDateForLocalPicker,
 } from '../activity-date-utils';
 
@@ -37,5 +38,33 @@ describe('formatPickedDateForUtcStorage', () => {
     const parsed = parseStoredDateForLocalPicker(original);
     expect(parsed).toBeDefined();
     expect(formatPickedDateForUtcStorage(parsed as Date)).toBe(original);
+  });
+});
+
+describe('getDaysLabel', () => {
+  // Build offset dates from "today" in the LOCAL zone so the assertion is
+  // timezone-stable, then format them the same way the app stores them.
+  const localDateStr = (offsetDays: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    return formatPickedDateForUtcStorage(d);
+  };
+
+  it('returns null for empty / nullish input', () => {
+    expect(getDaysLabel(null)).toBeNull();
+    expect(getDaysLabel(undefined)).toBeNull();
+    expect(getDaysLabel('')).toBeNull();
+  });
+
+  it('labels today as "Today"', () => {
+    expect(getDaysLabel(localDateStr(0))).toBe('Today');
+  });
+
+  it('labels a future date as "in <n>d"', () => {
+    expect(getDaysLabel(localDateStr(3))).toBe('in 3d');
+  });
+
+  it('labels a past date as "<n>d overdue"', () => {
+    expect(getDaysLabel(localDateStr(-2))).toBe('2d overdue');
   });
 });

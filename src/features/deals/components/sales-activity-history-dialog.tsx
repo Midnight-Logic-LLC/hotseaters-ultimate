@@ -26,10 +26,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ResponsiveModal } from '@/components/ui/responsive-modal';
 import {
-  fetchSalesActivitiesForTrial,
-  fetchSalesActivitiesForAttorney,
+  useSalesActivities,
   type SalesActivityRow,
-} from '@/features/deals/stores/sales-activity-store';
+} from '@/features/deals/hooks/use-sales-activities';
 
 const HISTORY_PAGE_SIZE = 50;
 
@@ -61,22 +60,20 @@ export function SalesActivityHistoryDialog({
   attorneyId,
   consultants = [],
 }: SalesActivityHistoryDialogProps) {
+  const { fetchActivitiesFor } = useSalesActivities();
+
   const [limit, setLimit] = useState(HISTORY_PAGE_SIZE);
   const [allRows, setAllRows] = useState<SalesActivityRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const filterValue = trialId || attorneyId || null;
-
   useEffect(() => {
-    if (!open || !filterValue) return;
+    if (!open || (!trialId && !attorneyId)) return;
     let cancelled = false;
     setIsLoading(true);
     setLimit(HISTORY_PAGE_SIZE);
     (async () => {
       try {
-        const rows = trialId
-          ? await fetchSalesActivitiesForTrial(trialId)
-          : await fetchSalesActivitiesForAttorney(attorneyId as string);
+        const rows = await fetchActivitiesFor({ trialId, attorneyId });
         if (!cancelled) setAllRows(rows);
       } catch {
         if (!cancelled) setAllRows([]);
@@ -87,7 +84,7 @@ export function SalesActivityHistoryDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, trialId, attorneyId, filterValue]);
+  }, [open, trialId, attorneyId, fetchActivitiesFor]);
 
   const activities = useMemo(() => allRows.slice(0, limit), [allRows, limit]);
   const hasMore = allRows.length > limit;

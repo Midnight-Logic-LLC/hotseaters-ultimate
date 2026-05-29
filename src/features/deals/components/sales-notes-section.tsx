@@ -16,7 +16,7 @@ import { useMemo, useState } from 'react';
 import {
   Phone, Mail, CalendarDays, StickyNote, CheckCircle2, Pencil, AlertTriangle,
 } from 'lucide-react';
-import { format, parseISO, differenceInCalendarDays } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/tooltip';
 
 import { useSalesActivities } from '@/features/deals/hooks/use-sales-activities';
+import { getDaysLabel } from '@/features/deals/business-rules/activity-date-utils';
 import { InlineSalesActivityForm, type InlineFormMode, type InlineFormUser } from './inline-sales-activity-form';
 import { ActivityToolbar } from './activity-toolbar';
 import { SalesActivityHistoryDialog, type HistoryConsultant } from './sales-activity-history-dialog';
@@ -71,16 +72,6 @@ export function SalesNotesSection({
   const isOverdue = !!fuDate && fuDate < todayStr;
   const isDueToday = fuDate === todayStr;
 
-  const getDaysLabel = (): string | null => {
-    if (!fuDate) return null;
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const target = new Date(`${fuDate}T00:00:00`);
-    const diff = differenceInCalendarDays(target, today);
-    if (diff < 0) return `${Math.abs(diff)}d overdue`;
-    if (diff === 0) return 'Today';
-    return `in ${diff}d`;
-  };
-
   const handleFormDone = () => setInlineFormMode(null);
 
   if (!attorneyId) {
@@ -98,7 +89,7 @@ export function SalesNotesSection({
     ? ACTIVITY_TYPE_ICONS[nextActivity.activity_type ?? 'Note'] ?? ACTIVITY_TYPE_ICONS.Note!
     : null;
   const ActIcon = actInfo?.icon;
-  const daysLabel = getDaysLabel();
+  const daysLabel = getDaysLabel(fuDate);
 
   return (
     <>

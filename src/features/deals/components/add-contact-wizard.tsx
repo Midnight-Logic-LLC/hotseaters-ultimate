@@ -20,6 +20,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, User, Building2, Search } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,10 +34,6 @@ import {
   useSalesActivities,
   type AttorneyRecord,
 } from '@/features/deals/hooks/use-sales-activities';
-import {
-  createAttorney,
-  createClient as createClientRow,
-} from '@/features/deals/stores/sales-activity-store';
 import { guessContactEmail } from '@/features/deals/business-rules/guess-contact-email';
 import { InlineSalesActivityForm, type InlineFormUser } from './inline-sales-activity-form';
 
@@ -66,7 +63,12 @@ const EMPTY_CONTACT: NewContactState = {
 export function AddContactWizard({ open, onOpenChange, userInfo, onCreated }: AddContactWizardProps) {
   const { clientTypes } = useTier1();
   const { clients } = useClientsList();
-  const { attorneys, setAttorneyProspectStatus, reload } = useSalesActivities();
+  const {
+    attorneys,
+    setAttorneyProspectStatus,
+    createAttorney,
+    createClient: createClientRow,
+  } = useSalesActivities();
 
   const [step, setStep] = useState(0);
   const [selectedAttorney, setSelectedAttorney] = useState<AttorneyRecord | null>(null);
@@ -129,7 +131,12 @@ export function AddContactWizard({ open, onOpenChange, userInfo, onCreated }: Ad
 
   const handleSelectContact = async (attorney: AttorneyRecord, clientId: string | null) => {
     // Path A: flip the existing contact to an active prospect.
-    await setAttorneyProspectStatus(attorney.id, true);
+    try {
+      await setAttorneyProspectStatus(attorney.id, true);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to select contact.');
+      return; // stay on the current step
+    }
     setSavedAttorneyId(attorney.id);
     setSavedClientId(clientId ?? attorney.client_id ?? null);
     setSelectedAttorney(attorney);
@@ -156,36 +163,40 @@ export function AddContactWizard({ open, onOpenChange, userInfo, onCreated }: Ad
 
   const saveContactAndFirm = async () => {
     // Path B (existing firm) or C (new firm), then create the attorney.
-    const existingFirm = clients.find(
-      (c) => (c.firm_name ?? '').toLowerCase() === newFirm.firm_name.trim().toLowerCase(),
-    );
-    let clientId: string;
-    if (existingFirm) {
-      clientId = existingFirm.id;
-    } else {
-      const created = await createClientRow({
-        company_id: companyId,
-        firm_name: newFirm.firm_name.trim(),
-        client_type_id: newFirm.client_type_id || null,
-        sales_lead: userInfo?.id ?? null,
-      });
-      clientId = created.id;
-    }
-    setSavedClientId(clientId);
+    try {
+      const existingFirm = clients.find(
+        (c) => (c.firm_name ?? '').toLowerCase() === newFirm.firm_name.trim().toLowerCase(),
+      );
+      let clientId: string;
+      if (existingFirm) {
+        clientId = existingFirm.id;
+      } else {
+        const created = await createClientRow({
+          company_id: companyId,
+          firm_name: newFirm.firm_name.trim(),
+          client_type_id: newFirm.client_type_id || null,
+          sales_lead: userInfo?.id ?? null,
+        });
+        clientId = created.id;
+      }
+      setSavedClientId(clientId);
 
-    const attorney = await createAttorney({
-      company_id: companyId,
-      client_id: clientId,
-      first_name: newContact.first_name.trim(),
-      last_name: newContact.last_name.trim(),
-      title: newContact.title.trim() || null,
-      email: newContact.email.trim() || null,
-      phone: newContact.phone.replace(/\D/g, '') || null,
-      is_active_prospect: true,
-    });
-    setSavedAttorneyId(attorney.id);
-    reload();
-    setStep(2);
+      const attorney = await createAttorney({
+        company_id: companyId,
+        client_id: clientId,
+        first_name: newContact.first_name.trim(),
+        last_name: newContact.last_name.trim(),
+        title: newContact.title.trim() || null,
+        email: newContact.email.trim() || null,
+        phone: newContact.phone.replace(/\D/g, '') || null,
+        is_active_prospect: true,
+      });
+      setSavedAttorneyId(attorney.id);
+      setStep(2);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save contact.');
+      // stay on the current step
+    }
   };
 
   const canAdvanceStep2 = (): boolean =>
@@ -441,10 +452,7 @@ export function AddContactWizard({ open, onOpenChange, userInfo, onCreated }: Ad
                     <button
                       key={client.id}
                       onClick={() =>
-                        handleSelectFirm(
-                          client.firm_name ?? '',
-                          (client as unknown as { client_type_id?: string | null }).client_type_id ?? null,
-                        )
+                        handleSelectFirm(client.firm_name ?? '', client.client_type_id ?? null)
                       }
                       className="flex items-center gap-2 w-full text-left px-3 py-2 hover:bg-stone-50 text-sm"
                     >
