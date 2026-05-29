@@ -52,17 +52,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { Trial } from '@/features/trials/entities';
 import { stageColorToCss } from '@/features/deals/business-rules/deal-kanban-buckets';
+import { ACTIVITY_TYPE_ICON } from './deal-card-types';
 import type {
   AttorneyRow,
   DealRow,
   SharedCardProps,
 } from './deal-card-types';
-
-const ACTIVITY_TYPE_ICON: Record<string, { icon: typeof Phone; color: string }> = {
-  Call: { icon: Phone, color: 'text-blue-600' },
-  Email: { icon: Mail, color: 'text-amber-600' },
-  Meeting: { icon: CalendarDays, color: 'text-green-600' },
-};
 
 interface OpportunityCardProps extends SharedCardProps {
   /** Deal mode (a sales-stage trial with derived daysUntilTrial). */
@@ -139,6 +134,7 @@ export function OpportunityCard({
     if (diff === 0) return 'Today';
     return `in ${diff}d`;
   };
+  const daysLabel = getDaysLabel();
 
   // ── Urgency styling (deal-attached only) ───────────────────────────────
   const days = deal?.daysUntilTrial ?? null;
@@ -160,7 +156,7 @@ export function OpportunityCard({
     'var(--theme-success)';
 
   const dealStage = deal ? pipelineStages.find((s) => s.id === deal.pipeline_stage_id) ?? null : null;
-  const stageAccent = stageColorToCss((dealStage as unknown as { color?: string } | null)?.color);
+  const stageAccent = stageColorToCss(dealStage?.color);
 
   const locationStr = deal
     ? deal.city && deal.state ? `${deal.city}, ${deal.state}` : deal.city || deal.state || ''
@@ -360,13 +356,13 @@ export function OpportunityCard({
                   >
                     {nextActivity.activity_type} — {fuDate && format(parseISO(`${fuDate}T00:00:00`), 'MMM d, yyyy')}
                   </span>
-                  {getDaysLabel() && (
+                  {daysLabel && (
                     <span
                       className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
                         isOverdue ? 'bg-red-100 text-red-700' : isDueToday ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'
                       }`}
                     >
-                      {getDaysLabel()}
+                      {daysLabel}
                     </span>
                   )}
                 </div>

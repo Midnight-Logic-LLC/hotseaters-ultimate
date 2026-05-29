@@ -20,7 +20,7 @@
  * HotSeatersMVP is the bible.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Search, Plus, User as UserIcon, Users, UserPlus, Briefcase } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
@@ -109,21 +109,35 @@ export function DealTrackerTab({
   // Force next_step on mobile; respect saved mode on desktop.
   const effectiveViewMode: DealViewMode = isMobile ? 'next_step' : viewMode;
 
-  const sharedCardProps: SharedCardProps = {
-    clients,
-    pipelineStages,
-    attorneys,
-    documents,
-    documentSigners,
-    consultants,
-    salesActivities,
-    showMyDeals,
-    onSelectTrial,
-    ...(onAddDealForContact ? { onAddDealForContact } : {}),
-  };
+  const sharedCardProps: SharedCardProps = useMemo(
+    () => ({
+      clients,
+      pipelineStages,
+      attorneys,
+      documents,
+      documentSigners,
+      consultants,
+      salesActivities,
+      showMyDeals,
+      onSelectTrial,
+      ...(onAddDealForContact ? { onAddDealForContact } : {}),
+    }),
+    [
+      clients,
+      pipelineStages,
+      attorneys,
+      documents,
+      documentSigners,
+      consultants,
+      salesActivities,
+      showMyDeals,
+      onSelectTrial,
+      onAddDealForContact,
+    ],
+  );
 
-  const filterDeals = (input: DealRow[]): DealRow[] => {
-    let result = input;
+  const filteredDeals = useMemo(() => {
+    let result = allDeals || [];
     if (!showMyDeals && selectedSalesPerson !== 'all') {
       result = result.filter((deal) => deal.consultant_id === selectedSalesPerson);
     }
@@ -139,23 +153,25 @@ export function DealTrackerTab({
       });
     }
     return result;
-  };
+  }, [allDeals, showMyDeals, selectedSalesPerson, searchTerm, clients]);
 
-  const filteredDeals = filterDeals(allDeals || []);
-
-  const filteredProspects = (prospectAttorneys || []).filter((a) => {
-    if (!showMyDeals && selectedSalesPerson !== 'all') {
-      const firm = clients.find((c) => c.id === a.client_id);
-      if ((firm as unknown as { sales_lead?: string } | undefined)?.sales_lead !== selectedSalesPerson) return false;
-    }
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      const firm = clients.find((c) => c.id === a.client_id);
-      const name = `${a.first_name || ''} ${a.last_name || ''}`.toLowerCase();
-      if (!name.includes(term) && !(firm?.firm_name || '').toLowerCase().includes(term)) return false;
-    }
-    return true;
-  });
+  const filteredProspects = useMemo(
+    () =>
+      (prospectAttorneys || []).filter((a) => {
+        if (!showMyDeals && selectedSalesPerson !== 'all') {
+          const firm = clients.find((c) => c.id === a.client_id);
+          if ((firm as unknown as { sales_lead?: string } | undefined)?.sales_lead !== selectedSalesPerson) return false;
+        }
+        if (searchTerm.trim()) {
+          const term = searchTerm.toLowerCase();
+          const firm = clients.find((c) => c.id === a.client_id);
+          const name = `${a.first_name || ''} ${a.last_name || ''}`.toLowerCase();
+          if (!name.includes(term) && !(firm?.firm_name || '').toLowerCase().includes(term)) return false;
+        }
+        return true;
+      }),
+    [prospectAttorneys, showMyDeals, selectedSalesPerson, searchTerm, clients],
+  );
 
   const isLostView = effectiveViewMode === 'sales_stage' && statusFilter === 'lost';
 

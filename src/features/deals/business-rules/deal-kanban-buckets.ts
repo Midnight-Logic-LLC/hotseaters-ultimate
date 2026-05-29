@@ -75,7 +75,7 @@ export function buildSalesStageColumns(
       key: `stage-${s.id}`,
       label: s.name,
       subtitle: null,
-      color: stageColorToCss((s as unknown as { color?: string }).color),
+      color: stageColorToCss(s.color),
       stageId: s.id,
     }));
 }

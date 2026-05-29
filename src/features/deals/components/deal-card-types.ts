@@ -12,9 +12,21 @@
  * HotSeatersMVP is the bible.
  */
 
+import { Phone, Mail, CalendarDays } from 'lucide-react';
+
 import type { Trial } from '@/features/trials/entities';
 import type { PipelineStage } from '@/shared/db/lookups-selectors';
 import type { ClientRow } from '@/features/clients/hooks/use-clients-list';
+
+/**
+ * Activity-type → icon + Tailwind color class. Single source consumed by both
+ * DealCard and OpportunityCard (bible parity for the next-activity display).
+ */
+export const ACTIVITY_TYPE_ICON: Record<string, { icon: typeof Phone; color: string }> = {
+  Call: { icon: Phone, color: 'text-blue-600' },
+  Email: { icon: Mail, color: 'text-amber-600' },
+  Meeting: { icon: CalendarDays, color: 'text-green-600' },
+};
 
 /** A deal is a Trial with a derived `daysUntilTrial`. */
 export interface DealRow extends Trial {

@@ -23,13 +23,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Trial } from '@/features/trials/entities';
 import { stageColorToCss } from '@/features/deals/business-rules/deal-kanban-buckets';
+import { ACTIVITY_TYPE_ICON } from './deal-card-types';
 import type { DealRow, SharedCardProps } from './deal-card-types';
-
-const ACTIVITY_TYPE_ICON: Record<string, { icon: typeof Phone; color: string }> = {
-  Call: { icon: Phone, color: 'text-blue-600' },
-  Email: { icon: Mail, color: 'text-amber-600' },
-  Meeting: { icon: CalendarDays, color: 'text-green-600' },
-};
 
 interface DealCardProps extends SharedCardProps {
   deal: DealRow;
@@ -83,6 +78,7 @@ export function DealCard({
     if (diff === 0) return 'Today';
     return `in ${diff}d`;
   };
+  const daysLabel = getDaysLabel();
 
   const salesStages = pipelineStages
     .filter((s) => s.type === 'sales')
@@ -174,7 +170,7 @@ export function DealCard({
                   padding: '2px 4px',
                   fontSize: '9px',
                   fontWeight: isActive ? 600 : 400,
-                  backgroundColor: isActive ? stageColorToCss((s as unknown as { color?: string }).color) : 'var(--theme-stone-100)',
+                  backgroundColor: isActive ? stageColorToCss(s.color) : 'var(--theme-stone-100)',
                   color: isActive ? 'white' : 'var(--theme-stone-400)',
                   borderRadius: i === 0 ? '4px 0 0 4px' : i === salesStages.length - 1 ? '0 4px 4px 0' : '0',
                 }}
@@ -238,9 +234,9 @@ export function DealCard({
                 >
                   {nextActivity.activity_type} — {fuDate && format(parseISO(`${fuDate}T00:00:00`), 'MMM d, yyyy')}
                 </span>
-                {getDaysLabel() && (
+                {daysLabel && (
                   <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${isOverdue ? 'bg-red-100 text-red-700' : isDueToday ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'}`}>
-                    {getDaysLabel()}
+                    {daysLabel}
                   </span>
                 )}
               </div>

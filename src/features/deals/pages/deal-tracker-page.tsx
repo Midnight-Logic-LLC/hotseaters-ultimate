@@ -67,7 +67,7 @@ function DealWizardStub({ onCancel }: { onCancel: () => void }) {
   return (
     <div className="rounded-lg border p-6" style={{ borderColor: 'var(--theme-stone-200)', color: 'var(--theme-stone-500)' }}>
       <p>Deal wizard arrives in change-D03.</p>
-      <button onClick={onCancel} style={{ marginTop: '1rem', color: 'var(--theme-stone-700)' }}>
+      <button type="button" onClick={onCancel} style={{ marginTop: '1rem', color: 'var(--theme-stone-700)' }}>
         Cancel
       </button>
     </div>
@@ -80,7 +80,7 @@ function AddContactWizardStub({ onCancel }: { onCancel: () => void }) {
   return (
     <div className="rounded-lg border p-6" style={{ borderColor: 'var(--theme-stone-200)', color: 'var(--theme-stone-500)' }}>
       <p>Add Contact wizard arrives in change-D04.</p>
-      <button onClick={onCancel} style={{ marginTop: '1rem', color: 'var(--theme-stone-700)' }}>
+      <button type="button" onClick={onCancel} style={{ marginTop: '1rem', color: 'var(--theme-stone-700)' }}>
         Cancel
       </button>
     </div>
