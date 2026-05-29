@@ -102,3 +102,29 @@ Two real issues, both now correctly diagnosed:
 2. **Port built against a 427-commit-stale bible** → bible refreshed to
    `29ae47e3`; marketing pages (and likely others) need re-porting vs current
    source. This is genuine rework scope, not a calibration artifact.
+
+## Post-Landing-re-port drift (2026-05-29, after commit 09ae5df deployed + ArgoCD roll)
+
+The Landing re-port (current-bible dark Hero+Features redesign) is LIVE and the
+headline drift COLLAPSED:
+
+| Surface | Before (stale port) | After (re-port live) |
+|---------|--------------------:|---------------------:|
+| `/` desktop | 79.58% | **8.62%** |
+| `/` mobile | 78.24% | **9.88%** |
+| `/Landing` desktop | 79.58% | **8.74%** |
+| `/Landing` mobile | 78.24% | **8.10%** |
+
+Confirmed live: deployed `/` renders the dark Hero+Features gradient
+(`rgb(12,30,61)`), bible headline + "Purpose-Built Features" subhead + "From
+Chaos to Clarity", #root=51,847 chars, 0 console errors. The residual ~8-10% is
+sub-pixel/font-render/image-scaling noise + minor deployed-bible-vs-source
+nuance, not a structural mismatch.
+
+### Remaining marketing drift (next re-port targets, same treatment as Landing)
+| Surface | Drift | Priority |
+|---------|------:|----------|
+| `/Pricing` (mobile 18.9% / desktop 17.8%) | ~18% | NEXT — re-port to current bible |
+| `/ReferralLanding` (15-17%) | ~16% | re-port/audit |
+| `/TermsOfService`, `/PrivacyPolicy` (7-13%) | 7-13% | policy-content audit (MDX, RULE 7) |
+| `/login`, auth utilities | ≤5% | 🟢 at/near parity |
