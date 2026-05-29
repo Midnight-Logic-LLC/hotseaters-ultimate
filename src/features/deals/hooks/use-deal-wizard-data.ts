@@ -22,7 +22,7 @@
  * HotSeatersMVP is the bible.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTier1 } from '@/app/tier1-provider';
 import { useCurrentCompany } from '@/features/auth/hooks/use-current-company';
 import { useServices, type ServiceRecord } from '@/features/company/hooks/use-services';
@@ -192,14 +192,9 @@ export function useDealWizardData({
     attorneysLoading ||
     (!!trialId && editLoading);
 
-  // Stable no-op currently; placeholder for future manual refetch wiring.
-  const _refetch = useCallback(() => {}, []);
-  void _refetch;
-
-  const createClientAction = useCallback(
-    (input: CreateClientInput) => createClient(input),
-    [],
-  );
+  // `createClient` is a stable module-level store fn, so it can be passed
+  // through directly (no useCallback / dependency dance needed).
+  const createClientAction = createClient;
 
   return {
     companyId,

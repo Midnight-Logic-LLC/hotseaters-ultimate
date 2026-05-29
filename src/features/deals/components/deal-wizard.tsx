@@ -19,12 +19,10 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { format, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
 import { ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import type { Trial } from '@/features/trials/entities';
 import { useDealWizardData } from '@/features/deals/hooks/use-deal-wizard-data';
 import type { DealWritePayload } from '@/features/deals/hooks/use-deals-trials-data';
@@ -34,10 +32,22 @@ import {
   calculateRetainer,
   type BuilderService,
 } from '@/features/deals/business-rules/build-trial-services';
+import {
+  hydrateServiceInstances,
+  filterSalesConsultants,
+  filterClientsForLead,
+  filterFrpClients,
+  filterContactsForClient,
+  resolveRate,
+  countDays,
+  travelCost,
+  computePreTrialSubtotal,
+} from './deal-wizard-helpers';
 import { WizardStep1ClientContact, type NewClientDraft } from './wizard-step1-client-contact';
+import { WizardStep4Footer } from './wizard-step4-footer';
 import { WizardStep2CaseDetails } from './wizard-step2-case-details';
-import { AvailableServicesColumn } from './available-services-column';
-import { WizardServiceStep } from './wizard-service-step';
+import { WizardServicesGrid } from './wizard-services-grid';
+import { WizardHeader } from './wizard-header';
 import { WizardDialogs, type ContractWarning } from './wizard-dialogs';
 import type {
   DealFormData,
@@ -103,6 +113,7 @@ export function DealWizard({
   const isEditing = !!trial;
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [dealData, setDealData] = useState<DealFormData>(() =>
     emptyDealData(preselectedClientId, preselectedContactId),
@@ -226,100 +237,14 @@ export function DealWizard({
     if (!trial || existingServices.length === 0 || services.length === 0) return;
     servicesLoadedRef.current = true;
 
-    const rows = existingServices
-      .filter((ts) => ts.trial_id === trial.id)
-      .sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
-
-    const preList: PreTrialServiceInstance[] = [];
-    const inList: InTrialServiceInstance[] = [];
-    const detectedOverrides: Record<string, number> = {};
-
-    rows.forEach((ts) => {
-      const service = services.find((s) => s.id === ts.service_id);
-      if (!service) return;
-      const expectedRate = calculateRate(service.id, service.base_rate, trial.client_id || '', null);
-      if (ts.rate != null && Math.abs(ts.rate - expectedRate) > 0.01) {
-        detectedOverrides[ts.id] = ts.rate;
-      }
-      const phase =
-        ts.service_phase ||
-        (ts.final_billing_method === 'split'
-          ? 'split'
-          : ts.final_billing_method === 'hourly'
-            ? 'pre_trial'
-            : 'in_trial');
-      const seg = ts.segment_id ? trialSegments.find((s) => s.id === ts.segment_id) : null;
-      const segStart = seg?.start_date || trial.start_date || '';
-
-      if (phase === 'split') {
-        const leadDays =
-          segStart && ts.start_date
-            ? Math.floor((parseISO(segStart).getTime() - parseISO(ts.start_date).getTime()) / 86400000)
-            : (service.default_lead_days ?? 0);
-        preList.push({
-          id: ts.id,
-          service_id: ts.service_id ?? '',
-          quantity: ts.pre_trial_estimated_hours ?? 1,
-          lead_days: leadDays,
-          split_billing: true,
-          custom_description: ts.custom_description ?? '',
-          travel_eligible: ts.travel_eligible || false,
-          estimated_travel_hours: ts.estimated_travel_hours ?? 0,
-          segment_id: ts.segment_id ?? null,
-        });
-        inList.push({
-          id: ts.id,
-          service_id: ts.service_id ?? '',
-          arrival_date: ts.start_date !== segStart ? ts.start_date : null,
-          split_billing: true,
-          pre_trial_hours: ts.pre_trial_estimated_hours ?? 1,
-          start_date: ts.start_date,
-          end_date: ts.end_date,
-          custom_description: ts.custom_description ?? '',
-          travel_eligible: ts.travel_eligible || false,
-          estimated_travel_hours: ts.estimated_travel_hours ?? 0,
-          segment_id: ts.segment_id ?? null,
-        });
-      } else if (phase === 'in_trial') {
-        inList.push({
-          id: ts.id,
-          service_id: ts.service_id ?? '',
-          arrival_date: ts.start_date !== segStart ? ts.start_date : null,
-          split_billing: false,
-          end_date: ts.end_date,
-          quantity: ts.final_billing_method === 'hourly' ? (ts.estimated_quantity ?? 1) : undefined,
-          // Preserve the in-trial offset (bible DealWizard.jsx ~L377) so
-          // buildTrialServices recomputes the correct start_date on next save.
-          days_before_trial: ts.days_before_trial ?? undefined,
-          custom_description: ts.custom_description ?? '',
-          travel_eligible: ts.travel_eligible || false,
-          estimated_travel_hours: ts.estimated_travel_hours ?? 0,
-          segment_id: ts.segment_id ?? null,
-        });
-      } else {
-        const leadDays =
-          segStart && ts.start_date
-            ? Math.floor((parseISO(segStart).getTime() - parseISO(ts.start_date).getTime()) / 86400000)
-            : (service.default_lead_days ?? 0);
-        const durationDays =
-          ts.start_date && ts.end_date
-            ? Math.floor((parseISO(ts.end_date).getTime() - parseISO(ts.start_date).getTime()) / 86400000) + 1
-            : (service.default_duration_days ?? 1);
-        preList.push({
-          id: ts.id,
-          service_id: ts.service_id ?? '',
-          quantity: ts.estimated_quantity ?? 1,
-          lead_days: leadDays,
-          duration_days: durationDays,
-          split_billing: false,
-          start_date: ts.start_date,
-          end_date: ts.end_date,
-          custom_description: ts.custom_description ?? '',
-          travel_eligible: ts.travel_eligible || false,
-          estimated_travel_hours: ts.estimated_travel_hours ?? 0,
-          segment_id: ts.segment_id ?? null,
-        });
-      }
+    const { preList, inList, detectedOverrides } = hydrateServiceInstances({
+      rows: existingServices,
+      trialId: trial.id,
+      trialStartDate: trial.start_date,
+      trialClientId: trial.client_id,
+      services,
+      trialSegments,
+      calculateRate,
     });
     setPreTrialServices(preList);
     setInTrialServices(inList);
@@ -341,41 +266,27 @@ export function DealWizard({
     !!trial && pipelineStages.find((s) => s.id === trial.pipeline_stage_id)?.type === 'operations';
 
   // Rate resolver — overrides → client overrides → client-type multiplier.
-  function calculateRate(
+  // Pure logic lives in deal-wizard-helpers (resolveRate); this thin closure
+  // binds the live deps so the existing call sites stay unchanged.
+  const calculateRate = (
     serviceId: string,
     baseRate: number,
     clientId: string,
     instanceId: number | string | null = null,
-  ): number {
-    if (instanceId !== null && overriddenRates[String(instanceId)] !== undefined) {
-      return overriddenRates[String(instanceId)]!;
-    }
-    if (clientId) {
-      const override = clientOverrides.find((o) => o.service_id === serviceId);
-      if (override && override.custom_rate != null) {
-        return typeof override.custom_rate === 'number'
-          ? override.custom_rate
-          : parseFloat(override.custom_rate) || baseRate;
-      }
-    }
-    const client = clients.find((c) => c.id === clientId);
-    const clientType = clientTypes.find((t) => t.id === client?.client_type_id);
-    return baseRate * (clientType?.multiplier || 1);
-  }
+  ): number =>
+    resolveRate({
+      serviceId,
+      baseRate,
+      clientId,
+      instanceId,
+      overriddenRates,
+      clientOverrides,
+      clients,
+      clientTypes,
+    });
 
-  function dayCount(start: string, end: string): number {
-    const s = new Date(`${start}T00:00:00`);
-    const e = new Date(`${end}T00:00:00`);
-    let total = Math.ceil((e.getTime() - s.getTime()) / 86400000) + 1;
-    if (!billForWeekends) {
-      let wc = 0;
-      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-        if (d.getDay() !== 0 && d.getDay() !== 6) wc++;
-      }
-      total = wc;
-    }
-    return total;
-  }
+  const dayCount = (start: string, end: string): number =>
+    countDays(start, end, billForWeekends);
 
   function calculateTrialDays(): number {
     if (!dealData.start_date || !dealData.end_date) return 1;
@@ -425,10 +336,7 @@ export function DealWizard({
   const calcTravelCost = (
     inst: { travel_eligible?: boolean | undefined; estimated_travel_hours?: number | null | undefined },
     svcRate: number,
-  ): number =>
-    inst.travel_eligible && (inst.estimated_travel_hours ?? 0) > 0
-      ? (inst.estimated_travel_hours ?? 0) * svcRate * travelMultiplier
-      : 0;
+  ): number => travelCost(inst, svcRate, travelMultiplier);
 
   // ── Service add / remove / update ──
   const addPreTrialService = (serviceId: string) => {
@@ -507,32 +415,19 @@ export function DealWizard({
       return next;
     });
 
-  // ── Sales-lead-scoped + FRP client lists ──
-  const salesConsultants = useMemo(
-    () => consultants.filter((c) => ['owner', 'admin', 'sales'].includes(c.company_role ?? '') && c.status === 'active'),
-    [consultants],
-  );
+  // ── Sales-lead-scoped + FRP client lists (logic in deal-wizard-helpers) ──
+  const salesConsultants = useMemo(() => filterSalesConsultants(consultants), [consultants]);
   const filteredClients = useMemo(
-    () =>
-      dealData.consultant_id
-        ? clients.filter((c) => c.id === dealData.client_id || c.sales_lead === dealData.consultant_id)
-        : clients,
+    () => filterClientsForLead(clients, dealData.consultant_id, dealData.client_id),
     [clients, dealData.consultant_id, dealData.client_id],
   );
-  const frpClients = useMemo(
-    () =>
-      clients.filter((c) => {
-        const ct = clientTypes.find((t) => t.id === c.client_type_id);
-        return ct?.name === 'Financially Responsible Party';
-      }),
-    [clients, clientTypes],
-  );
+  const frpClients = useMemo(() => filterFrpClients(clients, clientTypes), [clients, clientTypes]);
   const clientContacts = useMemo(
-    () => attorneys.filter((a) => a.client_id === dealData.client_id),
+    () => filterContactsForClient(attorneys, dealData.client_id),
     [attorneys, dealData.client_id],
   );
   const frpContacts = useMemo(
-    () => attorneys.filter((a) => a.client_id === dealData.frp_client_id),
+    () => filterContactsForClient(attorneys, dealData.frp_client_id),
     [attorneys, dealData.frp_client_id],
   );
 
@@ -551,6 +446,19 @@ export function DealWizard({
     return svcTotal + trvTotal;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preTrialServices, inTrialServices, services, dealData, overriddenRates, billForWeekends, trialSegments]);
+
+  const preTrialSubtotal = useMemo(
+    () =>
+      computePreTrialSubtotal({
+        instances: preTrialServices,
+        services,
+        clientId: dealData.client_id,
+        rateFor: calculateRate,
+        travelCostFor: calcTravelCost,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [preTrialServices, services, dealData.client_id, overriddenRates],
+  );
 
   const recalcRetainer = () =>
     setDealData((prev) => ({ ...prev, retainer_value: calculateRetainer(estimatedValue, companyDefaults) }));
@@ -594,6 +502,7 @@ export function DealWizard({
     };
 
     setSaving(true);
+    setSubmitError(null);
     try {
       await onSubmit(
         {
@@ -604,6 +513,13 @@ export function DealWizard({
         } as DealWritePayload,
         isEditing,
       );
+    } catch (err: unknown) {
+      // Save failed — surface it inline and keep the wizard open so the entered
+      // data isn't lost. The page-level onSubmit handler owns the toast +
+      // server reconcile (and re-throws to land here), so we don't toast twice.
+      const message =
+        err instanceof Error ? err.message : `Failed to ${isEditing ? 'update' : 'create'} deal`;
+      setSubmitError(message);
     } finally {
       setSaving(false);
     }
@@ -660,61 +576,21 @@ export function DealWizard({
     );
   }
 
+  const headerTitle = trial
+    ? `${mode === 'trial' ? 'Edit Trial' : 'Edit Deal'}: ${dealData.case_name || 'Untitled'}`
+    : `New Deal: ${dealData.case_name || 'Untitled'}`;
+
   return (
     <Card>
-      <CardHeader className="border-b border-stone-100">
-        <div className="flex items-center justify-between mb-4">
-          <CardTitle className="text-xl">
-            {trial
-              ? `${mode === 'trial' ? 'Edit Trial' : 'Edit Deal'}: ${dealData.case_name || 'Untitled'}`
-              : `New Deal: ${dealData.case_name || 'Untitled'}`}
-          </CardTitle>
-          <Button variant="outline" onClick={onCancel} disabled={busy}>
-            Cancel
-          </Button>
-        </div>
-        <div className="flex items-center justify-between">
-          {steps.map((step, idx) => (
-            <div key={step.number} className="contents">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => isEditing && setCurrentStep(step.number)}
-                  disabled={!isEditing}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold transition-all ${
-                    currentStep > step.number
-                      ? 'bg-green-600 text-white'
-                      : currentStep === step.number
-                        ? 'text-white'
-                        : 'bg-stone-200 text-stone-600'
-                  } ${isEditing ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
-                  style={
-                    currentStep === step.number
-                      ? { backgroundColor: 'var(--theme-brand-operations)' }
-                      : {}
-                  }
-                >
-                  {currentStep > step.number ? <CheckCircle2 className="w-5 h-5" /> : step.number}
-                </button>
-                <span
-                  className={`text-sm font-medium ${
-                    currentStep === step.number ? 'text-stone-900' : 'text-stone-500'
-                  }`}
-                >
-                  {step.title}
-                </span>
-              </div>
-              {idx < steps.length - 1 && (
-                <div
-                  className={`flex-1 h-0.5 mx-2 ${
-                    currentStep > step.number ? 'bg-green-600' : 'bg-stone-200'
-                  }`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      </CardHeader>
+      <WizardHeader
+        title={headerTitle}
+        steps={steps}
+        currentStep={currentStep}
+        isEditing={isEditing}
+        busy={busy}
+        onCancel={onCancel}
+        onStepClick={setCurrentStep}
+      />
 
       <CardContent className="p-6">
         {currentStep === 1 && (
@@ -765,219 +641,89 @@ export function DealWizard({
         )}
 
         {currentStep === 3 && (
-          <div className="grid lg:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="pb-3 border-b border-stone-200">
-                <h3 className="font-semibold text-stone-900">Available Pre-Trial Services</h3>
-                <p className="text-xs text-stone-600 mt-1">Services before trial begins</p>
-              </div>
-              <AvailableServicesColumn
-                services={services}
-                serviceCategories={serviceCategories}
-                addedServiceIds={preTrialServices.map((s) => s.service_id)}
-                onAddService={addPreTrialService}
-                calculateRate={(id, base, cid) => calculateRate(id, base, cid)}
-                clientId={dealData.client_id}
-                clientOverrides={clientOverrides}
-                collapsedCategories={collapsedCategories}
-                onToggleCategory={toggleCategory}
-                serviceType="pre-trial"
-                existingServices={preTrialServices}
-                inTrialServices={inTrialServices}
-              />
-            </div>
-            <div className="space-y-4">
-              <div className="pb-3 border-b border-stone-200">
-                <h3 className="font-semibold text-stone-900">Selected Pre-Trial Services</h3>
-                <p className="text-xs text-stone-600 mt-1">
-                  {dealData.case_name} • Trial starts{' '}
-                  {dealData.start_date && format(parseISO(dealData.start_date), 'MMM d, yyyy')}
-                  {dealData.city && dealData.state && ` • ${dealData.city}, ${dealData.state}`}
-                </p>
-              </div>
-              <WizardServiceStep
-                phase="pre-trial"
-                instances={preTrialServices}
-                onReorder={setPreTrialServices}
-                updateInstance={updatePreTrialService}
-                removeInstance={removePreTrialService}
-                services={services}
-                dealData={dealData}
-                trialSegments={trialSegments}
-                calculateRate={calculateRate}
-                calculateServiceDays={calculateServiceDays}
-                dailyMinimumHours={dailyMinimumHours}
-                travelMultiplier={travelMultiplier}
-                overriddenRates={overriddenRates}
-                onRateOverride={onRateOverride}
-                onClearRateOverride={clearRateOverride}
-                calcTravelCost={calcTravelCost}
-              />
-              {preTrialServices.length > 0 && (
+          <WizardServicesGrid
+            phase="pre-trial"
+            dealData={dealData}
+            services={services}
+            serviceCategories={serviceCategories}
+            clientOverrides={clientOverrides}
+            collapsedCategories={collapsedCategories}
+            onToggleCategory={toggleCategory}
+            trialSegments={trialSegments}
+            calculateRate={calculateRate}
+            calculateServiceDays={calculateServiceDays}
+            dailyMinimumHours={dailyMinimumHours}
+            travelMultiplier={travelMultiplier}
+            overriddenRates={overriddenRates}
+            onRateOverride={onRateOverride}
+            onClearRateOverride={clearRateOverride}
+            calcTravelCost={calcTravelCost}
+            preTrialServices={preTrialServices}
+            inTrialServices={inTrialServices}
+            onAddService={addPreTrialService}
+            onReorder={setPreTrialServices}
+            updateInstance={updatePreTrialService}
+            removeInstance={removePreTrialService}
+            footer={
+              preTrialServices.length > 0 ? (
                 <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
                   <div className="flex items-center justify-between font-semibold">
                     <span className="text-stone-900">Pre-Trial Subtotal:</span>
                     <span className="text-green-600 text-lg">
-                      $
-                      {preTrialServices
-                        .reduce((sum, ps) => {
-                          const svc = services.find((s) => s.id === ps.service_id);
-                          if (!svc) return sum;
-                          const r = calculateRate(svc.id, svc.base_rate, dealData.client_id, ps.id);
-                          return sum + r * (ps.quantity || 1) + calcTravelCost(ps, r);
-                        }, 0)
-                        .toLocaleString()}
+                      ${preTrialSubtotal.toLocaleString()}
                     </span>
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
+              ) : null
+            }
+          />
         )}
 
         {currentStep === 4 && (
-          <div className="grid lg:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="pb-3 border-b border-stone-200">
-                <h3 className="font-semibold text-stone-900">Available In-Trial Services</h3>
-                <p className="text-xs text-stone-600 mt-1">Services during trial</p>
-              </div>
-              <AvailableServicesColumn
-                services={services}
-                serviceCategories={serviceCategories}
-                addedServiceIds={inTrialServices.map((s) => s.service_id)}
-                onAddService={addInTrialService}
-                calculateRate={(id, base, cid) => calculateRate(id, base, cid)}
-                clientId={dealData.client_id}
-                clientOverrides={clientOverrides}
-                collapsedCategories={collapsedCategories}
-                onToggleCategory={toggleCategory}
-                serviceType="in-trial"
-                existingServices={preTrialServices}
-                inTrialServices={inTrialServices}
-              />
-            </div>
-            <div className="space-y-4">
-              <div className="pb-3 border-b border-stone-200">
-                <h3 className="font-semibold text-stone-900">Selected In-Trial Services</h3>
-                <p className="text-xs text-stone-600 mt-1">
-                  {dealData.case_name} •{' '}
-                  {dealData.start_date &&
-                    dealData.end_date &&
-                    `${format(parseISO(dealData.start_date), 'MMM d')} - ${format(
-                      parseISO(dealData.end_date),
-                      'MMM d, yyyy',
-                    )}`}
-                  {dealData.city && dealData.state && ` • ${dealData.city}, ${dealData.state}`}
-                </p>
-              </div>
-              <WizardServiceStep
-                phase="in-trial"
-                instances={inTrialServices}
-                onReorder={setInTrialServices}
-                updateInstance={updateInTrialService}
-                removeInstance={removeInTrialService}
-                services={services}
+          <WizardServicesGrid
+            phase="in-trial"
+            dealData={dealData}
+            services={services}
+            serviceCategories={serviceCategories}
+            clientOverrides={clientOverrides}
+            collapsedCategories={collapsedCategories}
+            onToggleCategory={toggleCategory}
+            trialSegments={trialSegments}
+            calculateRate={calculateRate}
+            calculateServiceDays={calculateServiceDays}
+            dailyMinimumHours={dailyMinimumHours}
+            travelMultiplier={travelMultiplier}
+            overriddenRates={overriddenRates}
+            onRateOverride={onRateOverride}
+            onClearRateOverride={clearRateOverride}
+            calcTravelCost={calcTravelCost}
+            preTrialServices={preTrialServices}
+            inTrialServices={inTrialServices}
+            onAddService={addInTrialService}
+            onReorder={setInTrialServices}
+            updateInstance={updateInTrialService}
+            removeInstance={removeInTrialService}
+            footer={
+              <WizardStep4Footer
                 dealData={dealData}
-                trialSegments={trialSegments}
-                calculateRate={calculateRate}
-                calculateServiceDays={calculateServiceDays}
-                dailyMinimumHours={dailyMinimumHours}
-                travelMultiplier={travelMultiplier}
-                overriddenRates={overriddenRates}
-                onRateOverride={onRateOverride}
-                onClearRateOverride={clearRateOverride}
-                calcTravelCost={calcTravelCost}
+                setDealData={setDealData}
+                defaultDailyMinimumHours={companyDefaults.default_daily_minimum_hours}
+                billForWeekends={billForWeekends}
+                setBillForWeekends={setBillForWeekends}
+                trialDays={calculateTrialDays()}
+                estimatedValue={estimatedValue}
+                retainerEnabled={retainerEnabled}
+                setRetainerEnabled={setRetainerEnabled}
+                recalcRetainer={recalcRetainer}
               />
-              <div className="space-y-3 pt-3 border-t border-stone-200">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2">
-                    <Label
-                      htmlFor="override_daily_minimum_hours"
-                      className="text-xs text-stone-600 whitespace-nowrap"
-                    >
-                      Daily Min Hours:
-                    </Label>
-                    <Input
-                      id="override_daily_minimum_hours"
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      value={dealData.override_daily_minimum_hours}
-                      onChange={(e) =>
-                        setDealData({ ...dealData, override_daily_minimum_hours: e.target.value })
-                      }
-                      placeholder={`${companyDefaults.default_daily_minimum_hours}`}
-                      className="h-7 text-xs w-16"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="billForWeekends"
-                      checked={billForWeekends}
-                      onChange={(e) => setBillForWeekends(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 rounded"
-                    />
-                    <Label htmlFor="billForWeekends" className="cursor-pointer text-xs text-stone-700">
-                      Bill weekends ({calculateTrialDays()} {billForWeekends ? 'total' : 'weekday'} days)
-                    </Label>
-                  </div>
-                </div>
-              </div>
-              <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-2">
-                <div className="flex items-center justify-between font-semibold pt-2 border-t border-indigo-200">
-                  <span className="text-stone-900">Estimated Total:</span>
-                  <span className="text-green-600 text-lg">${estimatedValue.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between pt-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="retainerEnabled"
-                      checked={retainerEnabled}
-                      onChange={(e) => {
-                        setRetainerEnabled(e.target.checked);
-                        if (!e.target.checked) setDealData((p) => ({ ...p, retainer_value: 0 }));
-                        else recalcRetainer();
-                      }}
-                      className="w-4 h-4 text-indigo-600 rounded"
-                    />
-                    <Label htmlFor="retainerEnabled" className="text-sm text-stone-600 cursor-pointer">
-                      Retainer:
-                    </Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={recalcRetainer}
-                      className="h-7 w-7 p-0"
-                      disabled={!retainerEnabled}
-                    >
-                      ↻
-                    </Button>
-                    <div className="relative w-32">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-stone-500">
-                        $
-                      </span>
-                      <Input
-                        id="retainer_value"
-                        type="number"
-                        step="100"
-                        min="0"
-                        value={dealData.retainer_value}
-                        onChange={(e) => setDealData({ ...dealData, retainer_value: e.target.value })}
-                        className="h-7 text-xs pl-5 text-right bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        disabled={!retainerEnabled}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+            }
+          />
+        )}
+
+        {submitError && (
+          <p className="mt-4 text-sm text-red-600" role="alert">
+            {submitError}
+          </p>
         )}
 
         <div className="flex justify-between mt-6 pt-4 border-t">

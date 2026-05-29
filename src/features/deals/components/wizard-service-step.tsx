@@ -155,11 +155,12 @@ export function WizardServiceStep(props: WizardServiceStepProps) {
     const oldIndex = ids.indexOf(String(active.id));
     const newIndex = ids.indexOf(String(over.id));
     if (oldIndex < 0 || newIndex < 0) return;
-    if (props.phase === 'pre-trial') {
-      props.onReorder(arrayMove(props.instances, oldIndex, newIndex));
-    } else {
-      props.onReorder(arrayMove(props.instances, oldIndex, newIndex));
-    }
+    // `props` is a discriminated union on `phase`; cast the reorder handler to
+    // a permissive shape so the single call type-checks for either variant
+    // (the runtime array is always the matching instance type).
+    (props.onReorder as (next: typeof props.instances) => void)(
+      arrayMove(props.instances, oldIndex, newIndex),
+    );
   };
 
   const emptyState = (

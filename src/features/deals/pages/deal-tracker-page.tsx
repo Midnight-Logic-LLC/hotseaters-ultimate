@@ -27,6 +27,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { differenceInDays } from 'date-fns';
+import { toast } from 'sonner';
 
 import { useDealsTrialsData } from '@/features/deals/hooks/use-deals-trials-data';
 import { useClientsList } from '@/features/clients/hooks/use-clients-list';
@@ -90,7 +91,7 @@ function TrialDetailsStub({ trial, onClose }: { trial: Trial; onClose: () => voi
 }
 
 function trialIsHSH(trial: Trial): boolean {
-  return !!(trial as unknown as Record<string, unknown>).isHSH;
+  return 'isHSH' in trial && !!(trial as Record<string, unknown>).isHSH;
 }
 
 // ─── Main page component ─────────────────────────────────────────────────────
@@ -137,23 +138,35 @@ export function DealTrackerPage() {
     updateStage,
     createDeal,
     updateDeal,
+    invalidate,
   } = useDealsTrialsData({ scope: 'deals' });
   const { clients } = useClientsList();
 
   // Wizard submit → create or update the deal (D03). Returns the trial so the
-  // wizard can reuse it (e.g. return-to-details on edit).
+  // wizard can reuse it (e.g. return-to-details on edit). On failure we surface
+  // a toast, keep the wizard open (don't clear showForm), and invalidate so any
+  // partial write reconciles from server state, then re-throw so the wizard's
+  // own catch can show its inline error too.
   const handleWizardSubmit = useCallback(
     async (payload: DealWritePayload, isEditing: boolean): Promise<Trial> => {
-      const result = isEditing
-        ? await updateDeal(payload as DealWritePayload & { id: string })
-        : await createDeal(payload);
-      setShowForm(false);
-      if (isEditing && editingTrial) setSelectedTrial(result);
-      else setSelectedTrial(null);
-      setEditingTrial(null);
-      return result;
+      try {
+        const result = isEditing
+          ? await updateDeal(payload as DealWritePayload & { id: string })
+          : await createDeal(payload);
+        setShowForm(false);
+        if (isEditing && editingTrial) setSelectedTrial(result);
+        else setSelectedTrial(null);
+        setEditingTrial(null);
+        return result;
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : `Failed to ${isEditing ? 'update' : 'create'} deal`;
+        toast.error(message);
+        invalidate();
+        throw err;
+      }
     },
-    [createDeal, updateDeal, editingTrial],
+    [createDeal, updateDeal, editingTrial, invalidate],
   );
 
   // Sync selectedTrial when live data patches arrive.

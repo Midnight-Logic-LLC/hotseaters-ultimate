@@ -18,6 +18,9 @@ import type {
   InTrialServiceInstance,
 } from '@/features/deals/components/deal-wizard-types';
 
+/** Milliseconds per day — shared across the wizard's date-diff math. */
+export const MS_PER_DAY = 86_400_000;
+
 /** Minimal service-registry shape the builder reads. */
 export interface BuilderService {
   id: string;
@@ -198,7 +201,7 @@ export function buildTrialServices(ctx: BuildContext): BuiltTrialService[] {
       if (data.split_billing && segStart && data.end_date) {
         const start = new Date(`${segStart}T00:00:00`);
         const end = new Date(`${seg?.end_date || data.end_date}T00:00:00`);
-        serviceDays = Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1;
+        serviceDays = Math.ceil((end.getTime() - start.getTime()) / MS_PER_DAY) + 1;
         if (!billForWeekends) {
           let wc = 0;
           for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -225,7 +228,7 @@ export function buildTrialServices(ctx: BuildContext): BuiltTrialService[] {
     if (data.arrival_date && dealData.start_date) {
       const ad = parseISO(data.arrival_date);
       const ts = parseISO(dealData.start_date);
-      if (ad < ts) daysBefore = Math.ceil((ts.getTime() - ad.getTime()) / 86400000);
+      if (ad < ts) daysBefore = Math.ceil((ts.getTime() - ad.getTime()) / MS_PER_DAY);
     }
 
     const finalBillingMethod: BuiltTrialService['final_billing_method'] = data.split_billing

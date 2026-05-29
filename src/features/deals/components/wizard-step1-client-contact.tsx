@@ -22,6 +22,7 @@
 
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -80,11 +81,12 @@ function NewClientInlineForm({
   onCancel,
 }: {
   clientTypes: LookupRow[];
-  onSubmit: (draft: NewClientDraft) => void;
+  onSubmit: (draft: NewClientDraft) => Promise<void>;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<NewClientDraft>({ firm_name: '', client_type_id: '' });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   return (
     <div className="p-4 border border-stone-200 rounded-lg space-y-3 bg-stone-50">
       <Input
@@ -116,7 +118,16 @@ function NewClientInlineForm({
           disabled={!draft.firm_name || saving}
           onClick={() => {
             setSaving(true);
-            void Promise.resolve(onSubmit(draft)).finally(() => setSaving(false));
+            setError(null);
+            // The caller's onCreateClient can reject (store write fails); surface
+            // it instead of swallowing, and keep the form open so the user can retry.
+            void Promise.resolve(onSubmit(draft))
+              .catch((err: unknown) => {
+                const message = err instanceof Error ? err.message : 'Failed to create client';
+                setError(message);
+                toast.error(message);
+              })
+              .finally(() => setSaving(false));
           }}
           style={{ backgroundColor: 'var(--theme-brand-primary)', color: 'white' }}
           className="hover:opacity-90 transition-opacity"
@@ -127,6 +138,7 @@ function NewClientInlineForm({
           Cancel
         </Button>
       </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   );
 }

@@ -510,9 +510,9 @@ export function WizardStep2CaseDetails({
                 />
               </SelectTrigger>
               <SelectContent style={SELECT_CONTENT_STYLE}>
-                {venueSuggestions.map((venue, idx) => (
+                {venueSuggestions.map((venue) => (
                   <SelectItem
-                    key={idx}
+                    key={venue.courthouse}
                     value={venue.courthouse}
                     className={venue.isExisting ? 'bg-yellow-50 font-medium' : ''}
                   >
@@ -619,9 +619,9 @@ export function WizardStep2CaseDetails({
                   />
                 </SelectTrigger>
                 <SelectContent style={SELECT_CONTENT_STYLE}>
-                  {courtSuggestions.map((court, idx) => (
+                  {courtSuggestions.map((court) => (
                     <SelectItem
-                      key={idx}
+                      key={court.court}
                       value={court.court}
                       className={court.isExisting ? 'bg-yellow-50 font-medium' : ''}
                     >
@@ -708,9 +708,9 @@ export function WizardStep2CaseDetails({
                   />
                 </SelectTrigger>
                 <SelectContent style={SELECT_CONTENT_STYLE}>
-                  {judgeSuggestions.map((judge, idx) => (
+                  {judgeSuggestions.map((judge) => (
                     <SelectItem
-                      key={idx}
+                      key={judge.judge}
                       value={judge.judge}
                       className={judge.isExisting ? 'bg-yellow-50 font-medium' : ''}
                     >
