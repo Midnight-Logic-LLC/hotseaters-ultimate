@@ -38,7 +38,10 @@ import type {
   ChartInvoiceRow,
   ChartPaymentRow,
 } from '@/features/deals/business-rules/revenue-projection-chart-data';
-import type { TrialRow } from '@/features/sales/components/revenue-projections-types';
+import type {
+  TrialRow,
+  DetailedRecord,
+} from '@/features/sales/components/revenue-projections-types';
 
 // ─── Types (verbatim from Sales.jsx / SalesPage) ─────────────────────────────
 
@@ -54,6 +57,12 @@ interface TrialService {
   service_name?: string | null;
 }
 
+// TODO(types): the entity `Trial` (features/trials/entities) declares
+// `company_id`, `bill_for_weekends`, and `is_sample` as required/non-null,
+// whereas the projection math treats trials as a loose, partly-nullable
+// field-bag (and `task.trial` is also populated from the HSH stub path).
+// Swapping this local stub for the entity type cascades into many
+// field-access + object-construction fixes that risk the math — deferred.
 interface Trial {
   id: string;
   case_name?: string | null;
@@ -102,23 +111,6 @@ interface CompanyData {
   annual_revenue_target?: number | null;
   monthly_breakeven?: number | null;
   show_debug_info?: boolean | null;
-}
-
-// ─── Detail record shape (passed to RevenueProjectionsTab) ───────────────────
-
-interface DetailedRecord {
-  taskDate: string;
-  billingDateKey: string;
-  dealTrial: string;
-  taskName: string;
-  dateRange: string;
-  dailyValue: number;
-  daysAssigned: number;
-  projectedValue: number;
-  fullValue: number;
-  dailyHshPayout: number;
-  isHSH: boolean;
-  probability?: number;
 }
 
 // ─── Helpers (verbatim from Bible Projections.jsx) ───────────────────────────
@@ -225,22 +217,24 @@ export function ProjectionsPage() {
   const collections = EMPTY_PAYMENTS;
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Local cast mirrors SalesPage / Projections.jsx shape
-  const companyExtras = (t1Company ?? {}) as {
-    show_debug_info?: boolean | null;
-  };
-  const company: CompanyData | null = t1Company
-    ? {
-        fiscal_year_start_month: t1Company.fiscal_year_start_month ?? null,
-        invoice_period: t1Company.invoice_period ?? null,
-        weekly_billing_day: t1Company.weekly_billing_day ?? null,
-        monthly_billing_date: t1Company.monthly_billing_date ?? null,
-        per_trial_billing_days_after_end: t1Company.per_trial_billing_days_after_end ?? null,
-        annual_revenue_target: t1Company.annual_revenue_target ?? null,
-        monthly_breakeven: t1Company.monthly_breakeven ?? null,
-        show_debug_info: companyExtras.show_debug_info ?? null,
-      }
-    : null;
+  // Local cast mirrors SalesPage / Projections.jsx shape. Memoized on the
+  // Tier-1 company identity so the large projection-math useMemo below (which
+  // depends on `company`) doesn't re-run every render — mirrors the
+  // fyStartTime→fyStart stabilization pattern used in the tab.
+  const company = useMemo<CompanyData | null>(() => {
+    if (!t1Company) return null;
+    const companyExtras = t1Company as { show_debug_info?: boolean | null };
+    return {
+      fiscal_year_start_month: t1Company.fiscal_year_start_month ?? null,
+      invoice_period: t1Company.invoice_period ?? null,
+      weekly_billing_day: t1Company.weekly_billing_day ?? null,
+      monthly_billing_date: t1Company.monthly_billing_date ?? null,
+      per_trial_billing_days_after_end: t1Company.per_trial_billing_days_after_end ?? null,
+      annual_revenue_target: t1Company.annual_revenue_target ?? null,
+      monthly_breakeven: t1Company.monthly_breakeven ?? null,
+      show_debug_info: companyExtras.show_debug_info ?? null,
+    };
+  }, [t1Company]);
 
   // Load preferences once from the real user_info jsonb bag — bible
   // Projections.jsx lines 28–35. Mirrors D03 deal-tracker's prefsLoadedRef
@@ -296,38 +290,6 @@ export function ProjectionsPage() {
         let dailyRevenue: number | { isSplit: true; preTrialDailyRevenue: number; inTrialDailyRevenue: number; preTrialDays: number; inTrialDays: number };
         let dailyRevenueFull: number | { isSplit: true; preTrialDailyRevenue: number; inTrialDailyRevenue: number; preTrialDays: number; inTrialDays: number };
 
-        if (ts.final_billing_method === 'split' && trialStartDate) {
-          const daysBeforeTrial = Math.max(
-            0,
-            Math.ceil(
-              (trialStartDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-            ),
-          );
-          const daysInTrial = Math.max(
-            0,
-            Math.ceil(
-              (endDate.getTime() - trialStartDate.getTime()) / (1000 * 60 * 60 * 24),
-            ) + 1,
-          );
-          dailyRevenueFull = {
-            isSplit: true,
-            preTrialDailyRevenue: ts.pre_trial_projected_daily_revenue ?? 0,
-            inTrialDailyRevenue: ts.in_trial_projected_daily_revenue ?? 0,
-            preTrialDays: daysBeforeTrial,
-            inTrialDays: daysInTrial,
-          };
-          dailyRevenue = {
-            isSplit: true,
-            preTrialDailyRevenue: 0,
-            inTrialDailyRevenue: 0,
-            preTrialDays: daysBeforeTrial,
-            inTrialDays: daysInTrial,
-          };
-        } else {
-          dailyRevenueFull = ts.projected_daily_revenue ?? 0;
-          dailyRevenue = 0;
-        }
-
         const hshAssignment = hiringCompanyAssignments.find(
           sa => sa.trial_service_id === ts.id,
         );
@@ -346,20 +308,37 @@ export function ProjectionsPage() {
         }
 
         if (ts.final_billing_method === 'split' && trialStartDate) {
-          const dr = dailyRevenue as {
-            isSplit: true;
-            preTrialDailyRevenue: number;
-            inTrialDailyRevenue: number;
-            preTrialDays: number;
-            inTrialDays: number;
+          const daysBeforeTrial = Math.max(
+            0,
+            Math.ceil(
+              (trialStartDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+            ),
+          );
+          const daysInTrial = Math.max(
+            0,
+            Math.ceil(
+              (endDate.getTime() - trialStartDate.getTime()) / (1000 * 60 * 60 * 24),
+            ) + 1,
+          );
+          const preTrialFull = ts.pre_trial_projected_daily_revenue ?? 0;
+          const inTrialFull = ts.in_trial_projected_daily_revenue ?? 0;
+          dailyRevenueFull = {
+            isSplit: true,
+            preTrialDailyRevenue: preTrialFull,
+            inTrialDailyRevenue: inTrialFull,
+            preTrialDays: daysBeforeTrial,
+            inTrialDays: daysInTrial,
           };
-          const drf = dailyRevenueFull as typeof dr;
-          dr.preTrialDailyRevenue =
-            (drf.preTrialDailyRevenue - dailyHshPayoutValue) * probability;
-          dr.inTrialDailyRevenue =
-            (drf.inTrialDailyRevenue - dailyHshPayoutValue) * probability;
+          dailyRevenue = {
+            isSplit: true,
+            preTrialDailyRevenue: (preTrialFull - dailyHshPayoutValue) * probability,
+            inTrialDailyRevenue: (inTrialFull - dailyHshPayoutValue) * probability,
+            preTrialDays: daysBeforeTrial,
+            inTrialDays: daysInTrial,
+          };
         } else {
-          const drFull = dailyRevenueFull as number;
+          const drFull = ts.projected_daily_revenue ?? 0;
+          dailyRevenueFull = drFull;
           dailyRevenue = (drFull - dailyHshPayoutValue) * probability;
         }
 

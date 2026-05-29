@@ -43,6 +43,7 @@ import {
 } from '@/features/deals/business-rules/revenue-projection-chart-data';
 import type { DetailLevel } from '@/features/deals/business-rules/revenue-detail-aggregator';
 import type { PipelineStage } from '@/shared/db/lookups-selectors';
+import { readCssVar } from '@/shared/lib/css-vars';
 import { YearSelector } from './year-selector';
 import { RevenueDataTable } from './revenue-data-table';
 import { RevenueProjectionTooltip, type RevenueProjectionTooltipProps } from './revenue-projection-tooltip';
@@ -54,11 +55,6 @@ import type {
 } from './revenue-projections-types';
 
 const STACK_KEYS = ['revenue', 'unpaid', 'projected', 'fullPotentialDelta'] as const;
-
-function readVar(name: string, fallback: string): string {
-  if (typeof document === 'undefined') return fallback;
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-}
 
 // Custom bar shape: round top corners only when this bar is the topmost
 // visible segment in the stack (bible RoundedTopBar, lines 12–28). Typed loose
@@ -235,8 +231,8 @@ export function RevenueProjectionsTab({
     goalPerPeriod,
   ]);
 
-  const successColor = readVar('--theme-success', '#059669');
-  const successLight = readVar('--theme-success-light', '#DCFCE7');
+  const successColor = readCssVar('--theme-success', '#059669');
+  const successLight = readCssVar('--theme-success-light', '#DCFCE7');
   const roundedBar = makeRoundedTopBar(STACK_KEYS);
 
   const renderControls = () => (

@@ -11,6 +11,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { readCssVar } from '@/shared/lib/css-vars';
 import { DetailLevelSlider } from './detail-level-slider';
 import {
   aggregateUnpaid,
@@ -38,11 +39,6 @@ interface RevenueDataTableProps {
   onDetailLevelChange?: (value: DetailLevel) => void;
 }
 
-function readVar(name: string, fallback: string): string {
-  if (typeof document === 'undefined') return fallback;
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-}
-
 function fmt(val: number | undefined): string {
   return val
     ? `$${val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
@@ -61,8 +57,8 @@ export function RevenueDataTable({
   const [isOpen, setIsOpen] = useState(false);
   const [expandedPeriods, setExpandedPeriods] = useState<Record<number, boolean>>({});
 
-  const successColor = readVar('--theme-success', '#059669');
-  const successLight = readVar('--theme-success-light', '#DCFCE7');
+  const successColor = readCssVar('--theme-success', '#059669');
+  const successLight = readCssVar('--theme-success-light', '#DCFCE7');
 
   const togglePeriod = (idx: number) => {
     setExpandedPeriods((prev) => ({ ...prev, [idx]: !prev[idx] }));

@@ -90,6 +90,19 @@ function buildBaseRows(
   input: BuildChartDataInput,
 ): ChartRow[] {
   const { detailedRecords, invoices, payments, caseNames } = input;
+
+  // Pre-parse each item's date ONCE up front, rather than re-parsing inside the
+  // per-period filter (was parseISO'd twice per item per period). `null` marks
+  // a missing/empty date so the period filter skips it.
+  const parsedPayments = payments.map((p) => ({
+    payment: p,
+    date: p.payment_date ? parseISO(p.payment_date) : null,
+  }));
+  const parsedInvoices = invoices.map((inv) => ({
+    invoice: inv,
+    date: inv.invoice_date ? parseISO(inv.invoice_date) : null,
+  }));
+
   return periods.map((period) => {
     const row: ChartRow = {
       month: period.label,
@@ -100,21 +113,15 @@ function buildBaseRows(
       fullPotentialDelta: 0,
     };
 
-    const periodPayments = payments.filter(
-      (p) =>
-        p.payment_date &&
-        parseISO(p.payment_date) >= period.start &&
-        parseISO(p.payment_date) <= period.end,
-    );
+    const periodPayments = parsedPayments
+      .filter((p) => p.date && p.date >= period.start && p.date <= period.end)
+      .map((p) => p.payment);
     row.revenue = periodPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
     row._payments = periodPayments;
 
-    const periodInvoices = invoices.filter(
-      (inv) =>
-        inv.invoice_date &&
-        parseISO(inv.invoice_date) >= period.start &&
-        parseISO(inv.invoice_date) <= period.end,
-    );
+    const periodInvoices = parsedInvoices
+      .filter((inv) => inv.date && inv.date >= period.start && inv.date <= period.end)
+      .map((inv) => inv.invoice);
     const unpaidInvoices = periodInvoices.filter((inv) => inv.status !== 'paid');
     row.unpaid = unpaidInvoices.reduce((sum, i) => sum + (i.total || 0), 0);
     row._unpaidInvoices = unpaidInvoices;

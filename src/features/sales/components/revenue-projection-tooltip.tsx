@@ -17,17 +17,13 @@ import {
   type DetailLevel,
   type DetailItem,
 } from '@/features/deals/business-rules/revenue-detail-aggregator';
+import { readCssVar } from '@/shared/lib/css-vars';
 import type {
   ChartRow,
   ClientRow,
   TrialRow,
   RevenueInvoiceRow,
 } from './revenue-projections-types';
-
-function readVar(name: string, fallback: string): string {
-  if (typeof document === 'undefined') return fallback;
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-}
 
 interface TooltipPayloadEntry {
   payload?: ChartRow;
@@ -91,8 +87,8 @@ export function RevenueProjectionTooltip({
   const dataPoint = payload[0]?.payload;
   if (!dataPoint) return null;
 
-  const successColor = readVar('--theme-success', '#059669');
-  const successLight = readVar('--theme-success-light', '#DCFCE7');
+  const successColor = readCssVar('--theme-success', '#059669');
+  const successLight = readCssVar('--theme-success-light', '#DCFCE7');
 
   const rawProjectedCases = caseNames
     .map((c) => ({ name: c, value: (dataPoint[`proj_${c}`] as number) || 0 }))
