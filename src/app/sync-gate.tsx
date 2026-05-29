@@ -120,7 +120,7 @@ export function SyncGate({ children }: PropsWithChildren) {
             // lost, skip the PGlite call here.
           } catch (err) {
             // Best-effort cleanup; log and proceed.
-            // eslint-disable-next-line no-console
+             
             console.warn('[sync-gate] cleanup error', err);
           }
           handlesRef.current = {};
@@ -205,7 +205,7 @@ export function SyncGate({ children }: PropsWithChildren) {
           db: bootRes.db,
         });
       } catch (err) {
-        // eslint-disable-next-line no-console
+         
         console.error('[sync-gate] bootstrap failed', err);
         setBoot({
           phase: 'error',

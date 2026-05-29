@@ -203,11 +203,16 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'error',
     },
   },
-  // ── Test files — relax React hooks rule (Playwright/Vitest fixtures, not React) ──
+  // ── Test files — relax rules that conflict with test idioms ──
+  // - rules-of-hooks: Playwright/Vitest fixtures are not React hooks.
+  // - consistent-type-imports: Vitest's `importOriginal<typeof import('…')>()`
+  //   and `ReturnType<typeof import('…').fn>` mock typings are the documented
+  //   idiom and cannot be expressed with a top-level `import type`.
   {
     files: ['tests/**/*.{ts,tsx}', 'src/**/*.{spec,test}.{ts,tsx}', 'src/**/__tests__/**/*.{ts,tsx}'],
     rules: {
       'react-hooks/rules-of-hooks': 'off',
+      '@typescript-eslint/consistent-type-imports': 'off',
     },
   },
 );

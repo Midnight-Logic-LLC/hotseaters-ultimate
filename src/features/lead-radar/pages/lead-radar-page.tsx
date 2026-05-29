@@ -63,7 +63,7 @@ function useLeadRadarData(companyId: string | null) {
       setLeads(l);
       setPendingActivities(a);
       setAttorneys(atty);
-    } catch (_err) {
+    } catch {
       // silently degrade — data shows empty state rather than crashing
     } finally {
       setIsLoading(false);

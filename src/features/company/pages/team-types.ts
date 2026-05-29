@@ -5,9 +5,10 @@
  * HotSeatersMVP is the bible.
  */
 
-import React from 'react';
+import type React from 'react';
 import { Crown, Shield, Briefcase, User } from 'lucide-react';
 import type { TeamMember } from '@/features/company/hooks/use-team';
+import type { LookupRow } from '@/shared/db/lookups-selectors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ export function formatPhoneNumber(phone: string): string {
   return phone;
 }
 
-export function getTierColor(tier: import('@/shared/db/lookups-selectors').LookupRow | undefined): string {
+export function getTierColor(tier: LookupRow | undefined): string {
   if (!tier) return 'bg-stone-100 text-stone-700';
   const multiplier = tier.multiplier ?? 0;
   if (multiplier >= 1.2) return 'bg-purple-100 text-purple-700';

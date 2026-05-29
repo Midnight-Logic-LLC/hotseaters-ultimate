@@ -68,7 +68,7 @@ export function LastRouteTracker(): null {
       ).catch((err: unknown) => {
         // Bible Layout.jsx:464 swallows write failures with a warn — match.
         const msg = err instanceof Error ? err.message : String(err);
-        // eslint-disable-next-line no-console
+         
         console.warn('LastRouteTracker: failed to save lastViewedPage:', msg);
       });
     }, DEBOUNCE_MS);

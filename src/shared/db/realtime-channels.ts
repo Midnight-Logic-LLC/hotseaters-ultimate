@@ -127,7 +127,7 @@ async function handleUserInfoChange(
       keys.map((k) => row[k]),
     );
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[realtime-channels] user_info upsert failed:', err);
   }
 }
@@ -156,7 +156,7 @@ async function handleCompanyChange(
       keys.map((k) => row[k]),
     );
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error('[realtime-channels] company upsert failed:', err);
   }
 }

@@ -84,7 +84,7 @@ export function useTeam(companyId: string | null): UseTeamResult {
       inviteError,
       updateMember,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [rows, loading, invitePending, inviteError],
   );
 }
