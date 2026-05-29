@@ -117,6 +117,34 @@ beforeEach(() => {
   mockUseTier1.mockReset();
 });
 
+describe('useDashboardWidgets — is_sales third leg (bible Dashboard.jsx:57)', () => {
+  it('shows attention banner for an is_sales trial_consultant', () => {
+    // Bible: `isOwner || isSales || userInfo?.is_sales === true`. A non-owner /
+    // non-sales user flagged is_sales must still see the Needs-Attention banner.
+    mockUseTier1.mockReturnValue({
+      role: 'trial_consultant',
+      userInfo: { is_sales: true },
+      company: null,
+    });
+    const { result } = renderHook(() => useDashboardWidgets());
+    const ids = result.current.map((w) => w.id);
+    expect(ids).toContain('needs-attention-banner');
+    // Revenue-only surfaces still stay hidden for the trial_consultant role.
+    expect(ids).not.toContain('kpi-revenue-ytd');
+  });
+
+  it('keeps attention banner hidden for a trial_consultant without is_sales', () => {
+    mockUseTier1.mockReturnValue({
+      role: 'trial_consultant',
+      userInfo: { is_sales: false },
+      company: null,
+    });
+    const { result } = renderHook(() => useDashboardWidgets());
+    const ids = result.current.map((w) => w.id);
+    expect(ids).not.toContain('needs-attention-banner');
+  });
+});
+
 describe('useDashboardWidgets — role × flag matrix', () => {
   for (const row of MATRIX) {
     const label = `${row.role ?? '(undefined)'} + post=${row.flags.marketplace_post_jobs}`;
