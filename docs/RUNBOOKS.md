@@ -724,6 +724,25 @@ Flip `FEATURE_FLAG_ENABLED = true` once the migration lands. Zero other changes.
 
 ---
 
+## R-14 — Enable the local pre-commit gate
+
+Husky is intentionally not installed (friction across IDEs / Tauri desktop
+builds). The gate is opt-in per clone. Enable it once:
+
+```bash
+cp .githooks/pre-commit.example .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+The hook runs `pnpm lint --cache` + `pnpm lint:rules` (boundaries + RLS
+coherence) before every commit and blocks on error. This is what stops lint
+debt from accumulating silently across commits — the lesson from the
+`hotseaters-page-parity-port` reflection, where 8 wave commits skipped lint and
+let 31 errors pile up. Typecheck + tests stay out of pre-commit for speed; run
+the full trio (`pnpm typecheck && pnpm lint && pnpm test`) before pushing.
+
+---
+
 ## See also
 
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md)

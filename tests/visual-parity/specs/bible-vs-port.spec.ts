@@ -21,7 +21,19 @@ import pixelmatch from 'pixelmatch';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-const PATHS = ['/', '/login', '/accept-invite?token=fake', '/pending-approval', '/account-rejected'];
+const PATHS = [
+  // Unauth surfaces — deployed-vs-deployed drift, no session required.
+  '/',
+  '/Landing',
+  '/Pricing',
+  '/PrivacyPolicy',
+  '/TermsOfService',
+  '/ReferralLanding',
+  '/login',
+  '/accept-invite?token=fake',
+  '/pending-approval',
+  '/account-rejected',
+];
 const BIBLE = 'https://hotseaters.com';
 const PORT = 'https://hotseaters-ultimate.prometheusags.ai';
 
