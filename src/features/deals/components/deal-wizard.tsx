@@ -104,9 +104,16 @@ export function DealWizard({
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
 
+  const [dealData, setDealData] = useState<DealFormData>(() =>
+    emptyDealData(preselectedClientId, preselectedContactId),
+  );
+
+  // Feed the LIVE selected client (dealData.client_id) into the data hook so
+  // clientOverrides + rates reload when the user changes the client in step 1.
+  // Falls back to the preselected id until the form initializes.
   const data = useDealWizardData({
     trialId: trial?.id ?? null,
-    clientId: preselectedClientId,
+    clientId: dealData.client_id || preselectedClientId,
   });
   const {
     services,
@@ -121,11 +128,8 @@ export function DealWizard({
     trialSegments,
     companyDefaults,
     companyId,
+    createClient,
   } = data;
-
-  const [dealData, setDealData] = useState<DealFormData>(() =>
-    emptyDealData(preselectedClientId, preselectedContactId),
-  );
   const [dateRange, setDateRange] = useState<DateRangeValue | undefined>(undefined);
   const [activeRangePicker, setActiveRangePicker] = useState<RangePickerSide>('from');
   const [hasFRP, setHasFRP] = useState(false);
@@ -284,6 +288,9 @@ export function DealWizard({
           split_billing: false,
           end_date: ts.end_date,
           quantity: ts.final_billing_method === 'hourly' ? (ts.estimated_quantity ?? 1) : undefined,
+          // Preserve the in-trial offset (bible DealWizard.jsx ~L377) so
+          // buildTrialServices recomputes the correct start_date on next save.
+          days_before_trial: ts.days_before_trial ?? undefined,
           custom_description: ts.custom_description ?? '',
           travel_eligible: ts.travel_eligible || false,
           estimated_travel_hours: ts.estimated_travel_hours ?? 0,
@@ -603,10 +610,8 @@ export function DealWizard({
   };
 
   const handleCreateClient = async (draft: NewClientDraft): Promise<string> => {
-    // Inline client create goes through the clients store (RULE D seam). The
-    // store import is allowed here only because this hook-adjacent action needs
-    // a write path the wizard data hook doesn't expose; see report.
-    const { createClient } = await import('@/features/clients/stores/clients-store');
+    // Inline client create routes through the wizard data hook's createClient
+    // action (RULE B: components consume hooks; the hook owns the store seam).
     if (!companyId) throw new Error('No active company');
     return createClient({
       company_id: companyId,
@@ -730,6 +735,9 @@ export function DealWizard({
           />
         )}
 
+        {/* TODO(D05): when the trial start/end date changes here, cascade-
+            recompute already-scheduled service start/end dates. Bible applies
+            this offset shift on edit; deferred to D05 (no seam yet). */}
         {currentStep === 2 && (
           <WizardStep2CaseDetails
             dealData={dealData}

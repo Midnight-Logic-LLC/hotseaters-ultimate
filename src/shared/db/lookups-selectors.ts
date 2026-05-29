@@ -50,7 +50,11 @@ export interface LookupRow {
   company_id: string | null;
   /** Untyped passthrough of `extra_schema` for callers that need it. */
   extra_schema: Record<string, unknown> | null;
-  /** Lifted from `extra_schema.multiplier` when present and numeric. */
+  /**
+   * Lifted from `extra_schema.multiplier` (consultant_tier / client_tier) or
+   * `extra_schema.default_multiplier` (client_type), preferring whichever the
+   * scope's seed uses. See migration `20260523000003_v2_schema_settings_metadata.sql`.
+   */
   multiplier?: number;
 }
 
@@ -206,7 +210,10 @@ function selectGenericLookup(
   for (const row of rowsByScope(entities, scope, companyId)) {
     if (!row.id || !isActive(row)) continue;
     const extra = row.extra_schema ?? null;
-    const multiplier = readNumber(extra?.multiplier);
+    // client_type seeds the tier multiplier under `default_multiplier`;
+    // consultant_tier / client_tier use `multiplier`. Read both, prefer `multiplier`.
+    const multiplier =
+      readNumber(extra?.multiplier) ?? readNumber(extra?.default_multiplier);
     out.push({
       id: row.id,
       name: row.name ?? '',
@@ -299,7 +306,10 @@ function selectGenericLookupFromRows(
   for (const row of rowsByScopeFromArray(rows, scope, companyId)) {
     if (!row.id || !isActive(row)) continue;
     const extra = row.extra_schema ?? null;
-    const multiplier = readNumber(extra?.multiplier);
+    // client_type seeds the tier multiplier under `default_multiplier`;
+    // consultant_tier / client_tier use `multiplier`. Read both, prefer `multiplier`.
+    const multiplier =
+      readNumber(extra?.multiplier) ?? readNumber(extra?.default_multiplier);
     out.push({
       id: row.id,
       name: row.name ?? '',

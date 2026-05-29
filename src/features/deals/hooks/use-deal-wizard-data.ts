@@ -35,7 +35,9 @@ import {
 } from '@/features/lead-radar/stores/lead-radar-store';
 import {
   loadOverrides,
+  createClient,
   type ClientServiceOverrideRow,
+  type CreateClientInput,
 } from '@/features/clients/stores/clients-store';
 import { useTrialServices } from '@/features/trials/hooks/use-trial-services';
 import { useTrialContacts } from '@/features/trials/hooks/use-trial-contacts';
@@ -80,6 +82,12 @@ export interface UseDealWizardDataResult {
   existingServices: TrialService[];
   existingContacts: TrialContact[];
   trialSegments: TrialSegment[];
+  /**
+   * Inline client-create action. Hooks own the store seam (RULE C), so the
+   * wizard component routes its "create new client" path through here rather
+   * than importing the clients store directly (RULE B).
+   */
+  createClient: (input: CreateClientInput) => Promise<string>;
 }
 
 /** Map a user_info TeamMember into the bible's consultant shape. */
@@ -188,6 +196,11 @@ export function useDealWizardData({
   const _refetch = useCallback(() => {}, []);
   void _refetch;
 
+  const createClientAction = useCallback(
+    (input: CreateClientInput) => createClient(input),
+    [],
+  );
+
   return {
     companyId,
     companyDefaults,
@@ -203,5 +216,6 @@ export function useDealWizardData({
     existingServices,
     existingContacts,
     trialSegments,
+    createClient: createClientAction,
   };
 }
