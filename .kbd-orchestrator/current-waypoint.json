@@ -1,5 +1,5 @@
 {
-  "phase": "page-parity-verification-hardening",
+  "phase": "sales-deals-rearchitecture",
   "project": "hotseaters-ultimate",
   "status": "planned",
   "assessment_complete": true,
@@ -7,40 +7,34 @@
   "execution_complete": false,
   "reflection_complete": false,
   "change_backend": "openspec",
-  "assessment_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/assessment.md",
-  "plan_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/plan.md",
-  "progress_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/progress.json",
-  "active_wave": "V0 — Foundation (VR harness consolidation + audit ledger)",
-  "phase_summary": "Verification & parity-hardening of the already-shipped page port. 13 changes (V01-V13). Key revision from assessment: the VR harness already exists (bible-vs-port deployed-vs-deployed drift harness + per-page toHaveScreenshot specs). This phase EXTENDS it, does not rebuild. Unauth-surface drift has NO blocker (compares deployments). Only authed-surface committed baselines need the bible app run locally once.",
-  "next_step": "Run /kbd-execute page-parity-verification-hardening to begin. First changes (parallel): change-V01 (extend bible-vs-port PATHS + RUNBOOK + tracked pre-commit instruction) and change-V02 (RULE-0 audit template + ledger + W1-W8 inventory reconcile).",
+  "assessment_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/assessment.md",
+  "plan_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/plan.md",
+  "progress_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/progress.json",
+  "active_wave": "D0 — Deals-scope data layer (foundation)",
+  "phase_summary": "Re-port the port's Lead-based sales surface to the bible's Deals/Opportunities model (bible @ 29ae47e3). KEY: no schema migration needed — a 'deal' IS a trial at an early pipeline stage; the port trial entity already has pipeline_stage_id + deal_document_id and is synced. 9 changes D01-D09. UI/store re-port, not a data-model build.",
+  "next_step": "Run /kbd-execute sales-deals-rearchitecture to begin. First change: change-D01 (use-deals-trials-data hook over the trial entity + deal store). Then D02-D04 (DealTracker/Kanban, wizard, sales-activity) parallel-safe after D01.",
   "execution_order": [
-    ["change-V01", "change-V02"],
-    ["change-V03", "change-V04"],
-    ["change-V05", "change-V06", "change-V07", "change-V08", "change-V09", "change-V10"],
-    ["change-V11"],
-    ["change-V12"],
-    ["change-V13"]
+    ["change-D01"],
+    ["change-D02", "change-D03", "change-D04"],
+    ["change-D05", "change-D06", "change-D07"],
+    ["change-D08"],
+    ["change-D09"]
   ],
-  "vr_harness_facts": {
-    "bible_vs_port_spec": "tests/visual-parity/specs/bible-vs-port.spec.ts — live deployed-vs-deployed pixelmatch drift, 5 unauth surfaces, no baselines needed, soft-asserts <5%",
-    "per_page_specs": "tests/visual-parity/specs/<page>-parity.spec.ts — toHaveScreenshot vs committed baselines, uses seedSession auth fixture (owner/sales/trial)",
-    "deployed_bible": "https://hotseaters.com",
-    "deployed_port": "https://hotseaters-ultimate.prometheusags.ai",
-    "configs": ["tests/visual-parity/playwright.config.ts", "tests/visual-parity/bible-parity.config.ts"],
-    "scripts": ["pnpm test:bible-parity", "pnpm test:visual-parity", "pnpm test:visual-parity:update"]
+  "schema_finding": "No deal/opportunity migration required — deals are trials at early pipeline stages. See phase progress.json schema_finding.",
+  "open_decisions": [
+    "LeadRadar fate (D08): retire vs repurpose (default retire)",
+    "Sales-activity→deal creation rule (replace ensure-lead-for-attorney?)",
+    "Legacy lead-row data migration (likely greenfield)"
+  ],
+  "other_active_phase": {
+    "phase": "page-parity-verification-hardening",
+    "status": "execution in progress (V01,V02 DONE; V03 in progress; Michroma systemic fix shipped)",
+    "note": "Body A parity work. Resume after or alongside the deals re-port. The marketing-page re-ports (V11) overlap with this phase's Landing work — coordinate."
   },
-  "blockers": [
-    "Authed-surface committed baselines (V05-V09) need bible app (HotSeatersMVP, has vite dev) run locally with a seeded session, captured once. Unauth path (V03-V04) has no blocker.",
-    "Confirm disposition of 4 unported dev/admin utilities (3 onboarding previews + RunMigration) — recommend explicit out-of-scope in V02."
-  ],
   "previous_phases": [
     "dashboard-and-data-architecture-parity (complete, archived 2026-05-25)",
     "dashboard-bible-parity-build (complete, reflected 2026-05-26)",
     "hotseaters-page-parity-port (complete, reflected 2026-05-29)"
   ],
-  "deferred_items": [
-    "npm publish @prometheus-ags/prometheus-entity-management@1.3.2 (needs npm credentials)",
-    "entity-management 2.0 transport-registry redesign (foamy-marinating-hollerith.md)",
-    "Per-page OpenSpec traceability for W1-W8 (being reconciled in change-V02)"
-  ]
+  "bible_baseline": "29ae47e3 (refreshed 2026-05-29; old state tagged pre-parity-reset-2026-05-29)"
 }

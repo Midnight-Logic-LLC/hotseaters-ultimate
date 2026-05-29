@@ -1,18 +1,40 @@
 {
   "phase": "sales-deals-rearchitecture",
   "assessment_complete": true,
-  "plan_complete": false,
+  "plan_complete": true,
   "execution_complete": false,
   "reflection_complete": false,
-  "changes_total": null,
+  "changes_total": 9,
   "changes_completed": 0,
   "change_backend": "openspec",
-  "status": "assessed (awaiting plan)",
+  "status": "planned (ready to execute)",
   "last_updated": "2026-05-29",
   "last_updated_by": "claude-opus-4-8",
   "assessment_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/assessment.md",
+  "plan_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/plan.md",
   "bible_baseline": "29ae47e3",
-  "trigger": "page-parity-verification-hardening gap analysis found a bible Leads→Deals re-architecture (427-commit gap). audits/_BIBLE-GAP-ANALYSIS.md Body B.",
-  "blocking_open_question": "D0 schema: does self-hosted Supabase have a deal/opportunity table + RLS + Electric shape, or is a latest-data migration required first? Resolve before /kbd-plan.",
-  "recommended_waves": ["D0 schema+entity", "D1 stores+hooks", "D2 DealTracker+Kanban", "D3 Deal wizard", "D4 Sales Hub + Projections", "D5 Dashboard sales widgets", "D6 LeadRadar disposition + retire Lead code", "D7 verification"]
+  "schema_finding": "RESOLVED: no deal/opportunity migration needed. A 'deal' is a trial at an early pipeline stage. Bible useDealsTrialsData(scope) fans the SAME getDealsTrialsData query for deals|trials; migrations have NO deal table; the port trial entity already has pipeline_stage_id + deal_document_id and is synced. Phase is a UI/store re-port over the existing trial entity.",
+  "changes": [
+    { "id": "change-D01", "title": "Deals-scope data layer (use-deals-trials-data over trial entity; NO migration)", "change_state": "PENDING" },
+    { "id": "change-D02", "title": "DealTracker page + Kanban", "change_state": "PENDING" },
+    { "id": "change-D03", "title": "Deal wizard (components/deals/*)", "change_state": "PENDING" },
+    { "id": "change-D04", "title": "Sales activity surface", "change_state": "PENDING" },
+    { "id": "change-D05", "title": "Sales Hub re-port (simplified)", "change_state": "PENDING" },
+    { "id": "change-D06", "title": "Revenue Projections re-port", "change_state": "PENDING" },
+    { "id": "change-D07", "title": "Dashboard sales-widget pivot (leads→deals)", "change_state": "PENDING" },
+    { "id": "change-D08", "title": "LeadRadar disposition + retire dead Lead code", "change_state": "PENDING" },
+    { "id": "change-D09", "title": "Verification (RULE J + VR + Lighthouse + gate)", "change_state": "PENDING" }
+  ],
+  "execution_order": [
+    ["change-D01"],
+    ["change-D02", "change-D03", "change-D04"],
+    ["change-D05", "change-D06", "change-D07"],
+    ["change-D08"],
+    ["change-D09"]
+  ],
+  "open_decisions": [
+    "LeadRadar fate (D08): retire vs repurpose per current bible nav (default retire)",
+    "Sales-activity→deal flow: replace ensure-lead-for-attorney with a deal-creation rule if the bible creates deals from activities",
+    "Legacy lead-row data migration: likely greenfield (dev data)"
+  ]
 }
