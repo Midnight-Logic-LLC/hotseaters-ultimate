@@ -5,7 +5,7 @@
   "execution_complete": false,
   "reflection_complete": false,
   "changes_total": 9,
-  "changes_completed": 6,
+  "changes_completed": 7,
   "change_backend": "openspec",
   "status": "planned (ready to execute)",
   "last_updated": "2026-05-29",
@@ -48,7 +48,7 @@
     {
       "id": "change-D07",
       "title": "Dashboard sales-widget pivot (leads\u2192deals)",
-      "change_state": "PENDING"
+      "change_state": "DONE"
     },
     {
       "id": "change-D08",

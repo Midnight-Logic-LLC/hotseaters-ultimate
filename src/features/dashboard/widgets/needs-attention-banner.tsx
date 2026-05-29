@@ -1,5 +1,8 @@
 /**
- * NeedsAttentionBanner — bible Dashboard.jsx lines 711–755.
+ * NeedsAttentionBanner — bible Dashboard.jsx lines 712–756.
+ *
+ * Leads→Deals re-architecture (change-D07): clicking the banner now routes to
+ * /DealTracker (was /LeadRadar) and the copy reflects "deal items".
  *
  * Visibility decisions:
  *   • Role-level gate (owner / sales / is_sales) → widget registry.
@@ -21,7 +24,7 @@ export function NeedsAttentionBanner() {
   return (
     <button
       type="button"
-      onClick={() => navigate('/LeadRadar')}
+      onClick={() => navigate('/DealTracker')}
       data-testid="needs-attention-banner"
       className="w-full text-left transition-shadow hover:shadow-lg"
       style={{

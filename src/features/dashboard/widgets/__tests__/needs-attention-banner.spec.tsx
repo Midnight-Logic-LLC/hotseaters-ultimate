@@ -37,25 +37,25 @@ describe('NeedsAttentionBanner', () => {
       totalCount: 5,
       isLoading: false,
       shouldRender: true,
-      headline: '2 leads need attention',
-      subhead: 'Overdue or no next step scheduled — open Lead Radar to follow up.',
+      headline: '2 deal items need attention',
+      subhead: 'Overdue or no next step scheduled — open Deal Tracker to follow up.',
     });
     render(<NeedsAttentionBanner />);
-    expect(screen.getByText('2 leads need attention')).toBeTruthy();
-    expect(screen.getByText(/open Lead Radar/i)).toBeTruthy();
+    expect(screen.getByText('2 deal items need attention')).toBeTruthy();
+    expect(screen.getByText(/open Deal Tracker/i)).toBeTruthy();
   });
 
-  it('navigates to /LeadRadar on click', () => {
+  it('navigates to /DealTracker on click', () => {
     mockUseNeedsAttention.mockReturnValue({
       myCount: 1,
       totalCount: 1,
       isLoading: false,
       shouldRender: true,
-      headline: '1 lead needs attention',
+      headline: '1 deal item needs attention',
       subhead: 'sub',
     });
     render(<NeedsAttentionBanner />);
     fireEvent.click(screen.getByTestId('needs-attention-banner'));
-    expect(mockNavigate).toHaveBeenCalledWith('/LeadRadar');
+    expect(mockNavigate).toHaveBeenCalledWith('/DealTracker');
   });
 });

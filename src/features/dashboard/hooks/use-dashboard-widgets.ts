@@ -57,12 +57,22 @@ export type WidgetSlot =
   | 'wide'
   | 'footer';
 
+/**
+ * Audience inputs for a widget's visibility predicate. `role` is the legacy
+ * company role; `isSales` mirrors the bible's `user_info.is_sales` flag, which
+ * grants sales surfaces to any user regardless of their company role.
+ */
+export interface WidgetAudience {
+  role: LegacyRole | undefined;
+  isSales: boolean;
+}
+
 export interface WidgetSpec {
   id: string;
   Component: ComponentType;
   slot: WidgetSlot;
-  /** Returns true when this widget should render for the given role + flags. */
-  enabledFor: (role: LegacyRole | undefined, company: CompanyFlags | null) => boolean;
+  /** Returns true when this widget should render for the given audience + flags. */
+  enabledFor: (audience: WidgetAudience, company: CompanyFlags | null) => boolean;
 }
 
 // Role helpers — bible matrix from Dashboard.jsx 53–58.
@@ -70,8 +80,11 @@ const showsRevenueSurface = (role: LegacyRole | undefined): boolean =>
   role !== 'trial_consultant';
 const showsSalesSurface = (role: LegacyRole | undefined): boolean =>
   role === 'owner' || role === 'admin' || role === 'sales';
-const showsAttentionBanner = (role: LegacyRole | undefined): boolean =>
-  role === 'owner' || role === 'sales';
+// Bible Dashboard.jsx:57 — `isOwner || isSales || userInfo?.is_sales === true`.
+// The third leg surfaces the banner to any `is_sales` user regardless of role
+// (e.g. a trial_consultant flagged for sales).
+const showsAttentionBanner = (audience: WidgetAudience): boolean =>
+  audience.role === 'owner' || audience.role === 'sales' || audience.isSales;
 
 /**
  * REGISTRY — render order matters. Each `slot` is filled in this order;
@@ -86,7 +99,7 @@ const REGISTRY: WidgetSpec[] = [
     id: 'needs-attention-banner',
     Component: NeedsAttentionBanner,
     slot: 'banner',
-    enabledFor: (role) => showsAttentionBanner(role),
+    enabledFor: (audience) => showsAttentionBanner(audience),
   },
 
   // KPI row — bible Dashboard.jsx 762–884
@@ -94,19 +107,19 @@ const REGISTRY: WidgetSpec[] = [
     id: 'kpi-revenue-ytd',
     Component: KpiRevenueYtd,
     slot: 'kpi',
-    enabledFor: (role) => showsRevenueSurface(role),
+    enabledFor: ({ role }) => showsRevenueSurface(role),
   },
   {
     id: 'kpi-pipeline-value',
     Component: KpiPipelineValue,
     slot: 'kpi',
-    enabledFor: (role) => showsRevenueSurface(role),
+    enabledFor: ({ role }) => showsRevenueSurface(role),
   },
   {
     id: 'kpi-outstanding',
     Component: KpiOutstanding,
     slot: 'kpi',
-    enabledFor: (role) => showsRevenueSurface(role),
+    enabledFor: ({ role }) => showsRevenueSurface(role),
   },
   { id: 'kpi-active-trials', Component: KpiActiveTrials, slot: 'kpi', enabledFor: () => true },
   { id: 'kpi-trials-ytd', Component: KpiTrialsYtd, slot: 'kpi', enabledFor: () => true },
@@ -114,7 +127,7 @@ const REGISTRY: WidgetSpec[] = [
     id: 'kpi-revenue-per-trial-ytd',
     Component: KpiRevenuePerTrialYtd,
     slot: 'kpi',
-    enabledFor: (role) => showsRevenueSurface(role),
+    enabledFor: ({ role }) => showsRevenueSurface(role),
   },
 
   // Main 3-col row — Pipeline | Quick Stats | Recent Activity
@@ -122,13 +135,13 @@ const REGISTRY: WidgetSpec[] = [
     id: 'sales-pipeline-chart',
     Component: SalesPipelineChart,
     slot: 'main-1',
-    enabledFor: (role) => showsSalesSurface(role),
+    enabledFor: ({ role }) => showsSalesSurface(role),
   },
   {
     id: 'quick-stats-card',
     Component: QuickStatsCard,
     slot: 'main-2',
-    enabledFor: (role) => showsRevenueSurface(role),
+    enabledFor: ({ role }) => showsRevenueSurface(role),
   },
   {
     id: 'recent-activity-card',
@@ -142,13 +155,13 @@ const REGISTRY: WidgetSpec[] = [
     id: 'weekly-team-performance',
     Component: WeeklyTeamPerformance,
     slot: 'wide',
-    enabledFor: (role) => showsRevenueSurface(role),
+    enabledFor: ({ role }) => showsRevenueSurface(role),
   },
   {
     id: 'monthly-team-performance',
     Component: MonthlyTeamPerformance,
     slot: 'wide',
-    enabledFor: (role) => showsRevenueSurface(role),
+    enabledFor: ({ role }) => showsRevenueSurface(role),
   },
   {
     id: 'active-trial-performance',
@@ -166,7 +179,7 @@ const REGISTRY: WidgetSpec[] = [
     id: 'revenue-trend-card',
     Component: RevenueTrendCard,
     slot: 'wide',
-    enabledFor: (role) => showsRevenueSurface(role),
+    enabledFor: ({ role }) => showsRevenueSurface(role),
   },
 
   // Footer
@@ -202,16 +215,18 @@ export function useDashboardLayout(): DashboardLayout {
 
 /** Returns the role-filtered widget specs in declaration order. */
 export function useDashboardWidgets(): WidgetSpec[] {
-  const { role, company } = useTier1();
+  const { role, userInfo, company } = useTier1();
+  const isSales = userInfo?.is_sales === true;
   return useMemo(() => {
+    const audience: WidgetAudience = { role, isSales };
     const flags: CompanyFlags | null = company
       ? {
           marketplace_fill_jobs: company.marketplace_fill_jobs ?? false,
           marketplace_post_jobs: company.marketplace_post_jobs ?? false,
         }
       : null;
-    return REGISTRY.filter((w) => w.enabledFor(role, flags));
-  }, [role, company]);
+    return REGISTRY.filter((w) => w.enabledFor(audience, flags));
+  }, [role, isSales, company]);
 }
 
 /** Test-only helper — exposes the full registry without role filtering. */

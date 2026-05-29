@@ -91,7 +91,7 @@ src/features/dashboard/
 │   ├── use-team-week.ts            ← hybrid REST
 │   ├── use-team-month.ts           ← hybrid REST
 │   ├── use-quick-stats.ts          ← hybrid REST (5 sources)
-│   ├── use-needs-attention.ts      ← hybrid REST (lead-radar)
+│   ├── use-needs-attention.ts      ← deals+prospects (D04 sales-activity seam)
 │   ├── use-revenue-trend.ts        ← hybrid REST + trial-projections
 │   ├── use-trial-projections.ts    ← Tier-A (TrialService)
 │   ├── use-quick-actions.ts
@@ -102,7 +102,7 @@ src/features/dashboard/
 │   ├── trial-projections.ts
 │   ├── revenue-trend.ts
 │   ├── team-performance.ts
-│   ├── stale-leads.ts
+│   ├── stale-deals.ts
 │   ├── quick-action-policy.ts
 │   └── __tests__/                  ← 70 tests covering bible parity
 ├── components/

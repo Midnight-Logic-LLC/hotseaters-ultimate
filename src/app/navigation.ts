@@ -41,7 +41,7 @@ export interface NavigationItem {
   url: string;
   icon: LucideIcon;
   /** Marker used by the layout to render badges or special treatment. */
-  badge?: 'stale-leads';
+  badge?: 'stale-deals';
 }
 
 export interface NavigationGroup {
@@ -96,8 +96,8 @@ export function getNavigationGroups(
     groups.push({
       label: 'Sales',
       items: [
-        { title: 'Lead Radar', url: url('LeadRadar'), icon: Radar, badge: 'stale-leads' },
-        { title: 'Deal Tracker', url: url('DealTracker'), icon: Telescope },
+        { title: 'Lead Radar', url: url('LeadRadar'), icon: Radar },
+        { title: 'Deal Tracker', url: url('DealTracker'), icon: Telescope, badge: 'stale-deals' },
         { title: 'Clients', url: url('Clients'), icon: Building2 },
       ],
     });

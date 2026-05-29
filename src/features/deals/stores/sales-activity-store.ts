@@ -50,6 +50,7 @@ export interface AttorneyRecord {
   email: string | null;
   phone: string | null;
   is_active_prospect: boolean | null;
+  contact_status: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -68,7 +69,7 @@ const ACTIVITY_COLS =
   'completed_date, completed_by, created_at, updated_at';
 const ATTORNEY_COLS =
   'id, company_id, client_id, first_name, last_name, title, email, phone, ' +
-  'is_active_prospect, created_at, updated_at';
+  'is_active_prospect, contact_status, created_at, updated_at';
 const CLIENT_COLS = 'id, company_id, firm_name, client_type_id, sales_lead';
 
 const DEFAULT_LIMIT = 5000;
