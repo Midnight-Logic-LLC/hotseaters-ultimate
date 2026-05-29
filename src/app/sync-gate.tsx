@@ -23,6 +23,51 @@ import {
 import { startWriteSync } from '@/shared/db/write-sync';
 
 /**
+ * NOOP_PGLITE — a stand-in PGlite handle used as the `PGliteProvider` value
+ * whenever the real per-user database isn't open (signed-out public routes,
+ * pre-hydration).
+ *
+ * Why this exists: `@electric-sql/pglite-react`'s `useLiveQuery` calls
+ * `usePGlite()` unconditionally — BEFORE it inspects the query string — and
+ * `usePGlite()` throws "No PGlite instance found" when there is no provider
+ * value. A signed-out visitor hitting `/` mounts `LandingPage` →
+ * `useCurrentUser` → `useTierAById` → `useLiveQuery` → crash → blank page.
+ *
+ * Passing a non-null stub keeps `usePGlite()` happy. The stub's `live.query`
+ * fulfils the contract `useLiveQuery` relies on (invoke the callback with an
+ * empty result, return an object with `unsubscribe`) but never emits rows and
+ * never touches a real database. The `use-tier-a-query` hooks already pass a
+ * `SELECT 1 WHERE false` no-op query while disabled, so no consumer observes
+ * data until the real handle replaces the stub.
+ *
+ * Only `live.query` / `live.incrementalQuery` are exercised by the React
+ * bindings; the rest of the surface is intentionally absent and cast away.
+ */
+const NOOP_LIVE_RESULT = { rows: [], fields: [], affectedRows: 0 };
+function noopLive(
+  _query: string,
+  _params: unknown[] | undefined | null,
+  cb: (res: typeof NOOP_LIVE_RESULT) => void,
+) {
+  // Emit one empty result asynchronously, mirroring the real live query's
+  // initial callback, then hand back a no-op subscription.
+  queueMicrotask(() => cb(NOOP_LIVE_RESULT));
+  return Promise.resolve({ unsubscribe: () => {}, refresh: () => {} });
+}
+const NOOP_PGLITE = {
+  live: {
+    query: noopLive,
+    incrementalQuery: (
+      q: string,
+      p: unknown[] | undefined | null,
+      _key: string,
+      cb: (res: typeof NOOP_LIVE_RESULT) => void,
+    ) => noopLive(q, p, cb),
+  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any;
+
+/**
  * SyncGateDbContext — exposes the active PGlite handle (or null) to all
  * descendants of SyncGate without requiring them to be inside the conditional
  * `<PGliteProvider>`. Tier1Provider reads this to guard MetadataTypeSyncer:
@@ -228,11 +273,19 @@ export function SyncGate({ children }: PropsWithChildren) {
   // db is set as soon as openForUser() resolves (Step 1 of boot), which is
   // before Electric shapes attach or the graph bootstrap runs — so children
   // that render in 'syncing' phase already have PGlite context.
-  const content = boot.db ? (
-    <PGliteProvider db={boot.db}>{children}</PGliteProvider>
-  ) : (
-    children
-  );
+  // Pattern 4: children ALWAYS render inside a PGliteProvider so that
+  // `useLiveQuery` (which calls `usePGlite()` unconditionally, before it
+  // inspects the query string) never throws "No PGlite instance found".
+  //
+  // When the real per-user handle isn't open yet (signed-out public routes,
+  // pre-hydration), we provide a no-op stub whose `live.query` immediately
+  // yields an empty result and never emits. The `use-tier-a-query` hooks pass
+  // a `SELECT 1 WHERE false` no-op query in that state anyway, so no consumer
+  // observes rows until the real db replaces the stub. This is the systemic
+  // fix for the blank-public-page crash (RULE 0.3 — fixed in the shared seam,
+  // not per page).
+  const activeDb = boot.db ?? NOOP_PGLITE;
+  const content = <PGliteProvider db={activeDb}>{children}</PGliteProvider>;
 
   // Wrap all renders in SyncGateDbContext so Tier1Provider (and any other
   // component in the tree) can check whether PGlite is ready synchronously —
