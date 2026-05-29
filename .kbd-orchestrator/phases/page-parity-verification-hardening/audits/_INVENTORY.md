@@ -10,8 +10,8 @@ Audit status: PENDING (no audit note) → AUDITED (note exists) → PASS / FAIL.
 
 | Bible | Port page | Route | VR | Audit | Latest drift |
 |-------|-----------|-------|----|----|------|
-| Landing/Home | `landing/pages/landing-page.tsx` | `/` `/Landing` | drift | ✅ PASS (source) | 🔴 79% deployed = STALE DEPLOY, not code (audits/landing.md) |
-| Pricing | `marketing/pages/pricing-page.tsx` | `/Pricing` | drift | ✅ PASS (source) | 🔴 79% deployed = STALE DEPLOY, not code (audits/pricing.md) |
+| Landing/Home | `landing/pages/landing-page.tsx` | `/` `/Landing` | drift | 🔴 RE-PORT (V11) | Port built vs STALE bible; current bible has dark-hero redesign. 56-80% drift is REAL. audits/landing.md SUPERSEDED |
+| Pricing | `marketing/pages/pricing-page.tsx` | `/Pricing` | drift | 🔴 RE-PORT (V11) | Same — 80-83% drift vs refreshed bible. audits/pricing.md SUPERSEDED |
 | PrivacyPolicy | `marketing/pages/privacy-policy-page.tsx` | `/PrivacyPolicy` | drift | PENDING | 🟡 4.6%d / 7.2%m |
 | TermsOfService | `marketing/pages/terms-of-service-page.tsx` | `/TermsOfService` | drift | PENDING | 🟡 4.2%d / 7.6%m |
 | ReferralLanding | `marketing/pages/referral-landing-page.tsx` | `/ReferralLanding` | drift | PENDING | 🟡 5.6%d / 8.8%m |

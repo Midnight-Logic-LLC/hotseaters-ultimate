@@ -1,3 +1,7 @@
+> ⚠️ **SUPERSEDED (2026-05-29).** Audited against a 427-commit-stale bible
+> (`6f97312a`). Bible refreshed to `29ae47e3`. Re-audit against current source
+> pending; the PASS below reflects the OLD bible. See `_DRIFT-BACKLOG.md`.
+
 # RULE-0 acceptance audit — Pricing
 
 - **Bible source:** `HotSeatersMVP/src/pages/Pricing.jsx` (300 LOC)

@@ -1,3 +1,9 @@
+> ⚠️ **SUPERSEDED (2026-05-29).** This audit was performed against a bible
+> checkout that was 427 commits stale (`6f97312a`). The bible was refreshed to
+> `29ae47e3`, which has a redesigned dark-hero Landing. The PASS verdict below
+> reflects the OLD bible. The port genuinely drifts from the CURRENT bible and
+> must be re-ported in V11. See `_DRIFT-BACKLOG.md`. Re-audit pending.
+
 # RULE-0 acceptance audit — Landing
 
 - **Bible source:** `HotSeatersMVP/src/pages/Landing.jsx` (599 LOC)

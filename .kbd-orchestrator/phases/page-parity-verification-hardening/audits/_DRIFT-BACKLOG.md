@@ -59,9 +59,46 @@ audits/pricing.md, both PASS).
    issue — the source audit decides.
 3. **Auth utilities (≤5.5%):** at parity, no action.
 
+## RESOLUTION of the calibration issue (2026-05-29) — bible source was 427 commits stale
+
+Pulled the bible repo (`HotSeatersMVP`) to authoritative `origin/main`. The
+local checkout was **427 commits behind** (was `6f97312a`, now `29ae47e3`; old
+state tagged `pre-parity-reset-2026-05-29` for recovery).
+
+**The deployed bible == current bible source. The port was built against a
+STALE bible.** Confirmed at source level:
+
+- Current bible `Landing.jsx` (623 LOC, was 599) line 146: hero is a
+  **dark navy→cyan gradient banner** (`linear-gradient(to bottom, #0c1e3d 0%,
+  #1E3A8A 35%, #0891B2 70%, #e0f2fe 100%)`).
+- Line 167: headline accent is `text-cyan-300` (was `var(--theme-brand-primary)`).
+- The PORT has a **white hero** with dark text — matching the OLD bible source.
+
+### Consequence — prior audits SUPERSEDED
+
+`audits/landing.md` and `audits/pricing.md` were audited against the stale
+bible (`6f97312a`). They are now **INVALIDATED**. The marketing pages genuinely
+drift from the current bible and need **re-porting** (V11), not just a deploy.
+
+This is the verification phase doing its job: it caught that the entire port was
+built against a bible snapshot that is 427 commits old. The high marketing-page
+drift (56-83%) is now explained as **real port drift vs the refreshed bible** —
+NOT a measurement artifact.
+
+### Revised action
+
+- **V11 (rework):** re-port `/`, `/Landing`, `/Pricing` (and re-audit
+  `/ReferralLanding`, policy pages) against the **current** bible source
+  (`29ae47e3`). The dark-hero redesign + cyan accents are the new target.
+- **Phase-wide risk:** the 427-commit gap may affect MANY pages, not just
+  marketing. Every prior parity audit in the port (dashboard, settings, etc.)
+  was against the stale bible. The verification phase should re-baseline ALL
+  surfaces against `29ae47e3`. This materially expands V05-V10 scope.
+
 ## Bottom line
 
-The scary 79% number was TWO separate things, now disentangled:
-- **A real production bug** (blank page from the PGlite crash) → **FIXED + deployed**.
-- **A measurement-calibration issue** (deployed bible ahead of source) → needs a
-  ground-truth decision from the owner, not a code fix.
+Two real issues, both now correctly diagnosed:
+1. **Production blank-page bug** (PGlite crash) → **FIXED + deployed + verified**.
+2. **Port built against a 427-commit-stale bible** → bible refreshed to
+   `29ae47e3`; marketing pages (and likely others) need re-porting vs current
+   source. This is genuine rework scope, not a calibration artifact.
