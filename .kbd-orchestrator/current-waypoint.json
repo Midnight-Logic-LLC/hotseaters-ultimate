@@ -1,7 +1,7 @@
 {
-  "phase": "sales-deals-rearchitecture",
+  "phase": "page-parity-verification-hardening",
   "project": "hotseaters-ultimate",
-  "status": "planned",
+  "status": "executing",
   "assessment_complete": true,
   "plan_complete": true,
   "execution_complete": false,
@@ -10,31 +10,50 @@
   "assessment_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/assessment.md",
   "plan_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/plan.md",
   "progress_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/progress.json",
-  "active_wave": "D0 — Deals-scope data layer (foundation)",
-  "phase_summary": "Re-port the port's Lead-based sales surface to the bible's Deals/Opportunities model (bible @ 29ae47e3). KEY: no schema migration needed — a 'deal' IS a trial at an early pipeline stage; the port trial entity already has pipeline_stage_id + deal_document_id and is synced. 9 changes D01-D09. UI/store re-port, not a data-model build.",
-  "next_step": "Run /kbd-execute sales-deals-rearchitecture to begin. First change: change-D01 (use-deals-trials-data hook over the trial entity + deal store). Then D02-D04 (DealTracker/Kanban, wizard, sales-activity) parallel-safe after D01.",
+  "active_wave": "V11 \u2014 marketing-page re-port (Landing dark-hero redesign)",
+  "phase_summary": "Re-port the port's Lead-based sales surface to the bible's Deals/Opportunities model (bible @ 29ae47e3). KEY: no schema migration needed \u2014 a 'deal' IS a trial at an early pipeline stage; the port trial entity already has pipeline_stage_id + deal_document_id and is synced. 9 changes D01-D09. UI/store re-port, not a data-model build.",
+  "next_step": "Re-port Landing to the current bible (623 LOC, dark navy\u2192cyan gradient hero + text-cyan-300 accent) to resolve the ~79% deployed marketing drift. Then Pricing/Privacy/Terms/Referral per-page audits.",
   "execution_order": [
-    ["change-D01"],
-    ["change-D02", "change-D03", "change-D04"],
-    ["change-D05", "change-D06", "change-D07"],
-    ["change-D08"],
-    ["change-D09"]
+    [
+      "change-D01"
+    ],
+    [
+      "change-D02",
+      "change-D03",
+      "change-D04"
+    ],
+    [
+      "change-D05",
+      "change-D06",
+      "change-D07"
+    ],
+    [
+      "change-D08"
+    ],
+    [
+      "change-D09"
+    ]
   ],
-  "schema_finding": "No deal/opportunity migration required — deals are trials at early pipeline stages. See phase progress.json schema_finding.",
+  "schema_finding": "No deal/opportunity migration required \u2014 deals are trials at early pipeline stages. See phase progress.json schema_finding.",
   "open_decisions": [
     "LeadRadar fate (D08): retire vs repurpose (default retire)",
-    "Sales-activity→deal creation rule (replace ensure-lead-for-attorney?)",
+    "Sales-activity\u2192deal creation rule (replace ensure-lead-for-attorney?)",
     "Legacy lead-row data migration (likely greenfield)"
   ],
   "other_active_phase": {
     "phase": "page-parity-verification-hardening",
     "status": "execution in progress (V01,V02 DONE; V03 in progress; Michroma systemic fix shipped)",
-    "note": "Body A parity work. Resume after or alongside the deals re-port. The marketing-page re-ports (V11) overlap with this phase's Landing work — coordinate."
+    "note": "Body A parity work. Resume after or alongside the deals re-port. The marketing-page re-ports (V11) overlap with this phase's Landing work \u2014 coordinate."
   },
   "previous_phases": [
     "dashboard-and-data-architecture-parity (complete, archived 2026-05-25)",
     "dashboard-bible-parity-build (complete, reflected 2026-05-26)",
     "hotseaters-page-parity-port (complete, reflected 2026-05-29)"
   ],
-  "bible_baseline": "29ae47e3 (refreshed 2026-05-29; old state tagged pre-parity-reset-2026-05-29)"
+  "bible_baseline": "29ae47e3 (refreshed 2026-05-29; old state tagged pre-parity-reset-2026-05-29)",
+  "phase_note": "sales-deals-rearchitecture COMPLETE (9/9, reflected, deployed). Now resuming page-parity-verification-hardening: V01/V02 done; V03 marketing re-port is the active high-value item (Landing dark-hero redesign = the 79% drift).",
+  "completed_phases": [
+    "sales-deals-rearchitecture (COMPLETE 2026-05-29, 9/9 reflected)"
+  ],
+  "last_updated": "2026-05-29"
 }
