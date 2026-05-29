@@ -191,8 +191,14 @@ export function DealCard({
       <div className="flex items-center mb-2" style={{ gap: 'var(--theme-element-gap)' }}>
         <div className="flex-1">
           {showProgress && (
+            // Bible DealCard.jsx ~198: <Progress value={progressPercent} className="h-1" />.
+            // The bible's slim inline bar fills with the default primary color on a
+            // stone-200 track. The port's @/components/ui/progress is a Base UI
+            // composition (flex-wrap root + Track/Indicator children) that can't
+            // reproduce a single-element slim inline bar without restructuring, so
+            // we mirror the bible's rendered output with a token-styled div.
             <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--theme-stone-200)' }}>
-              <div className="h-full" style={{ width: `${progressPercent}%`, backgroundColor: daysColor }} />
+              <div className="h-full" style={{ width: `${progressPercent}%`, backgroundColor: 'var(--theme-primary)' }} />
             </div>
           )}
         </div>

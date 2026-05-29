@@ -25,11 +25,12 @@
  * HotSeatersMVP is the bible.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { differenceInDays } from 'date-fns';
 
 import { useDealsTrialsData } from '@/features/deals/hooks/use-deals-trials-data';
 import { useClientsList } from '@/features/clients/hooks/use-clients-list';
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
 import type { Trial } from '@/features/trials/entities';
 import type { DealViewMode } from '@/features/deals/business-rules/deal-kanban-buckets';
 
@@ -73,6 +74,19 @@ function DealWizardStub({ onCancel }: { onCancel: () => void }) {
   );
 }
 
+// ─── Stub: add-contact wizard (change-D04 sales-activity surface) ────────────
+
+function AddContactWizardStub({ onCancel }: { onCancel: () => void }) {
+  return (
+    <div className="rounded-lg border p-6" style={{ borderColor: 'var(--theme-stone-200)', color: 'var(--theme-stone-500)' }}>
+      <p>Add Contact wizard arrives in change-D04.</p>
+      <button onClick={onCancel} style={{ marginTop: '1rem', color: 'var(--theme-stone-700)' }}>
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 // ─── Stub: trial details overlay (owned by the trials feature) ───────────────
 
 function TrialDetailsStub({ trial, onClose }: { trial: Trial; onClose: () => void }) {
@@ -93,8 +107,29 @@ function trialIsHSH(trial: Trial): boolean {
 // ─── Main page component ─────────────────────────────────────────────────────
 
 export function DealTrackerPage() {
+  const { userInfo } = useCurrentUser();
+
   const [showMyDeals, setShowMyDeals] = useState(false);
   const [viewMode, setViewMode] = useState<DealViewMode>('next_step');
+
+  // Bible (DealTracker.jsx ~86–91): hydrate showMyDeals + viewMode from
+  // userInfo.preferences once, the first time userInfo resolves.
+  // The port's preferences are a free-form jsonb bag (`Record<string, unknown>`),
+  // so we read the bible's keys (`salesHubShowMyDeals`, `dealTrackerViewMode`)
+  // defensively and fall back to the bible defaults (false / 'next_step').
+  // TODO(D07/prefs): persisting these back to userInfo.preferences on change
+  // (bible's debounced UserInfo.update) lands with the preferences change.
+  const prefsLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!userInfo || prefsLoadedRef.current) return;
+    prefsLoadedRef.current = true;
+    const prefs = userInfo.preferences ?? {};
+    setShowMyDeals(prefs.salesHubShowMyDeals === true);
+    const savedMode = prefs.dealTrackerViewMode;
+    if (savedMode === 'next_step' || savedMode === 'trial_date' || savedMode === 'sales_stage') {
+      setViewMode(savedMode);
+    }
+  }, [userInfo]);
 
   // Sales-stage-only filters (session-scoped — not persisted, same as bible).
   const [dateFilter, setDateFilter] = useState<DealDateFilter>('this_year');
@@ -104,6 +139,7 @@ export function DealTrackerPage() {
   const [selectedTrial, setSelectedTrial] = useState<Trial | null>(null);
   const [editingTrial, setEditingTrial] = useState<Trial | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showAddContact, setShowAddContact] = useState(false);
 
   const {
     trials,
@@ -163,8 +199,12 @@ export function DealTrackerPage() {
   }, []);
 
   const handleAddContact = useCallback(() => {
-    // Add-contact wizard (contact-only prospect) lands with the activity change.
-    setShowForm(true);
+    // Add-contact wizard (contact-only prospect) is its OWN surface in the
+    // bible — distinct from the deal wizard. The real AddContactWizard lands
+    // in change-D04; until then we open a clearly-labeled contact stub so the
+    // "Add Contact" and "Add Deal" buttons never share a destination.
+    setShowAddContact(true);
+    setShowForm(false);
     setEditingTrial(null);
     setSelectedTrial(null);
   }, []);
@@ -195,6 +235,12 @@ export function DealTrackerPage() {
       });
     }
 
+    // Bible (DealTracker.jsx ~271): "My Deals" narrows the pool to deals whose
+    // consultant is the signed-in user.
+    if (showMyDeals) {
+      pool = pool.filter((d) => d.consultant_id === userInfo?.id);
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return pool.map((deal) => ({
@@ -203,9 +249,9 @@ export function DealTrackerPage() {
         ? differenceInDays(new Date(`${deal.start_date}T00:00:00`), today)
         : null,
     }));
-  }, [trials, pipelineStages, inSalesStageLostMode]);
+  }, [trials, pipelineStages, inSalesStageLostMode, showMyDeals, userInfo?.id]);
 
-  const overlayActive = !!selectedTrial || showForm;
+  const overlayActive = !!selectedTrial || showForm || showAddContact;
 
   // ── Loading gate ────────────────────────────────────────────────────────
   if (isLoading) {
@@ -255,15 +301,31 @@ export function DealTrackerPage() {
           />
         )}
 
-        {selectedTrial && !showForm && (
+        {showAddContact && (
+          <AddContactWizardStub onCancel={() => setShowAddContact(false)} />
+        )}
+
+        {selectedTrial && !showForm && !showAddContact && (
           <TrialDetailsStub trial={selectedTrial} onClose={() => setSelectedTrial(null)} />
         )}
 
         {/* Tracker content — hidden (but still mounted) when an overlay is active. */}
         <div style={overlayActive ? { display: 'none' } : undefined}>
+          {/*
+           * salesActivities/attorneys/prospects arrive with the sales-activity
+           * surface (change-D04); banner + contact-only cards stay empty until
+           * then. The DealUrgencyBanner's three sections are derived entirely
+           * from pending sales activities, so with no activity data there is
+           * nothing urgent to surface — we pass empty deals/prospects/activities
+           * and the banner self-suppresses (returns null) for bible parity
+           * (the banner is absent when nothing is urgent).
+           */}
           <DealUrgencyBanner
-            deals={allDeals}
+            deals={[]}
+            prospects={[]}
+            attorneys={[]}
             clients={clients}
+            salesActivities={[]}
             viewMode={viewMode}
             onViewModeChange={handleViewModeChange}
           />
@@ -271,12 +333,15 @@ export function DealTrackerPage() {
             allDeals={allDeals}
             clients={clients}
             pipelineStages={pipelineStages}
+            // attorneys/documents/documentSigners/consultants/salesActivities
+            // arrive with the sales-activity surface (change-D04); contact-only
+            // prospect cards + LOE status stay empty until then.
             attorneys={[]}
             documents={[]}
             documentSigners={[]}
             consultants={[]}
             salesActivities={[]}
-            userInfo={null}
+            userInfo={userInfo}
             showMyDeals={showMyDeals}
             onShowMyDealsChange={setShowMyDeals}
             onSelectTrial={setSelectedTrial}

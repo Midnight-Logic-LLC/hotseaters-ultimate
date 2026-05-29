@@ -10,25 +10,46 @@
  *
  * Adaptation (RULE 0): the bible's activity zone embeds an inline activity
  * editor (`InlineSalesActivityForm`), an `ActivityToolbar`, a history dialog
- * and `CascadeDeleteDialog` / "Not Pursuing" actions. Those depend on the
+ * and `CascadeDeleteDialog` (deal-mode Delete Deal). Those depend on the
  * sales-activity + cascade-delete surfaces that land in later changes (D03/D04
  * + activity). They are OUT OF SCOPE for D02. We reproduce the read-only
  * rendered output (next-activity display, urgency tint, LOE status, quick
  * actions) and cleanly omit the not-yet-wired editors. The card lights up its
  * activity zone automatically once `salesActivities` is wired.
  *
+ * The contact-only "Not Pursuing" menu IS rendered for bible parity, but its
+ * confirm action is a D04 stub — the single-field is_active_prospect write
+ * needs an Attorney store, which the port does not have yet.
+ *
  * HotSeatersMVP is the bible.
  */
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Phone, Mail, ExternalLink, CalendarDays, Send, Building2, MapPin,
-  Clock, User, Plus,
+  Clock, User, Plus, MoreVertical, UserX,
 } from 'lucide-react';
 import { differenceInDays, parseISO, format } from 'date-fns';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { Trial } from '@/features/trials/entities';
 import { stageColorToCss } from '@/features/deals/business-rules/deal-kanban-buckets';
 import type {
@@ -67,6 +88,8 @@ export function OpportunityCard({
   onAddDealForContact,
   disableInitialAnimation = false,
 }: OpportunityCardProps) {
+  const [showNotPursuingConfirm, setShowNotPursuingConfirm] = useState(false);
+
   // ── Resolve actors ─────────────────────────────────────────────────────
   const primaryContact = deal
     ? attorneys.find((a) => a.id === deal.primary_contact_id) ?? null
@@ -400,9 +423,42 @@ export function OpportunityCard({
           )}
         </div>
 
-        {/* Contact-only: Add Deal (D03 wizard) entry point */}
-        {!deal && primaryContact && onAddDealForContact && (
+        {/* Contact-only: Not Pursuing + Add Deal (D03 wizard) entry point */}
+        {!deal && primaryContact && (
           <div className="flex-1 flex justify-end items-center gap-1">
+            {/* Bible OpportunityCard ~529–558: "Not Pursuing" flips the
+                attorney's is_active_prospect to false (single-field write).
+                The port has no Attorney store/hook yet — the write path lands
+                with the sales-activity surface (change-D04). We render the menu
+                + confirm dialog for bible parity; the confirm action is a
+                clearly-labeled stub until the Attorney write path exists. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={(e) => e.stopPropagation()}
+                    title="More actions"
+                  >
+                    <MoreVertical className="w-3.5 h-3.5" />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem
+                  onClick={(e) => { e.stopPropagation(); setShowNotPursuingConfirm(true); }}
+                  className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                  style={{ fontFamily: 'var(--theme-font-body)', fontSize: 'var(--theme-text-body)' }}
+                >
+                  <UserX className="w-4 h-4 mr-2" />
+                  Not Pursuing
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {onAddDealForContact && (
             <Button
               size="sm"
               onClick={(e) => { e.stopPropagation(); onAddDealForContact(primaryContact); }}
@@ -418,6 +474,7 @@ export function OpportunityCard({
               <Plus className="w-3.5 h-3.5" />
               Add Deal
             </Button>
+            )}
           </div>
         )}
 
@@ -480,6 +537,34 @@ export function OpportunityCard({
           </div>
         )}
       </div>
+
+      {/* Not Pursuing confirm (contact-only). Bible OpportunityCard ~676–695.
+          The confirm action flips is_active_prospect to false; the port has no
+          Attorney write path yet, so this is a clearly-labeled D04 stub. */}
+      <AlertDialog open={showNotPursuingConfirm} onOpenChange={setShowNotPursuingConfirm}>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from Deal Tracker?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove <strong>{primaryContact?.first_name} {primaryContact?.last_name}</strong> from Deal Tracker? Their contact record and activity history will be kept. You can bring them back any time by adding a new Deal.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                // TODO(D04): flip primaryContact.is_active_prospect → false via
+                // the Attorney store once the sales-activity surface lands.
+                // Until then this just dismisses (no write path exists yet).
+                setShowNotPursuingConfirm(false);
+              }}
+              style={{ backgroundColor: 'var(--theme-brand-primary)', color: 'white' }}
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }

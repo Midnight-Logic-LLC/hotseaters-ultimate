@@ -59,7 +59,7 @@ interface DealTrackerTabProps {
   documentSigners: DocumentSignerRow[];
   consultants?: ConsultantRow[];
   salesActivities?: SalesActivityRow[];
-  userInfo: { id?: string; company_role?: string } | null;
+  userInfo: { id?: string; company_role?: string | null } | null;
   showMyDeals?: boolean;
   onShowMyDealsChange?: (v: boolean) => void;
   onSelectTrial: (trial: Trial) => void;
