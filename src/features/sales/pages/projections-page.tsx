@@ -10,19 +10,38 @@
  *
  * Adapter mappings:
  *   useTier1Data()         → useTier1() from @/app/tier1-provider
- *   useDealsTrialsData()   → Tier-2 stubs (arrays) + useTier1() for company
- *   base44.entities.*      → empty array stubs (Tier-2 pending)
+ *   useDealsTrialsData()   → useProjectionsData() (composes D01 deals hook +
+ *                            useClientsList + useEntities<TrialService>)
  *   PageLoader             → inline spinner
- *   RevenueProjectionsTab  → typed Coming-soon stub
+ *   RevenueProjectionsTab  → the ported component (D06)
+ *
+ * Realized-revenue + HSH inputs (D06 deferrals):
+ *   - invoices / payments(collections): no port read hook on the deals data
+ *     path yet → empty arrays. The projection (future) series is the D06
+ *     deliverable; the realized series renders empty until the billing surface
+ *     (features/invoices + features/collections) exposes a company-scoped read
+ *     hook. See TODO below.
+ *   - subcontractAssignments / hiringCompanyAssignments / hshTrials / services:
+ *     belong to the HotSeatHub / subcontracts surface → empty arrays.
  *
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { useTier1 } from '@/app/tier1-provider';
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
 import { Spinner } from '@/components/ui/spinner';
-import type { PipelineStage } from '@/shared/db/lookups-selectors';
+import { useProjectionsData } from '@/features/sales/hooks/use-projections-data';
+import { RevenueProjectionsTab } from '@/features/sales/components/revenue-projections-tab';
+import type {
+  ChartInvoiceRow,
+  ChartPaymentRow,
+} from '@/features/deals/business-rules/revenue-projection-chart-data';
+import type {
+  TrialRow,
+  DetailedRecord,
+} from '@/features/sales/components/revenue-projections-types';
 
 // ─── Types (verbatim from Sales.jsx / SalesPage) ─────────────────────────────
 
@@ -38,6 +57,12 @@ interface TrialService {
   service_name?: string | null;
 }
 
+// TODO(types): the entity `Trial` (features/trials/entities) declares
+// `company_id`, `bill_for_weekends`, and `is_sample` as required/non-null,
+// whereas the projection math treats trials as a loose, partly-nullable
+// field-bag (and `task.trial` is also populated from the HSH stub path).
+// Swapping this local stub for the entity type cascades into many
+// field-access + object-construction fixes that risk the math — deferred.
 interface Trial {
   id: string;
   case_name?: string | null;
@@ -76,47 +101,16 @@ interface Service {
   name?: string | null;
 }
 
-interface Invoice {
-  id: string;
-}
-
-interface Collection {
-  id: string;
-}
-
-interface Client {
-  id: string;
-  name?: string | null;
-}
-
 interface CompanyData {
   fiscal_year_start_month?: number | null;
   invoice_period?: string | null;
   weekly_billing_day?: string | null;
   monthly_billing_date?: number | null;
   per_trial_billing_days_after_end?: number | null;
-}
-
-interface UserInfo {
-  id: string;
-  preferences?: Record<string, unknown>;
-}
-
-// ─── Detail record shape (passed to RevenueProjectionsTab) ───────────────────
-
-interface DetailedRecord {
-  taskDate: string;
-  billingDateKey: string;
-  dealTrial: string;
-  taskName: string;
-  dateRange: string;
-  dailyValue: number;
-  daysAssigned: number;
-  projectedValue: number;
-  fullValue: number;
-  dailyHshPayout: number;
-  isHSH: boolean;
-  probability?: number;
+  // Read by RevenueProjectionsTab for the goal / breakeven reference lines.
+  annual_revenue_target?: number | null;
+  monthly_breakeven?: number | null;
+  show_debug_info?: boolean | null;
 }
 
 // ─── Helpers (verbatim from Bible Projections.jsx) ───────────────────────────
@@ -172,100 +166,96 @@ function PageLoader({ message }: { message: string }) {
   );
 }
 
-// ─── RevenueProjectionsTab stub ───────────────────────────────────────────────
-
-interface RevenueProjectionsTabProps {
-  timePeriod: string;
-  showCumulative: boolean;
-  selectedFiscalYear: number | null;
-  onTimePeriodChange: (p: string) => void;
-  onCumulativeToggle: (v: boolean) => void;
-  onFiscalYearChange: (y: number) => void;
-  detailedRecords: DetailedRecord[];
-  invoices: Invoice[];
-  payments: Collection[];
-  trials: Trial[];
-  clients: Client[];
-  company: CompanyData | null;
-  fiscalYearStart: Date | null;
-  invoicePeriod: string;
-  weeklyBillingDay: string;
-  monthlyBillingDate: number;
-  projectedInvoices: Map<string, number>;
-  tasksWithDailyRevenue: unknown[];
-  pipelineStages: PipelineStage[];
-}
-
-function RevenueProjectionsTab(_props: RevenueProjectionsTabProps) {
-  return (
-    <div
-      className="rounded-lg border p-6 text-center"
-      style={{
-        borderColor: 'var(--theme-stone-200)',
-        backgroundColor: 'var(--theme-stone-50)',
-        color: 'var(--theme-stone-500)',
-      }}
-    >
-      Coming soon: RevenueProjectionsTab
-    </div>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// Stable empty stubs for the not-yet-wired revenue inputs (D06 deferrals).
+// Module-level frozen identity keeps the projection-math useMemo deps stable.
+const EMPTY_SERVICES: Service[] = [];
+const EMPTY_SUBCONTRACTS: SubcontractAssignment[] = [];
+const EMPTY_HIRING_ASSIGNMENTS: HiringCompanyAssignment[] = [];
+const EMPTY_HSH_TRIALS: HshTrial[] = [];
+const EMPTY_INVOICES: ChartInvoiceRow[] = [];
+const EMPTY_PAYMENTS: ChartPaymentRow[] = [];
+
 export function ProjectionsPage() {
-  const { userInfo: t1UserInfo, company: t1Company, isLoading: tier1Loading, pipelineStages } =
-    useTier1();
+  const { company: t1Company } = useTier1();
+  // Real user prefs live on the live `user_info` row (jsonb bag), surfaced by
+  // useCurrentUser — same source the D03 deal-tracker reads (preferences is
+  // `Record<string, unknown> | null`). No fabricated empty object.
+  const { userInfo } = useCurrentUser();
 
   const [showMyDeals, setShowMyDeals] = useState<boolean | null>(null);
   const [timePeriod, setTimePeriod] = useState('month');
   const [showCumulative, setShowCumulative] = useState(false);
-  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number | null>(null);
 
-  // ── Tier-2 data stubs ─────────────────────────────────────────────────────
-  // Replace with real store data when the Tier-2 sales store port lands.
-  const trialServices: TrialService[] = [];
-  const trials: Trial[] = [];
-  const clients: Client[] = [];
-  const invoices: Invoice[] = [];
-  const services: Service[] = [];
-  const subcontractAssignments: SubcontractAssignment[] = [];
-  const hiringCompanyAssignments: HiringCompanyAssignment[] = [];
-  const hshTrials: HshTrial[] = [];
-  const collections: Collection[] = [];
-  const isSalesDataLoading = tier1Loading;
+  // ── Real data (D01 deals hook + clients + trial services) ─────────────────
+  const {
+    trials: trialRows,
+    clients,
+    trialServices: trialServiceRows,
+    pipelineStages,
+    isLoading: isSalesDataLoading,
+  } = useProjectionsData();
+
+  // The bible's projection math reads a narrow field-set; cast at the boundary.
+  const trials = trialRows as unknown as Trial[];
+  const trialServices = trialServiceRows as unknown as TrialService[];
+
+  // HSH / subcontract revenue inputs belong to the HotSeatHub + subcontracts
+  // surface — empty until those read hooks exist (D06 deferral).
+  const services = EMPTY_SERVICES;
+  const subcontractAssignments = EMPTY_SUBCONTRACTS;
+  const hiringCompanyAssignments = EMPTY_HIRING_ASSIGNMENTS;
+  const hshTrials = EMPTY_HSH_TRIALS;
+
+  // Realized-revenue inputs — no deals-path read hook yet (D06 deferral).
+  // TODO(billing): wire company-scoped invoice + payment reads from
+  // features/invoices (fetchInvoicesForCompany) + features/collections once
+  // those surfaces expose hooks. Until then the realized series renders empty.
+  const invoices = EMPTY_INVOICES;
+  const collections = EMPTY_PAYMENTS;
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Local cast mirrors SalesPage / Projections.jsx shape
-  const userInfo: UserInfo | null = t1UserInfo ? { id: t1UserInfo.id, preferences: {} } : null;
-  const company: CompanyData | null = t1Company
-    ? {
-        fiscal_year_start_month: t1Company.fiscal_year_start_month ?? null,
-        invoice_period: t1Company.invoice_period ?? null,
-        weekly_billing_day: t1Company.weekly_billing_day ?? null,
-        monthly_billing_date: t1Company.monthly_billing_date ?? null,
-        per_trial_billing_days_after_end: t1Company.per_trial_billing_days_after_end ?? null,
-      }
-    : null;
+  // Local cast mirrors SalesPage / Projections.jsx shape. Memoized on the
+  // Tier-1 company identity so the large projection-math useMemo below (which
+  // depends on `company`) doesn't re-run every render — mirrors the
+  // fyStartTime→fyStart stabilization pattern used in the tab.
+  const company = useMemo<CompanyData | null>(() => {
+    if (!t1Company) return null;
+    const companyExtras = t1Company as { show_debug_info?: boolean | null };
+    return {
+      fiscal_year_start_month: t1Company.fiscal_year_start_month ?? null,
+      invoice_period: t1Company.invoice_period ?? null,
+      weekly_billing_day: t1Company.weekly_billing_day ?? null,
+      monthly_billing_date: t1Company.monthly_billing_date ?? null,
+      per_trial_billing_days_after_end: t1Company.per_trial_billing_days_after_end ?? null,
+      annual_revenue_target: t1Company.annual_revenue_target ?? null,
+      monthly_breakeven: t1Company.monthly_breakeven ?? null,
+      show_debug_info: companyExtras.show_debug_info ?? null,
+    };
+  }, [t1Company]);
 
-  // Load preferences — bible Projections.jsx lines 28–35
+  // Load preferences once from the real user_info jsonb bag — bible
+  // Projections.jsx lines 28–35. Mirrors D03 deal-tracker's prefsLoadedRef
+  // hydrate-on-first-resolve pattern; the bible's keys are read defensively.
+  const prefsLoadedRef = useRef(false);
   useEffect(() => {
-    if (userInfo && !prefsLoaded) {
-      const prefs = (userInfo.preferences ?? {}) as Record<string, unknown>;
-      setTimePeriod((prefs.salesHubForecastingTimePeriod as string | undefined) || 'month');
-      setShowCumulative(
-        (prefs.salesHubForecastingShowCumulative as boolean | undefined) || false,
-      );
-      setShowMyDeals((prefs.salesHubShowMyDeals as boolean | undefined) || false);
-      setPrefsLoaded(true);
-    }
-  }, [userInfo, prefsLoaded]);
+    if (!userInfo || prefsLoadedRef.current) return;
+    prefsLoadedRef.current = true;
+    const prefs = userInfo.preferences ?? {};
+    setTimePeriod((prefs.salesHubForecastingTimePeriod as string | undefined) || 'month');
+    setShowCumulative(
+      (prefs.salesHubForecastingShowCumulative as boolean | undefined) || false,
+    );
+    setShowMyDeals((prefs.salesHubShowMyDeals as boolean | undefined) || false);
+  }, [userInfo]);
 
-  // Preference persistence — no-op until Tier-2 userInfo store wires in.
-  const savePreference = (_key: string, _value: unknown) => {
-    // TODO(Tier-2): persist to user_info.preferences when store port lands
-  };
+  // Preference persistence — no-op until the Tier-2 userInfo update path lands
+  // (same deferral as D03 deal-tracker; bible debounces UserInfo.update).
+  // TODO(D07/prefs): persist salesHubForecasting* + salesHubShowMyDeals back to
+  // user_info.preferences on change when the preferences write surface ports.
+  const savePreference = (_key: string, _value: unknown) => {};
 
   const handleTimePeriodChange = (period: string) => {
     setTimePeriod(period);
@@ -300,38 +290,6 @@ export function ProjectionsPage() {
         let dailyRevenue: number | { isSplit: true; preTrialDailyRevenue: number; inTrialDailyRevenue: number; preTrialDays: number; inTrialDays: number };
         let dailyRevenueFull: number | { isSplit: true; preTrialDailyRevenue: number; inTrialDailyRevenue: number; preTrialDays: number; inTrialDays: number };
 
-        if (ts.final_billing_method === 'split' && trialStartDate) {
-          const daysBeforeTrial = Math.max(
-            0,
-            Math.ceil(
-              (trialStartDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-            ),
-          );
-          const daysInTrial = Math.max(
-            0,
-            Math.ceil(
-              (endDate.getTime() - trialStartDate.getTime()) / (1000 * 60 * 60 * 24),
-            ) + 1,
-          );
-          dailyRevenueFull = {
-            isSplit: true,
-            preTrialDailyRevenue: ts.pre_trial_projected_daily_revenue ?? 0,
-            inTrialDailyRevenue: ts.in_trial_projected_daily_revenue ?? 0,
-            preTrialDays: daysBeforeTrial,
-            inTrialDays: daysInTrial,
-          };
-          dailyRevenue = {
-            isSplit: true,
-            preTrialDailyRevenue: 0,
-            inTrialDailyRevenue: 0,
-            preTrialDays: daysBeforeTrial,
-            inTrialDays: daysInTrial,
-          };
-        } else {
-          dailyRevenueFull = ts.projected_daily_revenue ?? 0;
-          dailyRevenue = 0;
-        }
-
         const hshAssignment = hiringCompanyAssignments.find(
           sa => sa.trial_service_id === ts.id,
         );
@@ -350,20 +308,37 @@ export function ProjectionsPage() {
         }
 
         if (ts.final_billing_method === 'split' && trialStartDate) {
-          const dr = dailyRevenue as {
-            isSplit: true;
-            preTrialDailyRevenue: number;
-            inTrialDailyRevenue: number;
-            preTrialDays: number;
-            inTrialDays: number;
+          const daysBeforeTrial = Math.max(
+            0,
+            Math.ceil(
+              (trialStartDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+            ),
+          );
+          const daysInTrial = Math.max(
+            0,
+            Math.ceil(
+              (endDate.getTime() - trialStartDate.getTime()) / (1000 * 60 * 60 * 24),
+            ) + 1,
+          );
+          const preTrialFull = ts.pre_trial_projected_daily_revenue ?? 0;
+          const inTrialFull = ts.in_trial_projected_daily_revenue ?? 0;
+          dailyRevenueFull = {
+            isSplit: true,
+            preTrialDailyRevenue: preTrialFull,
+            inTrialDailyRevenue: inTrialFull,
+            preTrialDays: daysBeforeTrial,
+            inTrialDays: daysInTrial,
           };
-          const drf = dailyRevenueFull as typeof dr;
-          dr.preTrialDailyRevenue =
-            (drf.preTrialDailyRevenue - dailyHshPayoutValue) * probability;
-          dr.inTrialDailyRevenue =
-            (drf.inTrialDailyRevenue - dailyHshPayoutValue) * probability;
+          dailyRevenue = {
+            isSplit: true,
+            preTrialDailyRevenue: (preTrialFull - dailyHshPayoutValue) * probability,
+            inTrialDailyRevenue: (inTrialFull - dailyHshPayoutValue) * probability,
+            preTrialDays: daysBeforeTrial,
+            inTrialDays: daysInTrial,
+          };
         } else {
-          const drFull = dailyRevenueFull as number;
+          const drFull = ts.projected_daily_revenue ?? 0;
+          dailyRevenueFull = drFull;
           dailyRevenue = (drFull - dailyHshPayoutValue) * probability;
         }
 
@@ -531,6 +506,9 @@ export function ProjectionsPage() {
         const probForTask =
           (stageForTask as { revenue_probability?: number } | undefined)?.revenue_probability ?? 1;
         const netFullValue = totalRevenueFull - totalHshPayout;
+        // TODO(HSH): verify per_trial HSH-payout probability weighting vs bible
+        // Projections.jsx:177 when hiringCompanyAssignments is wired (currently
+        // empty in D06, so this is equivalent to the bible for all live paths).
         const netProjectedValue =
           totalRevenue - totalHshPayout * probForTask;
 
@@ -709,7 +687,7 @@ export function ProjectionsPage() {
           detailedRecords={detailedRecords}
           invoices={invoices}
           payments={collections}
-          trials={trials}
+          trials={trialRows as unknown as TrialRow[]}
           clients={clients}
           company={company}
           fiscalYearStart={fiscalYearStart}

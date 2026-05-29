@@ -5,7 +5,7 @@
   "execution_complete": false,
   "reflection_complete": false,
   "changes_total": 9,
-  "changes_completed": 5,
+  "changes_completed": 6,
   "change_backend": "openspec",
   "status": "planned (ready to execute)",
   "last_updated": "2026-05-29",
@@ -43,7 +43,7 @@
     {
       "id": "change-D06",
       "title": "Revenue Projections re-port",
-      "change_state": "PENDING"
+      "change_state": "DONE"
     },
     {
       "id": "change-D07",

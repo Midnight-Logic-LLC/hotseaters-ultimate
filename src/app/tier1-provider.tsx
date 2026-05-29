@@ -88,6 +88,8 @@ export interface Tier1Company extends CompanyFlags {
   fiscal_year_start_month?: number | null;
   /** Annual revenue target — drives the RevenueTrend goal line. */
   annual_revenue_target?: number | null;
+  /** Monthly break-even — drives the RevenueProjections breakeven reference line. */
+  monthly_breakeven?: number | null;
 }
 
 export interface Tier1Value {
@@ -143,6 +145,9 @@ function buildTier1Company(
   }
   if (typeof company.annual_revenue_target === 'number') {
     out.annual_revenue_target = company.annual_revenue_target;
+  }
+  if (typeof company.monthly_breakeven === 'number') {
+    out.monthly_breakeven = company.monthly_breakeven;
   }
   return out;
 }
