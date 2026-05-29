@@ -90,15 +90,17 @@ export function useNeedsAttention(opts: UseNeedsAttentionOptions = {}): NeedsAtt
     if (!companyId) return EMPTY;
     const now = nowMs !== undefined ? new Date(nowMs) : new Date();
 
+    // Pre-filtered to pending here; earliestPendingByAnchor re-guards
+    // status !== 'pending' internally (defensive, intentionally redundant).
     const pendingActivities = salesActivities.filter(
       (a) => a.status === 'pending',
-    ) as unknown as SalesActivityLike[];
+    ) as SalesActivityLike[];
 
     const counts = computeStaleDealCounts({
-      trials: trials as unknown as TrialLike[],
-      pipelineStages: pipelineStages as unknown as PipelineStageLike[],
-      attorneys: attorneys as unknown as AttorneyLike[],
-      clients: clients as unknown as ClientLike[],
+      trials: trials as TrialLike[],
+      pipelineStages: pipelineStages as PipelineStageLike[],
+      attorneys: attorneys as AttorneyLike[],
+      clients: clients as ClientLike[],
       pendingActivities,
       myUserInfoId,
       now,
