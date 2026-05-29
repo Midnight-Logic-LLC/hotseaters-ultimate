@@ -24,8 +24,19 @@
 import { useCallback, useMemo } from 'react';
 import { useTier1 } from '@/app/tier1-provider';
 import { useTrialsList } from '@/features/trials/hooks/use-trials-list';
-import { updateTrial, deleteTrial } from '@/features/trials/stores/trials-store';
-import type { Trial } from '@/features/trials/entities';
+import {
+  createTrial,
+  updateTrial,
+  deleteTrial,
+  fetchTrialServices,
+  createTrialService,
+  updateTrialService,
+  deleteTrialService,
+  fetchTrialContacts,
+  createTrialContact,
+  deleteTrialContact,
+} from '@/features/trials/stores/trials-store';
+import type { Trial, TrialService } from '@/features/trials/entities';
 import type { PipelineStage, LookupRow } from '@/shared/db/lookups-selectors';
 import {
   isDealStage,
@@ -60,6 +71,31 @@ export interface UseDealsTrialsDataResult {
   restoreTrial: (id: string) => Promise<void>;
   /** Hard delete of the trial row. Cascade of children is handled in D04. */
   deleteDeal: (id: string) => Promise<void>;
+  // ── Deal create / update orchestration (change-D03) ──
+  /**
+   * Create a new deal: insert the `trial`, then create its `trial_service`
+   * rows and `trial_contact` (secondary-contact) rows. Mirrors the bible's
+   * `createDealMutation`. Returns the created trial.
+   */
+  createDeal: (input: DealWritePayload) => Promise<Trial>;
+  /**
+   * Update an existing deal: patch the `trial`, then diff its `trial_service`
+   * rows (create/update/delete) and replace its `trial_contact` rows. Mirrors
+   * the bible's `updateDealMutation`. Returns the updated trial.
+   */
+  updateDeal: (input: DealWritePayload & { id: string }) => Promise<Trial>;
+}
+
+/** Service row as produced by the wizard's `buildServicesFromAnswers`. */
+export type DealServiceInput = Partial<TrialService> & { id?: string };
+
+export interface DealWritePayload {
+  /** Trial column patch (case fields, dates, retainer, etc.). */
+  trialData: Partial<Trial>;
+  /** Built trial_service rows (existing rows carry a string `id`). */
+  services?: DealServiceInput[];
+  /** attorney_id list for the trial's secondary contacts. */
+  secondaryContacts?: string[];
 }
 
 function todayIso(): string {
@@ -144,6 +180,95 @@ export function useDealsTrialsData({ scope }: { scope: DealsScope }): UseDealsTr
     await deleteTrial(id);
   }, []);
 
+  const createDeal = useCallback(
+    async ({ trialData, services, secondaryContacts }: DealWritePayload): Promise<Trial> => {
+      if (!companyId) throw new Error('createDeal: no active company');
+      const trial = await createTrial({ ...trialData, company_id: companyId });
+      if (services && services.length > 0) {
+        for (const service of services) {
+          // New rows: strip any client-generated numeric id; the DB assigns one.
+          const { id: _id, ...rest } = service;
+          await createTrialService({ ...rest, trial_id: trial.id, company_id: companyId });
+        }
+      }
+      if (secondaryContacts && secondaryContacts.length > 0) {
+        for (const attorneyId of secondaryContacts) {
+          await createTrialContact({
+            trial_id: trial.id,
+            attorney_id: attorneyId,
+            company_id: companyId,
+          });
+        }
+      }
+      return trial;
+    },
+    [companyId],
+  );
+
+  const updateDeal = useCallback(
+    async ({
+      id,
+      trialData,
+      services,
+      secondaryContacts,
+    }: DealWritePayload & { id: string }): Promise<Trial> => {
+      if (!companyId) throw new Error('updateDeal: no active company');
+      const trial = await updateTrial(id, trialData);
+
+      if (services !== undefined) {
+        const existing = await fetchTrialServices(id);
+        const incomingIds = new Set(
+          services.map((s) => s.id).filter((v): v is string => typeof v === 'string'),
+        );
+        const toDeleteIds = existing
+          .filter((ts) => !incomingIds.has(ts.id))
+          .map((ts) => ts.id);
+
+        // TODO(D04 HSH guard): the bible blocks removing a service that has an
+        // active HotSeatHub assignment/request via `checkHSHBlockers`. The port
+        // has the pure `findHSHBlockers` rule (features/trials/business-rules/
+        // trial-service-delete-guard) but loading the HSH assignment/request
+        // inventory belongs to the D04 sales-activity / HSH surface. Until then
+        // service removal proceeds unguarded — wire `findHSHBlockers` here once
+        // the HSH data path is hooked up.
+
+        for (const tsId of toDeleteIds) {
+          await deleteTrialService(tsId);
+        }
+
+        for (const service of services) {
+          const { id: serviceId, ...rest } = service;
+          if (typeof serviceId === 'string' && incomingIds.has(serviceId)) {
+            await updateTrialService(serviceId, {
+              ...rest,
+              trial_id: id,
+              company_id: companyId,
+            });
+          } else {
+            await createTrialService({ ...rest, trial_id: id, company_id: companyId });
+          }
+        }
+      }
+
+      if (secondaryContacts !== undefined) {
+        const existingContacts = await fetchTrialContacts(id);
+        for (const tc of existingContacts) {
+          await deleteTrialContact(tc.id);
+        }
+        for (const attorneyId of secondaryContacts) {
+          await createTrialContact({
+            trial_id: id,
+            attorney_id: attorneyId,
+            company_id: companyId,
+          });
+        }
+      }
+
+      return trial;
+    },
+    [companyId],
+  );
+
   const invalidate = useCallback(() => {
     // Pattern-4 live query auto-updates on PGlite change — nothing to do.
   }, []);
@@ -164,5 +289,7 @@ export function useDealsTrialsData({ scope }: { scope: DealsScope }): UseDealsTr
     revertToDeal,
     restoreTrial,
     deleteDeal,
+    createDeal,
+    updateDeal,
   };
 }

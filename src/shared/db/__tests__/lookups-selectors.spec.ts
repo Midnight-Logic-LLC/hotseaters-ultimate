@@ -150,6 +150,19 @@ describe('selectClientTypes', () => {
     const r = selectClientTypes(entities, COMPANY);
     expect(r[0]?.multiplier).toBe(0.85);
   });
+
+  it('falls back to extra_schema.default_multiplier (client_type seed key)', () => {
+    const entities = build([
+      {
+        id: 'ct-default',
+        scope: 'client_type',
+        name: 'Corporate',
+        extra_schema: { default_multiplier: 1.2 },
+      },
+    ]);
+    const r = selectClientTypes(entities, COMPANY);
+    expect(r[0]?.multiplier).toBe(1.2);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -260,5 +273,18 @@ describe('selectClientTypesFromRows (Pattern 4)', () => {
     ]);
     const r = selectClientTypesFromRows(rows, COMPANY);
     expect(r[0]?.multiplier).toBe(0.85);
+  });
+
+  it('falls back to extra_schema.default_multiplier (client_type seed key)', () => {
+    const rows = makeRows([
+      {
+        id: 'ct-default',
+        scope: 'client_type',
+        name: 'Corporate',
+        extra_schema: { default_multiplier: 1.2 },
+      },
+    ]);
+    const r = selectClientTypesFromRows(rows, COMPANY);
+    expect(r[0]?.multiplier).toBe(1.2);
   });
 });
