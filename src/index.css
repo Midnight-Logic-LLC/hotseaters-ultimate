@@ -89,6 +89,10 @@
   --theme-font-brand-subtitle: 'Michroma', sans-serif;
   --theme-font-body: 'Montserrat', system-ui, -apple-system, sans-serif;
   --theme-font-sidebar: 'Syncopate', system-ui, -apple-system, sans-serif;
+  /* Page titles use Michroma — bible refresh 29ae47e3 moved every page-title
+     <h1> to `fontFamily: 'Michroma, sans-serif'`. Centralised here so all
+     in-app page titles share one source of truth (RULE 0.3). */
+  --theme-font-page-title: 'Michroma', sans-serif;
   --theme-text-page-title: 1.875rem;
   --theme-text-section-title: 1.25rem;
   --theme-text-card-title: 1.125rem;

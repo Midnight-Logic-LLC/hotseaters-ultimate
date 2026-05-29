@@ -170,6 +170,7 @@ export function TrialDetailPage() {
                 <h1
                   className="font-bold truncate"
                   style={{
+                    fontFamily: 'var(--theme-font-page-title)',
                     fontSize: 'var(--theme-text-page-title)',
                     color: 'var(--theme-stone-900)',
                   }}

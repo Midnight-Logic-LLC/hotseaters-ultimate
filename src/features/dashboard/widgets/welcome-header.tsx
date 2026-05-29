@@ -15,6 +15,7 @@ export function WelcomeHeader() {
       <h1
         className="mb-2 font-bold"
         style={{
+          fontFamily: 'var(--theme-font-page-title)',
           fontSize: 'var(--theme-text-page-title)',
           color: 'var(--theme-stone-900)',
         }}

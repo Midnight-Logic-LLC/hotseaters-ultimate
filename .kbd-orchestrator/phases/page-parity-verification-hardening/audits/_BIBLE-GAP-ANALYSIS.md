@@ -97,7 +97,16 @@ page diff is the visible tip of this pivot.
 ## REVISED net scope — two distinct bodies of work
 
 ### Body A — small parity fixes (fits in this verification phase)
-1. **Systemic Michroma page-title** font (one shared fix, ~all pages).
+1. ✅ **DONE — Systemic Michroma page-title** font. Added
+   `--theme-font-page-title: 'Michroma', sans-serif'` to `src/index.css` and
+   referenced it via `fontFamily: 'var(--theme-font-page-title)'` on all 18
+   in-app page-title `<h1>`s (trials/time-and-expenses/trial-detail/timeline/
+   lead-radar/sales/projections/invoices/deal-tracker/bills/approvals/
+   collections/hsh-directory/potential-gigs/help-wanted/settings/welcome-header
+   + team). One token = one source of truth (RULE 0.3). Gate trio green.
+   Excluded non-title uses: role-guard error screen, app-router debug
+   placeholder, auth-card (marketing-themed, not in bible Michroma set), and
+   the dead/unrouted company-settings-page.
 2. Tier-2 visual re-audits where unaffected by the Deals pivot
    (MobileMore, Timeline, Clients-visual).
 3. exhaustive-deps paydown (V12), final gate (V13).

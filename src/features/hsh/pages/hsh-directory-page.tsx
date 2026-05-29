@@ -404,6 +404,7 @@ export function HshDirectoryPage() {
               <h1
                 className="font-bold mb-2 flex items-center"
                 style={{
+                  fontFamily: 'var(--theme-font-page-title)',
                   fontSize: 'var(--theme-text-page-title)',
                   color: 'var(--theme-stone-900)',
                   gap: 'var(--theme-element-gap)',
