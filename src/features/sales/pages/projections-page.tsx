@@ -27,9 +27,10 @@
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { useTier1 } from '@/app/tier1-provider';
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
 import { Spinner } from '@/components/ui/spinner';
 import { useProjectionsData } from '@/features/sales/hooks/use-projections-data';
 import { RevenueProjectionsTab } from '@/features/sales/components/revenue-projections-tab';
@@ -101,11 +102,6 @@ interface CompanyData {
   annual_revenue_target?: number | null;
   monthly_breakeven?: number | null;
   show_debug_info?: boolean | null;
-}
-
-interface UserInfo {
-  id: string;
-  preferences?: Record<string, unknown>;
 }
 
 // ─── Detail record shape (passed to RevenueProjectionsTab) ───────────────────
@@ -190,12 +186,15 @@ const EMPTY_INVOICES: ChartInvoiceRow[] = [];
 const EMPTY_PAYMENTS: ChartPaymentRow[] = [];
 
 export function ProjectionsPage() {
-  const { userInfo: t1UserInfo, company: t1Company } = useTier1();
+  const { company: t1Company } = useTier1();
+  // Real user prefs live on the live `user_info` row (jsonb bag), surfaced by
+  // useCurrentUser — same source the D03 deal-tracker reads (preferences is
+  // `Record<string, unknown> | null`). No fabricated empty object.
+  const { userInfo } = useCurrentUser();
 
   const [showMyDeals, setShowMyDeals] = useState<boolean | null>(null);
   const [timePeriod, setTimePeriod] = useState('month');
   const [showCumulative, setShowCumulative] = useState(false);
-  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number | null>(null);
 
   // ── Real data (D01 deals hook + clients + trial services) ─────────────────
@@ -227,9 +226,7 @@ export function ProjectionsPage() {
   // ─────────────────────────────────────────────────────────────────────────
 
   // Local cast mirrors SalesPage / Projections.jsx shape
-  const userInfo: UserInfo | null = t1UserInfo ? { id: t1UserInfo.id, preferences: {} } : null;
   const companyExtras = (t1Company ?? {}) as {
-    monthly_breakeven?: number | null;
     show_debug_info?: boolean | null;
   };
   const company: CompanyData | null = t1Company
@@ -240,28 +237,31 @@ export function ProjectionsPage() {
         monthly_billing_date: t1Company.monthly_billing_date ?? null,
         per_trial_billing_days_after_end: t1Company.per_trial_billing_days_after_end ?? null,
         annual_revenue_target: t1Company.annual_revenue_target ?? null,
-        monthly_breakeven: companyExtras.monthly_breakeven ?? null,
+        monthly_breakeven: t1Company.monthly_breakeven ?? null,
         show_debug_info: companyExtras.show_debug_info ?? null,
       }
     : null;
 
-  // Load preferences — bible Projections.jsx lines 28–35
+  // Load preferences once from the real user_info jsonb bag — bible
+  // Projections.jsx lines 28–35. Mirrors D03 deal-tracker's prefsLoadedRef
+  // hydrate-on-first-resolve pattern; the bible's keys are read defensively.
+  const prefsLoadedRef = useRef(false);
   useEffect(() => {
-    if (userInfo && !prefsLoaded) {
-      const prefs = (userInfo.preferences ?? {}) as Record<string, unknown>;
-      setTimePeriod((prefs.salesHubForecastingTimePeriod as string | undefined) || 'month');
-      setShowCumulative(
-        (prefs.salesHubForecastingShowCumulative as boolean | undefined) || false,
-      );
-      setShowMyDeals((prefs.salesHubShowMyDeals as boolean | undefined) || false);
-      setPrefsLoaded(true);
-    }
-  }, [userInfo, prefsLoaded]);
+    if (!userInfo || prefsLoadedRef.current) return;
+    prefsLoadedRef.current = true;
+    const prefs = userInfo.preferences ?? {};
+    setTimePeriod((prefs.salesHubForecastingTimePeriod as string | undefined) || 'month');
+    setShowCumulative(
+      (prefs.salesHubForecastingShowCumulative as boolean | undefined) || false,
+    );
+    setShowMyDeals((prefs.salesHubShowMyDeals as boolean | undefined) || false);
+  }, [userInfo]);
 
-  // Preference persistence — no-op until Tier-2 userInfo store wires in.
-  const savePreference = (_key: string, _value: unknown) => {
-    // TODO(Tier-2): persist to user_info.preferences when store port lands
-  };
+  // Preference persistence — no-op until the Tier-2 userInfo update path lands
+  // (same deferral as D03 deal-tracker; bible debounces UserInfo.update).
+  // TODO(D07/prefs): persist salesHubForecasting* + salesHubShowMyDeals back to
+  // user_info.preferences on change when the preferences write surface ports.
+  const savePreference = (_key: string, _value: unknown) => {};
 
   const handleTimePeriodChange = (period: string) => {
     setTimePeriod(period);
@@ -527,6 +527,9 @@ export function ProjectionsPage() {
         const probForTask =
           (stageForTask as { revenue_probability?: number } | undefined)?.revenue_probability ?? 1;
         const netFullValue = totalRevenueFull - totalHshPayout;
+        // TODO(HSH): verify per_trial HSH-payout probability weighting vs bible
+        // Projections.jsx:177 when hiringCompanyAssignments is wired (currently
+        // empty in D06, so this is equivalent to the bible for all live paths).
         const netProjectedValue =
           totalRevenue - totalHshPayout * probForTask;
 

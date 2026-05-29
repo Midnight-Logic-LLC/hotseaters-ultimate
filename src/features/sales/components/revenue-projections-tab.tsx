@@ -540,11 +540,16 @@ export function RevenueProjectionsTab({
             detailLevel={detailLevel}
             onDetailLevelChange={setDetailLevel}
           />
-          {/* TODO(sales/billing debug): the bible renders <RevenueTrendDebugCard>
-              (465 LOC) always and <RevenueProjectionDebug> (171 LOC) behind
-              company.show_debug_info. Both are dev-only diagnostic panels, not
-              customer-facing parity surfaces — deferred. Port them behind a
-              debug toggle when a debug surface lands. */}
+          {/* TODO(sales): RevenueTrendDebugCard is rendered UNCONDITIONALLY in
+              the bible (RevenueProjectionsTab.jsx:502–509) — it is a customer-
+              visible 465-LOC collapsible per-day billing-record table, NOT a
+              dev-only panel. Deferred to a follow-up because porting it inline
+              would push this file past the 800-LOC ceiling; it should land as
+              its own component (props: detailedRecords, timePeriod,
+              fiscalYearStart, invoicePeriod, invoices — all already computed
+              here). Separately, <RevenueProjectionDebug> (171 LOC) IS gated on
+              company.show_debug_info in the bible and is genuinely dev-only —
+              port it behind that flag when a debug surface lands. */}
         </CardContent>
       </Card>
     </>
