@@ -36,7 +36,6 @@ import { ReferralLandingPage } from '@/features/marketing/pages/referral-landing
 import { ApprovalsPage } from '@/features/approvals/pages/approvals-page';
 import { LeadRadarPage } from '@/features/lead-radar/pages/lead-radar-page';
 import { DealTrackerPage } from '@/features/deals/pages/deal-tracker-page';
-import { SalesPage } from '@/features/sales/pages/sales-page';
 import { TimelinePage } from '@/features/trials/pages/timeline-page';
 import { LastRouteTracker } from '@/app/last-route-tracker';
 import { TimeAndExpensesPage } from '@/features/trials/pages/time-and-expenses-page';
@@ -262,19 +261,11 @@ export function AppRouter() {
               }
             />
 
-            {/* Sales Hub (bible: Sales.jsx — three-tab Lead Radar / Deal Tracker / Projections) */}
-            <Route
-              path="Sales"
-              element={
-                <RoleGuard roles={SALES_ROLES}>
-                  <SalesPage />
-                </RoleGuard>
-              }
-            />
-            <Route
-              path="sales"
-              element={<Navigate to="/Sales" replace />}
-            />
+            {/* Sales Hub retired (change-D05): the bible deleted Sales.jsx in the
+                Leads→Deals pivot. /Sales and /sales now redirect to the standalone
+                Deal Tracker page (bible's equivalent destination). */}
+            <Route path="Sales" element={<Navigate to="/DealTracker" replace />} />
+            <Route path="sales" element={<Navigate to="/DealTracker" replace />} />
 
             {/* Sales-scoped routes */}
             <Route
