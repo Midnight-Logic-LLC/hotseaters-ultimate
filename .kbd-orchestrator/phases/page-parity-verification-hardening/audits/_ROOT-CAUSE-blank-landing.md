@@ -110,3 +110,13 @@ Gate trio green (typecheck 0, lint 0, tests 407/407). Pushing to `main`
 auto-deploys via `deploy.yml`; the deployed `/` drift should collapse from
 79% to <5% once ArgoCD rolls the new image. Re-run `pnpm test:bible-parity`
 after the rollout to confirm.
+
+
+## DEPLOY VERIFIED (2026-05-29)
+
+Commit 77e285b deployed successfully (deploy.yml 4m27s). Headless re-check of
+the LIVE site confirms the fix: `#root` = 50,469 chars, all headings present,
+ZERO console errors. The blank-page production bug is RESOLVED in production.
+
+Note: residual bible-parity drift on marketing pages is NOT this bug — it is
+the deployed-bible-ahead-of-source calibration issue (see _DRIFT-BACKLOG.md).

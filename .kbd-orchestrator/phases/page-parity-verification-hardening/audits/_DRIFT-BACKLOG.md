@@ -1,84 +1,67 @@
 # Drift backlog — page-parity-verification-hardening
 
-Findings from `pnpm test:bible-parity` (deployed bible vs deployed port,
-pixelmatch, threshold 0.1). Soft-assert gate is <5% drift. Captured 2026-05-29
-via change-V01's extended harness.
+Findings from `pnpm test:bible-parity` (deployed bible `hotseaters.com` vs
+deployed port `hotseaters-ultimate.prometheusags.ai`, pixelmatch threshold 0.1).
+Soft-assert gate <5% drift.
 
-## Unauth surface drift (V03/V04 scope → fix in V11)
+## ⚠️ CRITICAL CALIBRATION FINDING (2026-05-29)
 
-| Drift | Viewport | Surface | Severity | Notes |
-|------:|----------|---------|----------|-------|
-| 79.58% | desktop | `/` | 🔴 BLOCKER | Port renders a fundamentally different page from the bible |
-| 79.58% | desktop | `/Landing` | 🔴 BLOCKER | Same — marketing surface not at parity |
-| 79.58% | desktop | `/Pricing` | 🔴 BLOCKER | Same |
-| 78.24% | mobile | `/` | 🔴 BLOCKER | Same |
-| 78.24% | mobile | `/Landing` | 🔴 BLOCKER | Same |
-| 78.24% | mobile | `/Pricing` | 🔴 BLOCKER | Same |
-| 8.91% | mobile | `/login` | 🟡 HIGH | Moderate drift |
-| 8.80% | mobile | `/ReferralLanding` | 🟡 HIGH | Moderate drift |
-| 7.57% | mobile | `/TermsOfService` | 🟡 HIGH | Moderate drift |
-| 7.16% | mobile | `/PrivacyPolicy` | 🟡 HIGH | Moderate drift |
-| 5.57% | desktop | `/ReferralLanding` | 🟡 HIGH | Just over gate |
-| 4.61% | desktop | `/PrivacyPolicy` | 🟢 PASS | Under 5% gate |
-| 4.16% | desktop | `/TermsOfService` | 🟢 PASS | Under gate |
-| 3.15% | desktop | `/login` | 🟢 PASS | Under gate |
-| 2.34% | mobile | `/pending-approval` | 🟢 PASS | At parity |
-| 2.32% | mobile | `/account-rejected` | 🟢 PASS | At parity |
-| 2.26% | mobile | `/accept-invite?token=fake` | 🟢 PASS | At parity |
-| 0.50% | desktop | `/pending-approval` | 🟢 PASS | At parity |
-| 0.50% | desktop | `/account-rejected` | 🟢 PASS | At parity |
-| 0.48% | desktop | `/accept-invite?token=fake` | 🟢 PASS | At parity |
+**The deployed bible (`hotseaters.com`) is AHEAD of the bible SOURCE in the
+repo.** Per RULE 2, the bible **source** (`HotSeatersMVP/src/pages/*.jsx`) is
+ground truth — NOT the deployment.
 
-## Top finding (needs root-cause in V03)
+Evidence: bible source `Landing.jsx:179` has a **white hero**
+(`<section className="max-w-7xl mx-auto px-6 py-20 lg:py-32">` over the page's
+`from-stone-50` gradient, dark headline). The deployed `hotseaters.com` shows a
+**dark navy hero banner** with reversed-out white text. These are different
+designs → the deployment was redesigned after the source snapshot we hold.
 
-`/`, `/Landing`, `/Pricing` show **~79% drift** at both viewports — an order of
-magnitude beyond "polish." This is not subtle copy/color drift; the deployed
-port is rendering a substantially different page. Likely causes to investigate
-in V03:
+**Consequence:** the deployed-vs-deployed drift numbers for the marketing pages
+are measuring the port against a *moving target that is itself ahead of ground
+truth*. A high drift here does NOT mean the port is wrong — the port faithfully
+matches the bible source (verified line-by-line in audits/landing.md +
+audits/pricing.md, both PASS).
 
-1. The deployed port's marketing routes were not included in the last deploy
-   (the W1 public-surface commit may not have shipped to
-   `hotseaters-ultimate.prometheusags.ai`).
-2. `/` redirects to a different layout (login/dashboard) on the port vs the
-   bible's marketing home.
-3. A build/routing regression on the deployed bundle.
+## Post-PGlite-fix drift (2026-05-29, after commit 77e285b deployed)
 
-**Action:** V03 must first confirm what the deployed port actually serves at
-`/` (screenshot review in `.artifacts/bible-parity/desktop/root/port.png`)
-before assuming a code defect. Per RULE 0.4, diagnose from the rendered output,
-not the source.
+| Drift | Viewport | Surface | Interpretation |
+|------:|----------|---------|----------------|
+| 83.31% | mobile | `/Pricing` | Port renders correctly (verified); deployed bible likely redesigned |
+| 80.69% | desktop | `/Pricing` | Same |
+| 80.55% | mobile | `/` `/Landing` | Port renders full page (50k DOM, no errors); hero design differs from *deployed* bible, MATCHES bible source |
+| 56.35% | desktop | `/` `/Landing` | Same — was 79% pre-fix (page was blank); now renders, residual = bible-deploy-ahead-of-source |
+| 17.2-17.3% | both | `/ReferralLanding` | Real moderate drift — audit vs SOURCE in V03 |
+| 13-15% | mobile | `/login`, `/TermsOfService`, `/PrivacyPolicy` | Real drift — audit vs SOURCE |
+| 7-8% | desktop | `/PrivacyPolicy`, `/TermsOfService` | Real moderate drift |
+| 0.9-5.5% | both | `/login`(d), `/accept-invite`, `/pending-approval`, `/account-rejected` | 🟢 At/near parity |
 
-### Diagnosis (2026-05-29, change-V01 follow-up)
+## What changed pre→post fix
 
-Confirmed by inspecting the captured artifacts + live HTML:
+- The PGlite crash fix (`77e285b`) **resolved the blank-page production bug** —
+  the deployed `/` went from 0-char blank (`#root` empty, pageerror) to full
+  render (50,469 chars, all sections, zero console errors). **This was the real
+  customer-facing bug and it is FIXED in production.**
+- Drift did NOT collapse to <5% as first predicted, because the residual is
+  NOT a port defect — it's the deployed-bible-ahead-of-source calibration issue
+  above. `/` desktop dropped 79%→56% (the blank page now renders); `/Pricing`
+  reads ~80% because the deployed bible's pricing page was also redesigned.
 
-- `bible.png` at `/` → full marketing landing ("The Complete Technology Toolkit
-  for Trial Techs", Purpose-Built Features, From Chaos to Clarity, HotSeatHub,
-  "Ready to Transform Your Business?" CTA).
-- `port.png` at `/` → **completely blank** (empty surface, no content rendered).
-- `curl https://hotseaters-ultimate.prometheusags.ai/` → SPA shell + bundle
-  (`/assets/index-CiwlaRa7.js`) **are served correctly**. So this is a runtime
-  render gap, not a 404/500.
+## Revised V03/V11 actions
 
-**Most likely cause: the deployed bundle is STALE** — it predates the W1
-public-surface port (`landing-page.tsx`) and/or the Pattern 4 + PGliteProvider
-commits that are on `main` but may not have been deployed to
-`hotseaters-ultimate.prometheusags.ai`. The landing source exists in the repo
-(`src/features/landing/pages/landing-page.tsx`) and the route is wired
-(`app-router.tsx` path="/"). 
+1. **Marketing pages (`/`, `/Landing`, `/Pricing`):** port matches bible
+   SOURCE (PASS). Do NOT "fix" the port to chase the deployed bible — that
+   would violate RULE 2 (source is ground truth). **Escalate to the user:**
+   should the bible SOURCE be refreshed from the newer deployed design, or is
+   the source the intended target? This is a ground-truth decision only the
+   owner can make.
+2. **`/ReferralLanding` (17%), policy pages (7-15%):** audit against the bible
+   SOURCE in V03. These may be genuine port drift OR the same deploy-ahead
+   issue — the source audit decides.
+3. **Auth utilities (≤5.5%):** at parity, no action.
 
-**Next step (deploy verification, owner action):** confirm whether the deployed
-bundle hash matches current `main`. If stale → redeploy and re-run
-`pnpm test:bible-parity`; the ~79% drift on `/`, `/Landing`, `/Pricing` should
-collapse. If a fresh deploy still renders blank → it IS a code/runtime defect
-(e.g. the landing route crashing on the deployed Supabase/Electric env) and
-becomes a V11 code fix. **Do not assume code drift until the deploy is
-confirmed current.**
+## Bottom line
 
-The 3–9% drifts on `/login`, `/ReferralLanding`, `/Terms*`, `/Privacy*` are
-genuine page-level drift to audit per-page in V03/V04 regardless of the deploy
-question.
-
-## Authed surfaces
-
-Not yet measured — require committed baselines (V05–V09, needs bible app local).
+The scary 79% number was TWO separate things, now disentangled:
+- **A real production bug** (blank page from the PGlite crash) → **FIXED + deployed**.
+- **A measurement-calibration issue** (deployed bible ahead of source) → needs a
+  ground-truth decision from the owner, not a code fix.
