@@ -1,54 +1,46 @@
 {
-  "phase": "hotseaters-page-parity-port",
+  "phase": "page-parity-verification-hardening",
   "project": "hotseaters-ultimate",
-  "status": "reflected",
+  "status": "planned",
   "assessment_complete": true,
   "plan_complete": true,
-  "execution_complete": true,
-  "reflection_complete": true,
+  "execution_complete": false,
+  "reflection_complete": false,
   "change_backend": "openspec",
-  "assessment_path": ".kbd-orchestrator/phases/hotseaters-page-parity-port/assessment.md",
-  "plan_path": ".kbd-orchestrator/phases/hotseaters-page-parity-port/plan.md",
-  "progress_path": ".kbd-orchestrator/phases/hotseaters-page-parity-port/progress.json",
-  "reflection_path": ".kbd-orchestrator/phases/hotseaters-page-parity-port/reflection.md",
-  "active_wave": "Wave S COMPLETE + W1-W8 DELIVERED (untracked)",
-  "phase_summary": "Wave S (16 changes) tracked + archived. Waves W1-W8 delivered as feat(wave-N) commits but not decomposed into tracked changes. Electric Pattern 4 + PGliteProvider hoist fix also landed in this phase window. Gate trio green at reflection (typecheck 0, lint 0, tests 407/407).",
-  "next_step": "Scaffold next phase with /kbd-new-phase. Recommended: (1) reconcile ledger to mark W1-W8 delivered + capture real page list, then (2) Wave-V — verification & parity hardening (stand up VR harness with bible baselines, run per-page RULE-0 acceptance gate at 1440x900 + 375x667, fix drift). Do NOT re-run W0-W8 from scratch — they already shipped.",
-  "recommended_next_phase": {
-    "name": "page-parity-verification-hardening",
-    "rationale": "Pages W1-W8 shipped fast but were not audited per-page against the bible. The 'shareholders can't tell which app' bar (RULE 0) is asserted, not proven. Verification is the highest-value next move.",
-    "ordered_focus": [
-      "Reconcile ledger: record W1-W8 as delivered, capture actual ported-page inventory",
-      "Stand up VR harness with bible baselines (closes S16 PARTIAL + Card-primitive baseline debt)",
-      "Per-page RULE-0 acceptance gate across all ported pages at 1440x900 + 375x667",
-      "Pay down 37 react-hooks/exhaustive-deps warnings on heavy ported pages",
-      "Resume entity-management 2.0 transport-registry redesign (foamy-marinating-hollerith.md)",
-      "Enable pre-commit hook (cp .githooks/pre-commit.example .git/hooks/pre-commit)"
-    ]
+  "assessment_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/assessment.md",
+  "plan_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/plan.md",
+  "progress_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/progress.json",
+  "active_wave": "V0 — Foundation (VR harness consolidation + audit ledger)",
+  "phase_summary": "Verification & parity-hardening of the already-shipped page port. 13 changes (V01-V13). Key revision from assessment: the VR harness already exists (bible-vs-port deployed-vs-deployed drift harness + per-page toHaveScreenshot specs). This phase EXTENDS it, does not rebuild. Unauth-surface drift has NO blocker (compares deployments). Only authed-surface committed baselines need the bible app run locally once.",
+  "next_step": "Run /kbd-execute page-parity-verification-hardening to begin. First changes (parallel): change-V01 (extend bible-vs-port PATHS + RUNBOOK + tracked pre-commit instruction) and change-V02 (RULE-0 audit template + ledger + W1-W8 inventory reconcile).",
+  "execution_order": [
+    ["change-V01", "change-V02"],
+    ["change-V03", "change-V04"],
+    ["change-V05", "change-V06", "change-V07", "change-V08", "change-V09", "change-V10"],
+    ["change-V11"],
+    ["change-V12"],
+    ["change-V13"]
+  ],
+  "vr_harness_facts": {
+    "bible_vs_port_spec": "tests/visual-parity/specs/bible-vs-port.spec.ts — live deployed-vs-deployed pixelmatch drift, 5 unauth surfaces, no baselines needed, soft-asserts <5%",
+    "per_page_specs": "tests/visual-parity/specs/<page>-parity.spec.ts — toHaveScreenshot vs committed baselines, uses seedSession auth fixture (owner/sales/trial)",
+    "deployed_bible": "https://hotseaters.com",
+    "deployed_port": "https://hotseaters-ultimate.prometheusags.ai",
+    "configs": ["tests/visual-parity/playwright.config.ts", "tests/visual-parity/bible-parity.config.ts"],
+    "scripts": ["pnpm test:bible-parity", "pnpm test:visual-parity", "pnpm test:visual-parity:update"]
   },
+  "blockers": [
+    "Authed-surface committed baselines (V05-V09) need bible app (HotSeatersMVP, has vite dev) run locally with a seeded session, captured once. Unauth path (V03-V04) has no blocker.",
+    "Confirm disposition of 4 unported dev/admin utilities (3 onboarding previews + RunMigration) — recommend explicit out-of-scope in V02."
+  ],
   "previous_phases": [
     "dashboard-and-data-architecture-parity (complete, archived 2026-05-25)",
     "dashboard-bible-parity-build (complete, reflected 2026-05-26)",
     "hotseaters-page-parity-port (complete, reflected 2026-05-29)"
   ],
-  "delivered_waves": [
-    "Wave S — Settings Infrastructure + all 12 tabs (TRACKED, 16 changes archived 2026-05-27)",
-    "Wave W1 — Public surface (commit d9ebecd)",
-    "Wave W2 — Auth surface (commit 7d1725c)",
-    "Wave W3 — App shell audit + MobileMore (commit ce830c1)",
-    "Wave W4 — Sales pages (commit 7a88042)",
-    "Wave W5 — Operations pages (commit 2924462)",
-    "Wave W6 — Billing pages (commit c900a36)",
-    "Wave W7 — HotSeatHub pages (commit 5f20323)",
-    "Wave W8 — Settings header fix + Manual + Documents (commit 597cc2e)",
-    "Electric SQL Pattern 4 local-first rewrite (commit 877fa66)",
-    "PGliteProvider hoist crash fix (commit 7c17b0d, pushed to main)"
-  ],
   "deferred_items": [
     "npm publish @prometheus-ags/prometheus-entity-management@1.3.2 (needs npm credentials)",
-    "VR baselines (needs bible app running locally) — blocks S16 full completion + Card primitive baseline",
-    "change-424 T11/T12 browser smoke (Team Members realtime update)",
-    "entity-management 2.0 transport-registry redesign (foamy-marinating-hollerith.md; TaskList step 2/11 in flight)",
-    "Per-page OpenSpec traceability for W1-W8 (delivered as squash commits, not tracked changes)"
+    "entity-management 2.0 transport-registry redesign (foamy-marinating-hollerith.md)",
+    "Per-page OpenSpec traceability for W1-W8 (being reconciled in change-V02)"
   ]
 }
