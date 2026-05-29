@@ -1,48 +1,54 @@
 {
   "phase": "hotseaters-page-parity-port",
   "project": "hotseaters-ultimate",
-  "status": "planned",
+  "status": "reflected",
   "assessment_complete": true,
   "plan_complete": true,
-  "execution_complete": false,
-  "reflection_complete": false,
+  "execution_complete": true,
+  "reflection_complete": true,
   "change_backend": "openspec",
   "assessment_path": ".kbd-orchestrator/phases/hotseaters-page-parity-port/assessment.md",
   "plan_path": ".kbd-orchestrator/phases/hotseaters-page-parity-port/plan.md",
   "progress_path": ".kbd-orchestrator/phases/hotseaters-page-parity-port/progress.json",
-  "active_wave": "Wave S — Settings Infrastructure",
-  "wave_rationale": "Settings first per user direction: settings values are shared across the whole application and affect behavior on every navigation route. Plugin-ready registry pattern required.",
-  "next_step": "Run /kbd-execute hotseaters-page-parity-port to begin Wave S. First change: change-S01 (settings tab registry + shell + route wiring).",
-  "execution_order": [
-    ["change-S01", "change-S02"],
-    ["change-S15"],
-    ["change-S03"],
-    ["change-S04", "change-S05"],
-    ["change-S06", "change-S07", "change-S08", "change-S09", "change-S10", "change-S11"],
-    ["change-S12", "change-S13"],
-    ["change-S14"],
-    ["change-S16"]
-  ],
+  "reflection_path": ".kbd-orchestrator/phases/hotseaters-page-parity-port/reflection.md",
+  "active_wave": "Wave S COMPLETE + W1-W8 DELIVERED (untracked)",
+  "phase_summary": "Wave S (16 changes) tracked + archived. Waves W1-W8 delivered as feat(wave-N) commits but not decomposed into tracked changes. Electric Pattern 4 + PGliteProvider hoist fix also landed in this phase window. Gate trio green at reflection (typecheck 0, lint 0, tests 407/407).",
+  "next_step": "Scaffold next phase with /kbd-new-phase. Recommended: (1) reconcile ledger to mark W1-W8 delivered + capture real page list, then (2) Wave-V — verification & parity hardening (stand up VR harness with bible baselines, run per-page RULE-0 acceptance gate at 1440x900 + 375x667, fix drift). Do NOT re-run W0-W8 from scratch — they already shipped.",
+  "recommended_next_phase": {
+    "name": "page-parity-verification-hardening",
+    "rationale": "Pages W1-W8 shipped fast but were not audited per-page against the bible. The 'shareholders can't tell which app' bar (RULE 0) is asserted, not proven. Verification is the highest-value next move.",
+    "ordered_focus": [
+      "Reconcile ledger: record W1-W8 as delivered, capture actual ported-page inventory",
+      "Stand up VR harness with bible baselines (closes S16 PARTIAL + Card-primitive baseline debt)",
+      "Per-page RULE-0 acceptance gate across all ported pages at 1440x900 + 375x667",
+      "Pay down 37 react-hooks/exhaustive-deps warnings on heavy ported pages",
+      "Resume entity-management 2.0 transport-registry redesign (foamy-marinating-hollerith.md)",
+      "Enable pre-commit hook (cp .githooks/pre-commit.example .git/hooks/pre-commit)"
+    ]
+  },
   "previous_phases": [
     "dashboard-and-data-architecture-parity (complete, archived 2026-05-25)",
-    "dashboard-bible-parity-build (complete, reflected 2026-05-26)"
+    "dashboard-bible-parity-build (complete, reflected 2026-05-26)",
+    "hotseaters-page-parity-port (complete, reflected 2026-05-29)"
   ],
-  "wave_order": [
-    "Wave S — Settings Infrastructure + All Settings Tabs (ACTIVE)",
-    "Wave W0 — Foundation (brand assets, auth routing, MarketingShell)",
-    "Wave W1 — Public surface (/, /Landing, /PrivacyPolicy, /TermsOfService, /Pricing, /ReferralLanding)",
-    "Wave W2 — Auth surface (/Onboarding, /AcceptInvite, /PaymentSuccess, /PaymentCancelled, /AccountDeactivated)",
-    "Wave W3 — App shell audit + /Dashboard + /MobileMore",
-    "Wave W4 — Sales (/Clients, /Clients/:id, /DealTracker, /Sales, /LeadRadar)",
-    "Wave W5 — Operations (/Trials, /Trials/:id, /Timeline, /TimeAndExpenses, /Team)",
-    "Wave W6 — Billing (/Approvals, /Invoices, /Bills, /Collections)",
-    "Wave W7 — HotSeatHub (/PotentialGigs, /HelpWanted, /HSHDirectory, /HotSeatHubMarketing, /Projections)",
-    "Wave W8 — Settings + Manual + Documents (/Settings, /UserManual, /SignDocument, /ViewDocument)"
+  "delivered_waves": [
+    "Wave S — Settings Infrastructure + all 12 tabs (TRACKED, 16 changes archived 2026-05-27)",
+    "Wave W1 — Public surface (commit d9ebecd)",
+    "Wave W2 — Auth surface (commit 7d1725c)",
+    "Wave W3 — App shell audit + MobileMore (commit ce830c1)",
+    "Wave W4 — Sales pages (commit 7a88042)",
+    "Wave W5 — Operations pages (commit 2924462)",
+    "Wave W6 — Billing pages (commit c900a36)",
+    "Wave W7 — HotSeatHub pages (commit 5f20323)",
+    "Wave W8 — Settings header fix + Manual + Documents (commit 597cc2e)",
+    "Electric SQL Pattern 4 local-first rewrite (commit 877fa66)",
+    "PGliteProvider hoist crash fix (commit 7c17b0d, pushed to main)"
   ],
   "deferred_items": [
     "npm publish @prometheus-ags/prometheus-entity-management@1.3.2 (needs npm credentials)",
-    "VR baselines for Card primitive (needs bible app running locally)",
+    "VR baselines (needs bible app running locally) — blocks S16 full completion + Card primitive baseline",
     "change-424 T11/T12 browser smoke (Team Members realtime update)",
-    "entity-management 2.0 redesign (archived plan in foamy-marinating-hollerith.md — Wave S takes priority)"
+    "entity-management 2.0 transport-registry redesign (foamy-marinating-hollerith.md; TaskList step 2/11 in flight)",
+    "Per-page OpenSpec traceability for W1-W8 (delivered as squash commits, not tracked changes)"
   ]
 }
