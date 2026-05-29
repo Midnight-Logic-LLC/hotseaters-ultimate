@@ -10,10 +10,19 @@
  *
  * Adapter mappings:
  *   useTier1Data()         → useTier1() from @/app/tier1-provider
- *   useDealsTrialsData()   → Tier-2 stubs (arrays) + useTier1() for company
- *   base44.entities.*      → empty array stubs (Tier-2 pending)
+ *   useDealsTrialsData()   → useProjectionsData() (composes D01 deals hook +
+ *                            useClientsList + useEntities<TrialService>)
  *   PageLoader             → inline spinner
- *   RevenueProjectionsTab  → typed Coming-soon stub
+ *   RevenueProjectionsTab  → the ported component (D06)
+ *
+ * Realized-revenue + HSH inputs (D06 deferrals):
+ *   - invoices / payments(collections): no port read hook on the deals data
+ *     path yet → empty arrays. The projection (future) series is the D06
+ *     deliverable; the realized series renders empty until the billing surface
+ *     (features/invoices + features/collections) exposes a company-scoped read
+ *     hook. See TODO below.
+ *   - subcontractAssignments / hiringCompanyAssignments / hshTrials / services:
+ *     belong to the HotSeatHub / subcontracts surface → empty arrays.
  *
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
@@ -22,7 +31,13 @@ import { useState, useMemo, useEffect } from 'react';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { useTier1 } from '@/app/tier1-provider';
 import { Spinner } from '@/components/ui/spinner';
-import type { PipelineStage } from '@/shared/db/lookups-selectors';
+import { useProjectionsData } from '@/features/sales/hooks/use-projections-data';
+import { RevenueProjectionsTab } from '@/features/sales/components/revenue-projections-tab';
+import type {
+  ChartInvoiceRow,
+  ChartPaymentRow,
+} from '@/features/deals/business-rules/revenue-projection-chart-data';
+import type { TrialRow } from '@/features/sales/components/revenue-projections-types';
 
 // ─── Types (verbatim from Sales.jsx / SalesPage) ─────────────────────────────
 
@@ -76,25 +91,16 @@ interface Service {
   name?: string | null;
 }
 
-interface Invoice {
-  id: string;
-}
-
-interface Collection {
-  id: string;
-}
-
-interface Client {
-  id: string;
-  name?: string | null;
-}
-
 interface CompanyData {
   fiscal_year_start_month?: number | null;
   invoice_period?: string | null;
   weekly_billing_day?: string | null;
   monthly_billing_date?: number | null;
   per_trial_billing_days_after_end?: number | null;
+  // Read by RevenueProjectionsTab for the goal / breakeven reference lines.
+  annual_revenue_target?: number | null;
+  monthly_breakeven?: number | null;
+  show_debug_info?: boolean | null;
 }
 
 interface UserInfo {
@@ -172,50 +178,19 @@ function PageLoader({ message }: { message: string }) {
   );
 }
 
-// ─── RevenueProjectionsTab stub ───────────────────────────────────────────────
-
-interface RevenueProjectionsTabProps {
-  timePeriod: string;
-  showCumulative: boolean;
-  selectedFiscalYear: number | null;
-  onTimePeriodChange: (p: string) => void;
-  onCumulativeToggle: (v: boolean) => void;
-  onFiscalYearChange: (y: number) => void;
-  detailedRecords: DetailedRecord[];
-  invoices: Invoice[];
-  payments: Collection[];
-  trials: Trial[];
-  clients: Client[];
-  company: CompanyData | null;
-  fiscalYearStart: Date | null;
-  invoicePeriod: string;
-  weeklyBillingDay: string;
-  monthlyBillingDate: number;
-  projectedInvoices: Map<string, number>;
-  tasksWithDailyRevenue: unknown[];
-  pipelineStages: PipelineStage[];
-}
-
-function RevenueProjectionsTab(_props: RevenueProjectionsTabProps) {
-  return (
-    <div
-      className="rounded-lg border p-6 text-center"
-      style={{
-        borderColor: 'var(--theme-stone-200)',
-        backgroundColor: 'var(--theme-stone-50)',
-        color: 'var(--theme-stone-500)',
-      }}
-    >
-      Coming soon: RevenueProjectionsTab
-    </div>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// Stable empty stubs for the not-yet-wired revenue inputs (D06 deferrals).
+// Module-level frozen identity keeps the projection-math useMemo deps stable.
+const EMPTY_SERVICES: Service[] = [];
+const EMPTY_SUBCONTRACTS: SubcontractAssignment[] = [];
+const EMPTY_HIRING_ASSIGNMENTS: HiringCompanyAssignment[] = [];
+const EMPTY_HSH_TRIALS: HshTrial[] = [];
+const EMPTY_INVOICES: ChartInvoiceRow[] = [];
+const EMPTY_PAYMENTS: ChartPaymentRow[] = [];
+
 export function ProjectionsPage() {
-  const { userInfo: t1UserInfo, company: t1Company, isLoading: tier1Loading, pipelineStages } =
-    useTier1();
+  const { userInfo: t1UserInfo, company: t1Company } = useTier1();
 
   const [showMyDeals, setShowMyDeals] = useState<boolean | null>(null);
   const [timePeriod, setTimePeriod] = useState('month');
@@ -223,22 +198,40 @@ export function ProjectionsPage() {
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number | null>(null);
 
-  // ── Tier-2 data stubs ─────────────────────────────────────────────────────
-  // Replace with real store data when the Tier-2 sales store port lands.
-  const trialServices: TrialService[] = [];
-  const trials: Trial[] = [];
-  const clients: Client[] = [];
-  const invoices: Invoice[] = [];
-  const services: Service[] = [];
-  const subcontractAssignments: SubcontractAssignment[] = [];
-  const hiringCompanyAssignments: HiringCompanyAssignment[] = [];
-  const hshTrials: HshTrial[] = [];
-  const collections: Collection[] = [];
-  const isSalesDataLoading = tier1Loading;
+  // ── Real data (D01 deals hook + clients + trial services) ─────────────────
+  const {
+    trials: trialRows,
+    clients,
+    trialServices: trialServiceRows,
+    pipelineStages,
+    isLoading: isSalesDataLoading,
+  } = useProjectionsData();
+
+  // The bible's projection math reads a narrow field-set; cast at the boundary.
+  const trials = trialRows as unknown as Trial[];
+  const trialServices = trialServiceRows as unknown as TrialService[];
+
+  // HSH / subcontract revenue inputs belong to the HotSeatHub + subcontracts
+  // surface — empty until those read hooks exist (D06 deferral).
+  const services = EMPTY_SERVICES;
+  const subcontractAssignments = EMPTY_SUBCONTRACTS;
+  const hiringCompanyAssignments = EMPTY_HIRING_ASSIGNMENTS;
+  const hshTrials = EMPTY_HSH_TRIALS;
+
+  // Realized-revenue inputs — no deals-path read hook yet (D06 deferral).
+  // TODO(billing): wire company-scoped invoice + payment reads from
+  // features/invoices (fetchInvoicesForCompany) + features/collections once
+  // those surfaces expose hooks. Until then the realized series renders empty.
+  const invoices = EMPTY_INVOICES;
+  const collections = EMPTY_PAYMENTS;
   // ─────────────────────────────────────────────────────────────────────────
 
   // Local cast mirrors SalesPage / Projections.jsx shape
   const userInfo: UserInfo | null = t1UserInfo ? { id: t1UserInfo.id, preferences: {} } : null;
+  const companyExtras = (t1Company ?? {}) as {
+    monthly_breakeven?: number | null;
+    show_debug_info?: boolean | null;
+  };
   const company: CompanyData | null = t1Company
     ? {
         fiscal_year_start_month: t1Company.fiscal_year_start_month ?? null,
@@ -246,6 +239,9 @@ export function ProjectionsPage() {
         weekly_billing_day: t1Company.weekly_billing_day ?? null,
         monthly_billing_date: t1Company.monthly_billing_date ?? null,
         per_trial_billing_days_after_end: t1Company.per_trial_billing_days_after_end ?? null,
+        annual_revenue_target: t1Company.annual_revenue_target ?? null,
+        monthly_breakeven: companyExtras.monthly_breakeven ?? null,
+        show_debug_info: companyExtras.show_debug_info ?? null,
       }
     : null;
 
@@ -709,7 +705,7 @@ export function ProjectionsPage() {
           detailedRecords={detailedRecords}
           invoices={invoices}
           payments={collections}
-          trials={trials}
+          trials={trialRows as unknown as TrialRow[]}
           clients={clients}
           company={company}
           fiscalYearStart={fiscalYearStart}
