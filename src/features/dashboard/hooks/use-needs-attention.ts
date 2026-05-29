@@ -1,49 +1,54 @@
 /**
- * use-needs-attention — sales-stale-leads counter for the NeedsAttentionBanner.
+ * use-needs-attention — sales "needs attention" counter for the
+ * NeedsAttentionBanner (and the Deal Tracker sidebar badge).
  *
- * Bible: HotSeatersMVP/src/pages/Dashboard.jsx lines 56–59, 711–755 +
- * useMyStaleLeadsCount.js.
+ * Bible: HotSeatersMVP/src/pages/Dashboard.jsx lines 712–756 +
+ * HotSeatersMVP/src/hooks/useMyStaleDealsCount.js.
+ *
+ * The Leads→Deals re-architecture (change-D07) pivoted this banner from a
+ * LEADS model to a DEALS+prospects model. The counted scope is now:
+ *   • Deals — active sales-stage Trials (not lost/settled), anchored by trial.
+ *   • Contact-only prospects — is_active_prospect Attorneys with no sales-stage
+ *     Trial pointing at them, anchored by attorney.
+ * "Needs attention" = no pending next step OR overdue OR due-today.
  *
  * Counters:
- *   • myCount    — stale leads where the current user is the sales_lead.
- *   • totalCount — stale leads company-wide (owner-only display).
+ *   • myCount    — items owned by the current user (deal.consultant_id === me,
+ *                  or the prospect's firm client.sales_lead === me).
+ *   • totalCount — all qualifying items company-wide (owner-only display).
  *
- * Stale = no pending activity OR earliest pending activity is overdue.
- * "Mine" walks lead.attorney_id → attorney.client_id → client.sales_lead.
- *
- * 2.0 migration: replaced useEntityView (inline remoteFetch closures) with
- * useEntities (transport-registry-backed).
- *
- * The LEAD_RADAR_AVAILABLE flag gates all three entity fetches until the
- * `lead`, `sales_activity`, and `attorney` tables land in the V2 schema.
- * Flip it to `true` when the schema is ready; zero other changes needed.
+ * Data sources (RULE C — this hook composes other hooks, never reaches the
+ * network itself):
+ *   • useDealsTrialsData('deals') — D02/D04 trials + Tier-1 pipelineStages.
+ *   • useSalesActivities()        — D04 sales-activity seam (attorneys +
+ *                                   pending activities, company-scoped REST).
+ *   • useClientsList()            — Tier-A clients (firm.sales_lead ownership).
+ *   • useTier1() / useCurrentUser() — role + my UserInfo id.
  */
 
 import { useMemo } from 'react';
-import { useEntities } from '@prometheus-ags/prometheus-entity-management';
 import { useTier1 } from '@/app/tier1-provider';
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
 import { useClientsList } from '@/features/clients/hooks/use-clients-list';
+import { useDealsTrialsData } from '@/features/deals/hooks/use-deals-trials-data';
+import { useSalesActivities } from '@/features/deals/hooks/use-sales-activities';
 import {
-  computeStaleLeadCounts,
-  type ActivityLike,
+  computeStaleDealCounts,
   type AttorneyLike,
   type ClientLike,
-  type LeadLike,
-  type StaleLeadsCounts,
-} from '@/features/dashboard/business-rules/stale-leads';
+  type PipelineStageLike,
+  type SalesActivityLike,
+  type StaleDealsCounts,
+  type TrialLike,
+} from '@/features/dashboard/business-rules/stale-deals';
 
-interface LeadRow { id: string; attorney_id: string | null; }
-interface SalesActivityRow { id: string; lead_id: string | null; status: string | null; due_date: string | null; }
-interface AttorneyRow { id: string; client_id: string | null; }
-
-export interface NeedsAttentionResult extends StaleLeadsCounts {
+export interface NeedsAttentionResult extends StaleDealsCounts {
   isLoading: boolean;
   /** True when the banner has anything worth showing for the current user. */
   shouldRender: boolean;
   /** Bible-correct primary copy (varies by owner vs. sales view). */
   headline: string;
-  /** Bible-correct secondary copy. */
+  /** Bible-correct secondary copy (varies by owner vs. sales view). */
   subhead: string;
 }
 
@@ -56,28 +61,6 @@ const EMPTY: NeedsAttentionResult = Object.freeze({
   subhead: '',
 });
 
-/**
- * Feature flag — flip to `true` when the offline-first phase wires the
- * `lead`, `sales_activity`, and `attorney` tables into Postgres + RLS +
- * sync-config. Until then this hook short-circuits to EMPTY and disables
- * the underlying `useEntities` REST calls, so we never fire
- * `/rest/v1/lead?...` against a schema where those tables don't exist
- * (which returns 400 → TerminalError, no retry storm).
- *
- * The NeedsAttentionBanner widget consumes `shouldRender` and renders
- * nothing when false, so flipping this flag is a true no-op for users
- * until the schema is ready.
- *
- * Exposed via a getter so unit tests can override it without mocking the
- * whole module. Production code MUST NOT call the setter.
- */
-let LEAD_RADAR_AVAILABLE = false;
-
-/** Test-only — flip the feature flag from a spec. */
-export function __setLeadRadarAvailableForTests(value: boolean): void {
-  LEAD_RADAR_AVAILABLE = value;
-}
-
 export interface UseNeedsAttentionOptions {
   /** Reference "now" for stale comparisons. Defaults to `new Date()`. */
   now?: Date;
@@ -86,77 +69,74 @@ export interface UseNeedsAttentionOptions {
 export function useNeedsAttention(opts: UseNeedsAttentionOptions = {}): NeedsAttentionResult {
   const { company, role } = useTier1();
   const companyId = company?.id ?? null;
-  const isOwnerView = role === 'owner';
+  const isOwner = role === 'owner';
   const { userInfo } = useCurrentUser();
   const myUserInfoId = userInfo?.id ?? null;
   const nowMs = opts.now?.getTime();
 
   const { clients, isLoading: clientsLoading } = useClientsList();
-
-  const { items: leads, isLoading: leadsLoading } = useEntities<LeadRow>('Lead', {
-    filter: companyId
-      ? [{ field: 'company_id', op: 'eq', value: companyId }]
-      : null,
-    enabled: LEAD_RADAR_AVAILABLE && !!companyId,
-  });
-
-  const { items: activities, isLoading: activitiesLoading } = useEntities<SalesActivityRow>('SalesActivity', {
-    filter: companyId
-      ? [
-          { field: 'company_id', op: 'eq', value: companyId },
-          { field: 'status', op: 'eq', value: 'pending' },
-        ]
-      : null,
-    enabled: LEAD_RADAR_AVAILABLE && !!companyId,
-  });
-
-  const { items: attorneys, isLoading: attorneysLoading } = useEntities<AttorneyRow>('Attorney', {
-    filter: companyId
-      ? [{ field: 'company_id', op: 'eq', value: companyId }]
-      : null,
-    enabled: LEAD_RADAR_AVAILABLE && !!companyId,
-  });
+  const {
+    trials,
+    pipelineStages,
+    isLoading: trialsLoading,
+  } = useDealsTrialsData({ scope: 'deals' });
+  const {
+    attorneys,
+    salesActivities,
+    isLoading: activitiesLoading,
+  } = useSalesActivities();
 
   return useMemo<NeedsAttentionResult>(() => {
-    if (!LEAD_RADAR_AVAILABLE) return EMPTY;
     if (!companyId) return EMPTY;
     const now = nowMs !== undefined ? new Date(nowMs) : new Date();
-    const clientsForRule: ClientLike[] = clients.map((c) => ({
-      id: c.id,
-      sales_lead: (c as { sales_lead?: string | null }).sales_lead ?? null,
-    }));
-    const counts = computeStaleLeadCounts({
-      leads: leads as unknown as LeadLike[],
-      pendingActivities: activities as unknown as ActivityLike[],
+
+    const pendingActivities = salesActivities.filter(
+      (a) => a.status === 'pending',
+    ) as unknown as SalesActivityLike[];
+
+    const counts = computeStaleDealCounts({
+      trials: trials as unknown as TrialLike[],
+      pipelineStages: pipelineStages as unknown as PipelineStageLike[],
       attorneys: attorneys as unknown as AttorneyLike[],
-      clients: clientsForRule,
+      clients: clients as unknown as ClientLike[],
+      pendingActivities,
       myUserInfoId,
       now,
     });
-    const shouldRender = isOwnerView ? counts.totalCount > 0 : counts.myCount > 0;
-    const headline = isOwnerView
-      ? `${counts.totalCount} Lead${counts.totalCount !== 1 ? 's' : ''} Need Attention`
-      : `${counts.myCount} of Your Lead${counts.myCount !== 1 ? 's' : ''} ${counts.myCount !== 1 ? 'Need' : 'Needs'} Attention`;
-    const subhead = 'No activity logged in the last 7 days';
+
+    // Bible Dashboard.jsx line 713:
+    //   showStaleWidget && (staleMyCount > 0 || (isOwner && staleTotalCount > 0))
+    // The role-level showStaleWidget gate lives in the widget registry; the
+    // per-data gate is here.
+    const shouldRender = counts.myCount > 0 || (isOwner && counts.totalCount > 0);
+
+    // Bible Dashboard.jsx lines 737–752.
+    const headline = isOwner
+      ? `${counts.myCount} of yours / ${counts.totalCount} total need attention`
+      : `${counts.myCount} ${counts.myCount === 1 ? 'deal item needs' : 'deal items need'} attention`;
+    const subhead = isOwner
+      ? 'Overdue or missing a next step — open Deal Tracker to follow up.'
+      : 'Overdue or no next step scheduled — open Deal Tracker to follow up.';
+
     return {
       ...counts,
-      isLoading: clientsLoading || leadsLoading || activitiesLoading || attorneysLoading,
+      isLoading: clientsLoading || trialsLoading || activitiesLoading,
       shouldRender,
       headline,
       subhead,
     };
   }, [
     companyId,
-    isOwnerView,
+    isOwner,
     myUserInfoId,
     nowMs,
     clients,
-    leads,
-    activities,
+    trials,
+    pipelineStages,
     attorneys,
+    salesActivities,
     clientsLoading,
-    leadsLoading,
+    trialsLoading,
     activitiesLoading,
-    attorneysLoading,
   ]);
 }

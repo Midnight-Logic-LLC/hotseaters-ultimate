@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 
 const mockUseTier1 = vi.fn();
 const mockUseCurrentUser = vi.fn();
 const mockUseClientsList = vi.fn();
+const mockUseDealsTrialsData = vi.fn();
+const mockUseSalesActivities = vi.fn();
 
 vi.mock('@/app/tier1-provider', () => ({
   useTier1: () => mockUseTier1(),
@@ -14,85 +16,133 @@ vi.mock('@/features/auth/hooks/use-current-user', () => ({
 vi.mock('@/features/clients/hooks/use-clients-list', () => ({
   useClientsList: () => mockUseClientsList(),
 }));
+vi.mock('@/features/deals/hooks/use-deals-trials-data', () => ({
+  useDealsTrialsData: () => mockUseDealsTrialsData(),
+}));
+vi.mock('@/features/deals/hooks/use-sales-activities', () => ({
+  useSalesActivities: () => mockUseSalesActivities(),
+}));
 
-// Mock useEntities at the module level
-vi.mock('@prometheus-ags/prometheus-entity-management', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@prometheus-ags/prometheus-entity-management')>();
-  return {
-    ...actual,
-    useEntities: vi.fn(),
-  };
-});
+import { useNeedsAttention } from '../use-needs-attention';
 
-import { useEntities } from '@prometheus-ags/prometheus-entity-management';
-import {
-  useNeedsAttention,
-  __setLeadRadarAvailableForTests,
-} from '../use-needs-attention';
+const NOW = new Date(2026, 2, 15); // 2026-03-15
+const tier1Sales = { company: { id: 'co', name: 'Co' }, role: 'sales' };
+const tier1Owner = { company: { id: 'co', name: 'Co' }, role: 'owner' };
 
-const mockUseEntities = vi.mocked(useEntities);
+const stages = [
+  { id: 'sales', type: 'sales' },
+  { id: 'ops', type: 'operations' },
+];
 
-const NOW = new Date(2026, 2, 15);
-const tier1 = { company: { id: 'co', name: 'Co' } };
+const clients = [
+  { id: 'cl-mine', sales_lead: 'me' },
+  { id: 'cl-other', sales_lead: 'someone-else' },
+];
 
 beforeEach(() => {
-  // Enable the lead-radar feature flag for the spec; production default is
-  // false until the `lead` / `sales_activity` / `attorney` tables exist.
-  __setLeadRadarAvailableForTests(true);
-  mockUseTier1.mockImplementation(() => tier1);
-  mockUseCurrentUser.mockReturnValue({
-    userInfo: { id: 'me' },
+  mockUseTier1.mockReturnValue(tier1Sales);
+  mockUseCurrentUser.mockReturnValue({ userInfo: { id: 'me' }, isLoading: false });
+  mockUseClientsList.mockReturnValue({ clients, isLoading: false });
+  mockUseDealsTrialsData.mockReturnValue({
+    trials: [],
+    pipelineStages: stages,
     isLoading: false,
   });
-  mockUseClientsList.mockReturnValue({
-    clients: [
-      { id: 'cl-mine', sales_lead: 'me' },
-      { id: 'cl-other', sales_lead: 'someone-else' },
-    ],
+  mockUseSalesActivities.mockReturnValue({
+    attorneys: [],
+    salesActivities: [],
     isLoading: false,
-  });
-  mockUseEntities.mockImplementation((type: string) => {
-    if (type === 'Lead') return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
-    if (type === 'SalesActivity') return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
-    if (type === 'Attorney') return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
-    return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
   });
 });
 
 describe('useNeedsAttention', () => {
   it('returns empty when no company', () => {
-    mockUseTier1.mockImplementation(() => ({ company: null }));
+    mockUseTier1.mockReturnValue({ company: null, role: 'sales' });
     const { result } = renderHook(() => useNeedsAttention({ now: NOW }));
     expect(result.current.myCount).toBe(0);
     expect(result.current.totalCount).toBe(0);
+    expect(result.current.shouldRender).toBe(false);
   });
 
-  it('counts mine vs total via Phase A stale-leads rule', async () => {
-    const leads = [
-      { id: 'l1', attorney_id: 'a-mine' }, // mine, no activity -> stale
-      { id: 'l2', attorney_id: 'a-other' }, // theirs, overdue -> stale
-      { id: 'l3', attorney_id: 'a-mine' }, // mine, future activity -> fresh
-    ];
-    const activities = [
-      { id: 'act1', lead_id: 'l2', scheduled_date: '2026-03-01', status: 'pending' }, // overdue
-      { id: 'act2', lead_id: 'l3', scheduled_date: '2026-03-20', status: 'pending' }, // future
-    ];
-    const attorneys = [
-      { id: 'a-mine', client_id: 'cl-mine' },
-      { id: 'a-other', client_id: 'cl-other' },
-    ];
-    mockUseEntities.mockImplementation((type: string) => {
-      if (type === 'Lead') return { items: leads, isLoading: false, isError: false, error: null, refetch: vi.fn() };
-      if (type === 'SalesActivity') return { items: activities, isLoading: false, isError: false, error: null, refetch: vi.fn() };
-      if (type === 'Attorney') return { items: attorneys, isLoading: false, isError: false, error: null, refetch: vi.fn() };
-      return { items: [], isLoading: false, isError: false, error: null, refetch: vi.fn() };
+  it('counts deals + prospects mine vs total via the stale-deals rule', () => {
+    mockUseDealsTrialsData.mockReturnValue({
+      trials: [
+        { id: 'd1', pipeline_stage_id: 'sales', consultant_id: 'me' }, // stale, mine
+        { id: 'd2', pipeline_stage_id: 'sales', consultant_id: 'other' }, // stale, theirs
+        { id: 'd3', pipeline_stage_id: 'ops', consultant_id: 'me' }, // not a deal
+      ],
+      pipelineStages: stages,
+      isLoading: false,
+    });
+    mockUseSalesActivities.mockReturnValue({
+      attorneys: [{ id: 'a1', client_id: 'cl-mine', is_active_prospect: true }], // stale, mine
+      salesActivities: [],
+      isLoading: false,
     });
     const { result } = renderHook(() => useNeedsAttention({ now: NOW }));
-    await waitFor(() => {
-      expect(result.current.totalCount).toBeGreaterThan(0);
+    expect(result.current.totalCount).toBe(3); // d1 + d2 + a1
+    expect(result.current.myCount).toBe(2); // d1 + a1
+  });
+
+  it('uses sales (non-owner) copy and gates on myCount', () => {
+    mockUseDealsTrialsData.mockReturnValue({
+      trials: [{ id: 'd1', pipeline_stage_id: 'sales', consultant_id: 'me' }],
+      pipelineStages: stages,
+      isLoading: false,
     });
-    // l1 stale + mine, l2 stale + theirs. l3 fresh.
-    expect(result.current.totalCount).toBe(2);
-    expect(result.current.myCount).toBe(1);
+    const { result } = renderHook(() => useNeedsAttention({ now: NOW }));
+    expect(result.current.shouldRender).toBe(true);
+    expect(result.current.headline).toBe('1 deal item needs attention');
+    expect(result.current.subhead).toBe(
+      'Overdue or no next step scheduled — open Deal Tracker to follow up.',
+    );
+  });
+
+  it('pluralizes the sales copy for multiple items', () => {
+    mockUseDealsTrialsData.mockReturnValue({
+      trials: [
+        { id: 'd1', pipeline_stage_id: 'sales', consultant_id: 'me' },
+        { id: 'd2', pipeline_stage_id: 'sales', consultant_id: 'me' },
+      ],
+      pipelineStages: stages,
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useNeedsAttention({ now: NOW }));
+    expect(result.current.headline).toBe('2 deal items need attention');
+  });
+
+  it('uses owner copy (my / total) and renders on total>0 even when myCount is 0', () => {
+    mockUseTier1.mockReturnValue(tier1Owner);
+    mockUseDealsTrialsData.mockReturnValue({
+      trials: [{ id: 'd2', pipeline_stage_id: 'sales', consultant_id: 'other' }], // theirs
+      pipelineStages: stages,
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useNeedsAttention({ now: NOW }));
+    expect(result.current.myCount).toBe(0);
+    expect(result.current.totalCount).toBe(1);
+    expect(result.current.shouldRender).toBe(true);
+    expect(result.current.headline).toBe('0 of yours / 1 total need attention');
+    expect(result.current.subhead).toBe(
+      'Overdue or missing a next step — open Deal Tracker to follow up.',
+    );
+  });
+
+  it('excludes deals with a future next step', () => {
+    mockUseDealsTrialsData.mockReturnValue({
+      trials: [{ id: 'd1', pipeline_stage_id: 'sales', consultant_id: 'me' }],
+      pipelineStages: stages,
+      isLoading: false,
+    });
+    mockUseSalesActivities.mockReturnValue({
+      attorneys: [],
+      salesActivities: [
+        { trial_id: 'd1', scheduled_date: '2026-03-20', status: 'pending' },
+      ],
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useNeedsAttention({ now: NOW }));
+    expect(result.current.totalCount).toBe(0);
+    expect(result.current.shouldRender).toBe(false);
   });
 });
