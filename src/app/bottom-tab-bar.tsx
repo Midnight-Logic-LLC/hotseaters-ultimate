@@ -82,7 +82,7 @@ function buildTabs(role: Role | undefined, company: CompanyFlags, hasSalesAccess
       ];
     case 'admin':
       return [
-        { kind: 'link', label: 'Sales', to: '/Sales', icon: TrendingUp },
+        { kind: 'link', label: 'Deals', to: '/DealTracker', icon: Telescope },
         { kind: 'link', label: 'Time', to: '/TimeAndExpenses', icon: Clock },
         { kind: 'link', label: 'Invoices', to: '/Invoices', icon: DollarSign },
         { kind: 'link', label: 'Collections', to: '/Collections', icon: HandCoins },
@@ -102,7 +102,7 @@ function buildTabs(role: Role | undefined, company: CompanyFlags, hasSalesAccess
         { kind: 'link', label: 'Dashboard', to: '/Dashboard', icon: LayoutDashboard },
       ];
       if (hasSalesAccess) {
-        tabs.push({ kind: 'link', label: 'Sales', to: '/Sales', icon: TrendingUp });
+        tabs.push({ kind: 'link', label: 'Deals', to: '/DealTracker', icon: Telescope });
       }
       tabs.push({ kind: 'link', label: 'Trials', to: '/Trials', icon: Gavel });
       tabs.push({ kind: 'link', label: 'Timeline', to: '/Timeline', icon: GanttChart });
