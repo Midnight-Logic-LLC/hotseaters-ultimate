@@ -5,7 +5,7 @@
   "execution_complete": false,
   "reflection_complete": false,
   "changes_total": 9,
-  "changes_completed": 3,
+  "changes_completed": 4,
   "change_backend": "openspec",
   "status": "planned (ready to execute)",
   "last_updated": "2026-05-29",
@@ -33,7 +33,7 @@
     {
       "id": "change-D04",
       "title": "Sales activity surface",
-      "change_state": "PENDING"
+      "change_state": "DONE"
     },
     {
       "id": "change-D05",

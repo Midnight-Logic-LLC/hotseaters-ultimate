@@ -96,4 +96,8 @@ export interface SharedCardProps {
   onSendReminder?: (doc: DocumentRow, e: React.MouseEvent) => void;
   /** Add-deal-for-contact (D03 wizard). Optional. */
   onAddDealForContact?: (attorney: AttorneyRow) => void;
+  /** Hard-delete the deal's trial row (deals hook `deleteDeal`). Deal-mode only. */
+  onDeleteTrial?: (id: string) => Promise<void>;
+  /** Delete the deal's trial child rows (services/contacts). Deal-mode only. */
+  onDeleteTrialChildren?: (id: string) => Promise<void>;
 }

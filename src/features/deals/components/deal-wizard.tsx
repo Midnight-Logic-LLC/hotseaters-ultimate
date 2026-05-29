@@ -44,9 +44,9 @@ import {
   computePreTrialSubtotal,
 } from './deal-wizard-helpers';
 import { WizardStep1ClientContact, type NewClientDraft } from './wizard-step1-client-contact';
-import { WizardStep4Footer } from './wizard-step4-footer';
+import { WizardStep3PreTrial } from './wizard-step3-pre-trial';
+import { WizardStep4InTrial } from './wizard-step4-in-trial';
 import { WizardStep2CaseDetails } from './wizard-step2-case-details';
-import { WizardServicesGrid } from './wizard-services-grid';
 import { WizardHeader } from './wizard-header';
 import { WizardDialogs, type ContractWarning } from './wizard-dialogs';
 import type {
@@ -140,6 +140,7 @@ export function DealWizard({
     companyDefaults,
     companyId,
     createClient,
+    createContact,
   } = data;
   const [dateRange, setDateRange] = useState<DateRangeValue | undefined>(undefined);
   const [activeRangePicker, setActiveRangePicker] = useState<RangePickerSide>('from');
@@ -537,6 +538,25 @@ export function DealWizard({
     });
   };
 
+  const handleCreateContact = async (
+    clientId: string,
+    draft: { first_name: string; last_name: string; email: string; phone: string; title: string },
+  ): Promise<string> => {
+    // D04: inline primary-contact create routes through the wizard data hook's
+    // createContact action (RULE B/C/D).
+    if (!companyId) throw new Error('No active company');
+    if (!clientId) throw new Error('Select a client first');
+    return createContact({
+      company_id: companyId,
+      client_id: clientId,
+      first_name: draft.first_name,
+      last_name: draft.last_name,
+      email: draft.email,
+      phone: draft.phone,
+      title: draft.title,
+    });
+  };
+
   const canProceed = (): boolean => {
     if (currentStep === 1) {
       const basicValid = dealData.consultant_id && dealData.client_id && dealData.primary_contact_id;
@@ -608,6 +628,7 @@ export function DealWizard({
             toggleSecondaryContact={toggleSecondaryContact}
             onCreateClient={handleCreateClient}
             onCreateFRPClient={handleCreateClient}
+            onCreateContact={handleCreateContact}
           />
         )}
 
@@ -641,8 +662,7 @@ export function DealWizard({
         )}
 
         {currentStep === 3 && (
-          <WizardServicesGrid
-            phase="pre-trial"
+          <WizardStep3PreTrial
             dealData={dealData}
             services={services}
             serviceCategories={serviceCategories}
@@ -664,24 +684,12 @@ export function DealWizard({
             onReorder={setPreTrialServices}
             updateInstance={updatePreTrialService}
             removeInstance={removePreTrialService}
-            footer={
-              preTrialServices.length > 0 ? (
-                <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
-                  <div className="flex items-center justify-between font-semibold">
-                    <span className="text-stone-900">Pre-Trial Subtotal:</span>
-                    <span className="text-green-600 text-lg">
-                      ${preTrialSubtotal.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              ) : null
-            }
+            preTrialSubtotal={preTrialSubtotal}
           />
         )}
 
         {currentStep === 4 && (
-          <WizardServicesGrid
-            phase="in-trial"
+          <WizardStep4InTrial
             dealData={dealData}
             services={services}
             serviceCategories={serviceCategories}
@@ -703,20 +711,15 @@ export function DealWizard({
             onReorder={setInTrialServices}
             updateInstance={updateInTrialService}
             removeInstance={removeInTrialService}
-            footer={
-              <WizardStep4Footer
-                dealData={dealData}
-                setDealData={setDealData}
-                defaultDailyMinimumHours={companyDefaults.default_daily_minimum_hours}
-                billForWeekends={billForWeekends}
-                setBillForWeekends={setBillForWeekends}
-                trialDays={calculateTrialDays()}
-                estimatedValue={estimatedValue}
-                retainerEnabled={retainerEnabled}
-                setRetainerEnabled={setRetainerEnabled}
-                recalcRetainer={recalcRetainer}
-              />
-            }
+            setDealData={setDealData}
+            defaultDailyMinimumHours={companyDefaults.default_daily_minimum_hours}
+            billForWeekends={billForWeekends}
+            setBillForWeekends={setBillForWeekends}
+            trialDays={calculateTrialDays()}
+            estimatedValue={estimatedValue}
+            retainerEnabled={retainerEnabled}
+            setRetainerEnabled={setRetainerEnabled}
+            recalcRetainer={recalcRetainer}
           />
         )}
 

@@ -22,7 +22,7 @@
  * HotSeatersMVP is the bible.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTier1 } from '@/app/tier1-provider';
 import { useCurrentCompany } from '@/features/auth/hooks/use-current-company';
 import { useServices, type ServiceRecord } from '@/features/company/hooks/use-services';
@@ -39,6 +39,7 @@ import {
   type ClientServiceOverrideRow,
   type CreateClientInput,
 } from '@/features/clients/stores/clients-store';
+import { createAttorney } from '@/features/deals/stores/sales-activity-store';
 import { useTrialServices } from '@/features/trials/hooks/use-trial-services';
 import { useTrialContacts } from '@/features/trials/hooks/use-trial-contacts';
 import { useTrialSegments } from '@/features/trials/hooks/use-trial-segments';
@@ -88,6 +89,23 @@ export interface UseDealWizardDataResult {
    * than importing the clients store directly (RULE B).
    */
   createClient: (input: CreateClientInput) => Promise<string>;
+  /** Re-fetch attorneys after a wizard-side contact create (D04). */
+  reloadAttorneys: () => void;
+  /**
+   * Inline contact-create action (D04). Creates an Attorney for the given
+   * client, reloads the attorney list, and resolves to the new attorney id.
+   */
+  createContact: (input: CreateContactInput) => Promise<string>;
+}
+
+export interface CreateContactInput {
+  company_id: string;
+  client_id: string;
+  first_name: string;
+  last_name: string;
+  email?: string | null;
+  phone?: string | null;
+  title?: string | null;
 }
 
 /** Map a user_info TeamMember into the bible's consultant shape. */
@@ -137,8 +155,12 @@ export function useDealWizardData({
   const consultants = useMemo(() => members.map(toConsultant), [members]);
 
   // ── Attorneys (REST — not a live query) ──
+  // `attorneysReloadKey` bumps after a wizard-side contact create (D04) so the
+  // freshly-created Attorney appears in the contact picker without a remount.
   const [attorneys, setAttorneys] = useState<AttorneyRow[]>([]);
   const [attorneysLoading, setAttorneysLoading] = useState(false);
+  const [attorneysReloadKey, setAttorneysReloadKey] = useState(0);
+  const reloadAttorneys = useCallback(() => setAttorneysReloadKey((k) => k + 1), []);
   useEffect(() => {
     if (!companyId) return;
     let cancelled = false;
@@ -156,7 +178,7 @@ export function useDealWizardData({
     return () => {
       cancelled = true;
     };
-  }, [companyId]);
+  }, [companyId, attorneysReloadKey]);
 
   // ── Client service overrides (REST — depends on the selected client) ──
   const [clientOverrides, setClientOverrides] = useState<ClientServiceOverrideRow[]>([]);
@@ -196,6 +218,25 @@ export function useDealWizardData({
   // through directly (no useCallback / dependency dance needed).
   const createClientAction = createClient;
 
+  const createContactAction = useCallback(
+    async (input: CreateContactInput): Promise<string> => {
+      const created = await createAttorney({
+        company_id: input.company_id,
+        client_id: input.client_id,
+        first_name: input.first_name.trim(),
+        last_name: input.last_name.trim(),
+        email: input.email?.trim() || null,
+        phone: input.phone ? input.phone.replace(/\D/g, '') || null : null,
+        title: input.title?.trim() || null,
+        // Wizard-created contacts are not auto-flagged as prospects; they
+        // attach to a deal directly (the deal is the pipeline anchor).
+      });
+      reloadAttorneys();
+      return created.id;
+    },
+    [reloadAttorneys],
+  );
+
   return {
     companyId,
     companyDefaults,
@@ -212,5 +253,7 @@ export function useDealWizardData({
     existingContacts,
     trialSegments,
     createClient: createClientAction,
+    reloadAttorneys,
+    createContact: createContactAction,
   };
 }

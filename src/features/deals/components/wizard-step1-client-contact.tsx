@@ -10,12 +10,14 @@
  *     client store exposes a cheap `createClient` path (wired through the
  *     deal-wizard data layer). The bible's `NewClientInlineForm` is reproduced
  *     inline (firm_name + client_type_id, the bible's `newClientData` shape).
- *   • Inline "New Contact" / "New Secondary Contact" / "New FRP Contact" forms
- *     are STUBBED: the port has no attorney(contact)-create write path yet
- *     (attorneys are read-only via REST). The "New Contact" affordance is
- *     hidden with a `// TODO(D04 contact-create)` note rather than shown as a
- *     dead button — selecting existing contacts is fully functional. See the
- *     change report; this is an auditable parity gap owned by D04.
+ *   • Inline "New Contact" (PRIMARY contact) is BUILT (D04): the sales-activity
+ *     store exposes `createAttorney`, wired through the wizard via
+ *     `onCreateContact`. The bible's `NewContactInlineForm` is reproduced inline
+ *     (first/last/email/phone/title — the bible's contact shape).
+ *   • "New Secondary Contact" / "New FRP Contact" inline-create remain DEFERRED
+ *     (the primary-contact path covers the common case; the secondary/FRP
+ *     create forms are a follow-up). Selecting existing contacts is fully
+ *     functional for all three. See the change report.
  *
  * Components consume hook-supplied props only (RULE B). HotSeatersMVP is the bible.
  */
@@ -44,6 +46,14 @@ export interface NewClientDraft {
   client_type_id: string;
 }
 
+export interface NewContactDraft {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  title: string;
+}
+
 interface WizardStep1Props {
   dealData: DealFormData;
   setDealData: (next: DealFormData) => void;
@@ -59,6 +69,11 @@ interface WizardStep1Props {
   /** Create a client; resolves to the new client id (wired through the data hook). */
   onCreateClient: (draft: NewClientDraft) => Promise<string>;
   onCreateFRPClient: (draft: NewClientDraft) => Promise<string>;
+  /**
+   * Create a primary contact (attorney) for the selected client (D04).
+   * Resolves to the new attorney id. Requires a client to be selected first.
+   */
+  onCreateContact: (clientId: string, draft: NewContactDraft) => Promise<string>;
 }
 
 const SELECT_CONTENT_STYLE: React.CSSProperties = {
@@ -143,6 +158,83 @@ function NewClientInlineForm({
   );
 }
 
+/** Inline new-contact form for the PRIMARY contact (D04). */
+function NewContactInlineForm({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (draft: NewContactDraft) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState<NewContactDraft>({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    title: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="p-4 border border-stone-200 rounded-lg space-y-3 bg-stone-50">
+      <div className="grid grid-cols-2 gap-2">
+        <Input
+          placeholder="First Name"
+          value={draft.first_name}
+          onChange={(e) => setDraft({ ...draft, first_name: e.target.value })}
+        />
+        <Input
+          placeholder="Last Name"
+          value={draft.last_name}
+          onChange={(e) => setDraft({ ...draft, last_name: e.target.value })}
+        />
+      </div>
+      <Input
+        placeholder="Email"
+        type="email"
+        value={draft.email}
+        onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+      />
+      <Input
+        placeholder="Phone"
+        value={draft.phone}
+        onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+      />
+      <Input
+        placeholder="Title (e.g. Partner)"
+        value={draft.title}
+        onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+      />
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={!draft.first_name || !draft.last_name || saving}
+          onClick={() => {
+            setSaving(true);
+            setError(null);
+            void Promise.resolve(onSubmit(draft))
+              .catch((err: unknown) => {
+                const message = err instanceof Error ? err.message : 'Failed to create contact';
+                setError(message);
+                toast.error(message);
+              })
+              .finally(() => setSaving(false));
+          }}
+          style={{ backgroundColor: 'var(--theme-brand-primary)', color: 'white' }}
+          className="hover:opacity-90 transition-opacity"
+        >
+          {saving ? 'Creating...' : 'Create Contact'}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 export function WizardStep1ClientContact({
   dealData,
   setDealData,
@@ -157,9 +249,11 @@ export function WizardStep1ClientContact({
   toggleSecondaryContact,
   onCreateClient,
   onCreateFRPClient,
+  onCreateContact,
 }: WizardStep1Props) {
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [showNewFRPClientForm, setShowNewFRPClientForm] = useState(false);
+  const [showNewContactForm, setShowNewContactForm] = useState(false);
 
   return (
     <div className="grid lg:grid-cols-3 gap-6">
@@ -268,30 +362,47 @@ export function WizardStep1ClientContact({
         <div>
           <div className="flex items-center justify-between mb-2">
             <Label htmlFor="contact">Primary Contact *</Label>
-            {/* TODO(D04 contact-create): the bible shows a "+ New Contact" button
-                here that creates an Attorney row. The port has no attorney-create
-                write path yet (attorneys are read-only via REST), so the button is
-                hidden until D04 lands the contact-create surface. Selecting an
-                existing contact is fully functional. */}
+            {/* D04: "+ New Contact" creates an Attorney for the selected client. */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowNewContactForm(!showNewContactForm)}
+              className="text-indigo-600"
+              disabled={!dealData.client_id}
+            >
+              <Plus className="w-4 h-4 mr-1" /> New Contact
+            </Button>
           </div>
-          <Select
-            value={dealData.primary_contact_id || undefined}
-            onValueChange={(value) =>
-              setDealData({ ...dealData, primary_contact_id: value ?? '' })
-            }
-            disabled={!dealData.client_id}
-          >
-            <SelectTrigger className="bg-purple-50">
-              <SelectValue placeholder="Select contact" />
-            </SelectTrigger>
-            <SelectContent style={SELECT_CONTENT_STYLE}>
-              {[...clientContacts].sort(byLastThenFirst).map((contact) => (
-                <SelectItem key={contact.id} value={contact.id}>
-                  {contact.first_name} {contact.last_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {showNewContactForm ? (
+            <NewContactInlineForm
+              onSubmit={async (draft) => {
+                const newId = await onCreateContact(dealData.client_id, draft);
+                setDealData({ ...dealData, primary_contact_id: newId });
+                setShowNewContactForm(false);
+              }}
+              onCancel={() => setShowNewContactForm(false)}
+            />
+          ) : (
+            <Select
+              value={dealData.primary_contact_id || undefined}
+              onValueChange={(value) =>
+                setDealData({ ...dealData, primary_contact_id: value ?? '' })
+              }
+              disabled={!dealData.client_id}
+            >
+              <SelectTrigger className="bg-purple-50">
+                <SelectValue placeholder="Select contact" />
+              </SelectTrigger>
+              <SelectContent style={SELECT_CONTENT_STYLE}>
+                {[...clientContacts].sort(byLastThenFirst).map((contact) => (
+                  <SelectItem key={contact.id} value={contact.id}>
+                    {contact.first_name} {contact.last_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {dealData.client_id && (
