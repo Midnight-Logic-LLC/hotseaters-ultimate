@@ -5,7 +5,7 @@
   "execution_complete": false,
   "reflection_complete": false,
   "changes_total": 9,
-  "changes_completed": 7,
+  "changes_completed": 8,
   "change_backend": "openspec",
   "status": "planned (ready to execute)",
   "last_updated": "2026-05-29",
@@ -53,7 +53,7 @@
     {
       "id": "change-D08",
       "title": "LeadRadar disposition + retire dead Lead code",
-      "change_state": "PENDING"
+      "change_state": "DONE"
     },
     {
       "id": "change-D09",
@@ -86,5 +86,6 @@
     "LeadRadar fate (D08): retire vs repurpose per current bible nav (default retire)",
     "Sales-activity\u2192deal flow: replace ensure-lead-for-attorney with a deal-creation rule if the bible creates deals from activities",
     "Legacy lead-row data migration: likely greenfield (dev data)"
-  ]
+  ],
+  "d08_note": "KEEP port's working 437-LOC Lead Radar (bible downgraded it to a 36-line 'Coming soon' stub). Owner-accepted deviation, port intentionally ahead. NO code change. lead-radar-store LIVE (D03 wizard uses it)."
 }
