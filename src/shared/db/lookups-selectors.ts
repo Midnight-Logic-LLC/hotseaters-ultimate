@@ -37,6 +37,8 @@ export interface PipelineStage {
   is_active: boolean;
   order: number;
   company_id: string | null;
+  /** Stage color lifted from `extra_schema.color` when present (else undefined). */
+  color?: string;
 }
 
 /** Generic typed lookup row for service_category / consultant_tier / client_type. */
@@ -109,6 +111,11 @@ function readNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function readString(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.length > 0) return value;
+  return undefined;
+}
+
 function readPipelineType(value: unknown): 'sales' | 'operations' | '' {
   return value === 'sales' || value === 'operations' ? value : '';
 }
@@ -150,6 +157,7 @@ export function selectPipelineStages(
     if (!row.id || !isActive(row)) continue;
     const extra = row.extra_schema ?? {};
     const probability = readNumber(extra.revenue_probability);
+    const color = readString(extra.color);
     projected.push({
       id: row.id,
       name: row.name ?? '',
@@ -158,6 +166,7 @@ export function selectPipelineStages(
       is_active: true,
       order: row.order ?? 0,
       company_id: row.company_id ?? null,
+      ...(color ? { color } : {}),
     });
   }
   projected.sort(compareByOrderThenName);
@@ -241,6 +250,7 @@ export function selectPipelineStagesFromRows(
     if (!row.id || !isActive(row)) continue;
     const extra = row.extra_schema ?? {};
     const probability = readNumber(extra.revenue_probability);
+    const color = readString(extra.color);
     projected.push({
       id: row.id,
       name: row.name ?? '',
@@ -249,6 +259,7 @@ export function selectPipelineStagesFromRows(
       is_active: true,
       order: row.order ?? 0,
       company_id: row.company_id ?? null,
+      ...(color ? { color } : {}),
     });
   }
   projected.sort(compareByOrderThenName);
