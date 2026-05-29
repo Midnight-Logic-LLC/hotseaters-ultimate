@@ -36,10 +36,13 @@ Implemented in `LandingPage.tsx` (matches the bible logic verbatim).
 
 This feature module:
 
-- imports `MarketingShell`, `AuthOptionsDialog` (shared primitives)
-- imports `useAuth` (hook layer)
-- imports `applyThemeVars`, `MARKETING_THEME` from `@/shared/lib/theme`
-- imports lucide icons
+- inlines its own header + footer (does NOT use `MarketingShell`)
+- routes login/signup CTAs to `/login` (single login surface — no
+  `AuthOptionsDialog`)
+- imports `useAuth` + `useCurrentUser` (hook layer) for the auth-aware redirect
+- imports `generateThemeCSS`, `MARKETING_THEME`, `buildGoogleFontsUrl` from
+  `@/shared/lib/theme`
+- imports `PolicyViewerModal` (shared marketing component) + lucide icons
 
 It does NOT import stores, supabase, PGlite, electric, or
 prometheus-entity-management internals (RULE 3 — components → hooks only).
