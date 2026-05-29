@@ -1,22 +1,24 @@
 /**
- * LandingPage — pixel-for-pixel port of `HotSeatersMVP/src/pages/Landing.jsx`.
+ * LandingPage — pixel-for-pixel port of `HotSeatersMVP/src/pages/Landing.jsx`
+ * (bible @ 29ae47e3, the Leads→Deals refresh).
  *
- * RULE 0 (pixel parity): this file mirrors the bible section-for-section.
- * Every copy string, every CSS value, every icon, every animation, every
- * inline style is bible-verbatim. Do NOT vary.
+ * RULE 0 (pixel + functional parity): this file mirrors the bible
+ * section-for-section. Every copy string, every CSS value, every icon, every
+ * animation, every inline style is bible-verbatim. Do NOT vary.
  *
  * Differences from the bible — adapter shims only, never UI:
  *   - bible's `base44.auth.redirectToLogin(...)` → our `navigate('/login')`
  *     (single login surface; AuthOptionsDialog was removed).
- *   - bible's `useTier1Data()` → our `useAuth()` hook (same shape: loading,
- *     authenticated, companyId, plus pending-invitation token check).
+ *   - bible's `useTier1Data()` → our `useAuth()` + `useCurrentUser()` hooks
+ *     (same shape: loading, authenticated, companyId, pending-invitation check,
+ *     plus the Layout.jsx last-viewed-page restoration branch table).
  *   - bible's `generateThemeCSS(defaultTheme)` → our `generateThemeCSS(
  *     MARKETING_THEME)` emitting the same CSS-variable block.
  *   - bible's `media.base44.com` brand PNGs → self-hosted `/brand/*.png`
  *     (RULE 1: no third-party CDNs).
- *
- * MarketingShell is intentionally NOT used — Landing inlines its own header
- * and footer to stay faithful to the bible's structure.
+ *     `HotseatersemailHeader.png`            → `/brand/hotseaters-header.png`
+ *     `Hotseaterslogochameleon-…-Thickv2.png`→ `/brand/chameleon-logo.png`
+ *     `HotSeatHubemailHeader.png`            → `/brand/hotseathub-header.png`
  *
  * HotSeatersMVP is the bible. Self-hosted Supabase only.
  */
@@ -35,15 +37,18 @@ import {
   FileText,
   FileWarning,
   GanttChart,
+  Gift,
   Handshake,
+  Layers,
   Mail,
   Orbit,
   Receipt,
   Search,
   Sparkles,
-  Sparkles as _Sparkles, // alias retained for explicit bible parity
   Star,
   StickyNote,
+  Table,
+  Timer,
   TrendingUp,
   UserPlus,
   Users,
@@ -52,14 +57,7 @@ import { Button } from '@/components/ui/button';
 import { PolicyViewerModal } from '@/features/marketing/components/policy-viewer-modal';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
-import {
-  buildGoogleFontsUrl,
-  generateThemeCSS,
-  MARKETING_THEME,
-} from '@/shared/lib/theme';
-
-// Silence unused-alias warning while preserving the bible import order.
-void _Sparkles;
+import { buildGoogleFontsUrl, generateThemeCSS, MARKETING_THEME } from '@/shared/lib/theme';
 
 // ── Bible arrays — verbatim from Landing.jsx lines 60-109 ─────────────────
 
@@ -126,11 +124,12 @@ const HSH_FEATURES = [
   { icon: Star, title: 'Build Your Reputation', description: "Earn HSH ratings and reviews from firms you've worked with to grow your network and win more gigs." },
 ] as const;
 
+// Stats banner — bible Landing.jsx lines 445-450 (icon + value + optional unit + label).
 const STATS = [
-  { value: '1', label: 'Platform for everything' },
-  { value: '15 min', label: 'From signup to invoice-ready' },
-  { value: '0', label: 'Spreadsheets required' },
-  { value: '90 days', label: 'Free to try, no card needed' },
+  { icon: Layers, value: '1', unit: undefined as string | undefined, label: 'Platform for everything' },
+  { icon: Timer, value: '15', unit: 'min', label: 'From signup to invoice-ready' },
+  { icon: Table, value: '0', unit: undefined as string | undefined, label: 'Spreadsheets required' },
+  { icon: Gift, value: '90', unit: 'days', label: 'Free to try, no card required' },
 ] as const;
 
 // Ripple keyframes — bible Landing.jsx lines 118-139, verbatim.
@@ -265,16 +264,16 @@ export function LandingPage() {
     userInfoLoading,
   });
 
+  // bible: handleLogin → /Dashboard redirect, handleSignup → /Onboarding
+  // redirect. We collapse both onto the single `/login` surface (the port
+  // removed AuthOptionsDialog); the post-auth branch table above sends the
+  // user on to Dashboard / Onboarding once authenticated.
   const handleLogin = () => {
     navigate('/login');
   };
 
   const handleSignup = () => {
     navigate('/login');
-  };
-
-  const handleDashboard = () => {
-    navigate('/Dashboard');
   };
 
   if (destination) {
@@ -291,206 +290,211 @@ export function LandingPage() {
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       <link href={googleFontsUrl} rel="stylesheet" />
       <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-indigo-50">
-        {/* Header */}
-        <header
-          className="border-b sticky top-0 z-50"
-          style={{
-            borderColor: 'var(--theme-stone-200)',
-            backgroundColor: 'var(--theme-card-bg)',
-            backdropFilter: 'blur(8px)',
-          }}
-        >
-          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img
-                src="/brand/chameleon-logo.png"
-                alt="HotSeaters Logo"
-                className="w-10 h-10 object-contain"
-              />
-              <div>
-                <h1
-                  className="font-bold text-xl"
-                  style={{
-                    fontFamily: 'var(--theme-font-brand-title)',
-                    color: 'var(--theme-stone-900)',
-                  }}
-                >
-                  HotSeaters
-                </h1>
-                <p
-                  className="text-xs"
-                  style={{
-                    fontFamily: 'var(--theme-font-brand-subtitle)',
-                    color: 'var(--theme-stone-500)',
-                  }}
-                >
-                  Trial Tech Toolkit
-                </p>
-              </div>
-            </div>
-            <Button
-              onClick={isAuthenticated ? handleDashboard : handleLogin}
-              variant="outline"
-              style={{
-                borderRadius: 'var(--theme-button-radius)',
-                boxShadow: 'var(--theme-button-shadow)',
-                fontFamily: 'var(--theme-font-body)',
-              }}
-            >
-              {isAuthenticated ? 'Dashboard' : 'Login'}
-            </Button>
-          </div>
-        </header>
-
-        {/* Hero Section */}
-        <section className="max-w-7xl mx-auto px-6 py-20 lg:py-32">
-          <div className="text-center max-w-4xl mx-auto">
-            <h2
-              className="text-5xl lg:text-6xl font-bold mb-6 leading-tight"
-              style={{
-                fontFamily: 'var(--theme-font-body)',
-                color: 'var(--theme-stone-900)',
-              }}
-            >
-              The Complete Business Toolkit for{' '}
-              <span style={{ color: 'var(--theme-brand-primary)' }}>Trial Techs</span>
-            </h2>
-            <p
-              className="text-xl mb-8 leading-relaxed"
-              style={{
-                fontFamily: 'var(--theme-font-body)',
-                color: 'var(--theme-stone-600)',
-              }}
-            >
-              Streamline your trial consulting business with the only app built specifically for litigation support professionals.
-              Manage deals, generate proposals and engagement letters with e-signatures, schedule trials for yourself or your team, track time, invoice clients, and take payments online.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                onClick={handleSignup}
-                size="lg"
-                className="shadow-xl text-lg px-8 py-6"
-                style={{
-                  backgroundColor: 'var(--theme-brand-primary)',
-                  color: 'white',
-                  borderRadius: 'var(--theme-button-radius)',
-                  boxShadow: 'var(--theme-button-shadow)',
-                  fontFamily: 'var(--theme-font-body)',
-                }}
-              >
-                Get Started Free
-              </Button>
-              <Button
-                onClick={handleLogin}
-                size="lg"
-                variant="outline"
-                className="text-lg px-8 py-6"
-                style={{
-                  borderRadius: 'var(--theme-button-radius)',
-                  boxShadow: 'var(--theme-button-shadow)',
-                  fontFamily: 'var(--theme-font-body)',
-                }}
-              >
-                Watch Demo
-              </Button>
-            </div>
-            <p
-              className="text-sm mt-6"
-              style={{
-                fontFamily: 'var(--theme-font-body)',
-                color: 'var(--theme-stone-500)',
-              }}
-            >
-              Try it free for 90 days • Setup in 5 minutes
-            </p>
-          </div>
-        </section>
-
-        {/* Features Grid */}
+        {/* Hero & Features Combined Section */}
         <section
-          className="max-w-7xl mx-auto px-6 py-12"
+          className="w-full pt-10 sm:pt-16 lg:pt-20 pb-8 sm:pb-12"
           style={{
             background:
               'linear-gradient(to bottom, #0c1e3d 0%, #1E3A8A 35%, #0891B2 70%, #e0f2fe 100%)',
-            borderRadius: 'var(--theme-card-radius)',
-            boxShadow: 'var(--theme-card-shadow)',
-            border: '1px solid color-mix(in srgb, var(--theme-brand-primary) 25%, white)',
+            borderBottom: '1px solid color-mix(in srgb, var(--theme-brand-primary) 25%, white)',
           }}
         >
-          <div className="flex flex-col items-center text-center mb-10">
-            <img
-              src="/brand/hotseaters-header.png"
-              alt="HotSeaters — Trial Tech Toolkit"
-              className="w-full max-w-xl h-auto object-contain mb-4"
-            />
-            <p
-              className="text-base max-w-2xl"
-              style={{
-                fontFamily: 'var(--theme-font-body)',
-                color: 'rgba(255, 255, 255, 0.95)',
-              }}
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="flex flex-col items-center text-center mb-10">
+              <img
+                src="/brand/hotseaters-header.png"
+                alt="Trial Tech Toolkit"
+                className="w-full max-w-[22rem] sm:max-w-sm lg:max-w-xl h-auto object-contain mb-3 sm:mb-4"
+              />
+              <div className="mb-6 sm:mb-10 lg:mb-12" />
+
+              <div
+                className="w-full max-w-4xl mx-auto px-2 py-5 sm:py-7 rounded-2xl"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.10)',
+                  border: '1px solid rgba(255, 255, 255, 0.18)',
+                  backdropFilter: 'blur(8px)',
+                }}
+              >
+                <h2
+                  className="text-xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-4 leading-tight px-4 sm:px-8"
+                  style={{ fontFamily: 'var(--theme-font-body)', color: 'white' }}
+                >
+                  The Complete Business Toolkit for{' '}
+                  <span className="text-cyan-300">Trial Techs</span>
+                </h2>
+                <p
+                  className="text-xs sm:text-base lg:text-lg leading-snug sm:leading-relaxed px-4 sm:px-8"
+                  style={{ fontFamily: 'var(--theme-font-body)', color: 'rgba(255, 255, 255, 0.9)' }}
+                >
+                  Streamline your trial consulting business with the only app built specifically for
+                  litigation support professionals. Manage deals, generate proposals and engagement
+                  letters with e-signatures, schedule trials for yourself or your team, track time,
+                  invoice clients, and take payments online.
+                </p>
+              </div>
+            </div>
+
+            <h3
+              className="text-base sm:text-xl lg:text-2xl text-center max-w-2xl mx-auto mb-4 sm:mb-6 px-2 font-semibold"
+              style={{ fontFamily: "'Michroma', sans-serif", color: 'rgba(255, 255, 255, 0.95)' }}
             >
-              Purpose-built features for trial technology consulting firms
-            </p>
-          </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 pt-8">
-            {FEATURES.map((feature, idx) => {
-              const Icon = feature.icon;
-              return (
-                <div
-                  key={idx}
-                  className="relative bg-white hover:-translate-y-1 hover:shadow-xl transition-all duration-300"
+              Purpose-Built Features for Trial Technology Consulting Firms
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 pt-4 pb-8 sm:pb-12">
+              {FEATURES.map((feature, idx) => {
+                const Icon = feature.icon;
+                return (
+                  <div
+                    key={idx}
+                    className="relative bg-white hover:-translate-y-1 hover:shadow-xl transition-all duration-300"
+                    style={{
+                      borderRadius: 'var(--theme-list-item-radius)',
+                      border: '1px solid color-mix(in srgb, var(--theme-brand-primary) 15%, white)',
+                      boxShadow: 'var(--theme-list-item-shadow)',
+                    }}
+                  >
+                    {/* Tinted header strip with full-width title */}
+                    <div
+                      className="rounded-t-lg px-4 sm:px-4 py-2 sm:py-2.5 min-h-[2.5rem] sm:min-h-[3rem] flex items-center"
+                      style={{
+                        background:
+                          'linear-gradient(135deg, color-mix(in srgb, var(--theme-brand-primary) 18%, white) 0%, color-mix(in srgb, var(--theme-brand-primary) 8%, white) 100%)',
+                      }}
+                    >
+                      <h4
+                        className="text-base sm:text-base font-bold leading-tight"
+                        style={{ fontFamily: "'Michroma', sans-serif", color: 'var(--theme-stone-900)' }}
+                      >
+                        {feature.title}
+                      </h4>
+                    </div>
+                    {/* Body — description with room for icon, icon absolutely pinned bottom-right */}
+                    <div className="px-4 sm:px-4 pt-2 sm:pt-2.5 pb-3 sm:pb-3.5 pr-24 sm:pr-32">
+                      <p
+                        className="text-sm sm:text-sm"
+                        style={{ fontFamily: 'var(--theme-font-body)', color: 'var(--theme-stone-600)' }}
+                      >
+                        {feature.description}
+                      </p>
+                    </div>
+                    <div
+                      className="absolute bottom-3 sm:bottom-4 right-3 sm:right-4 w-14 h-14 sm:w-20 sm:h-20 rounded-full flex items-center justify-center shadow-lg"
+                      style={{
+                        background:
+                          'linear-gradient(135deg, var(--theme-brand-primary) 0%, color-mix(in srgb, var(--theme-brand-primary) 70%, black) 100%)',
+                      }}
+                    >
+                      <Icon className="w-7 h-7 sm:w-10 sm:h-10 text-white" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="text-center max-w-4xl mx-auto pb-4">
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button
+                  onClick={handleSignup}
+                  size="lg"
+                  className="shadow-xl text-base sm:text-lg px-6 sm:px-8 py-5 sm:py-6 w-full sm:w-auto"
                   style={{
-                    borderRadius: 'var(--theme-list-item-radius)',
-                    border: '1px solid color-mix(in srgb, var(--theme-brand-primary) 15%, white)',
-                    boxShadow: 'var(--theme-list-item-shadow)',
+                    backgroundColor: 'var(--theme-brand-primary)',
+                    color: 'white',
+                    borderRadius: 'var(--theme-button-radius)',
+                    boxShadow: 'var(--theme-button-shadow)',
+                    fontFamily: 'var(--theme-font-body)',
                   }}
                 >
-                  <div
-                    className="rounded-t-lg px-6 py-5 min-h-[5rem] flex items-center"
-                    style={{
-                      background:
-                        'linear-gradient(135deg, color-mix(in srgb, var(--theme-brand-primary) 18%, white) 0%, color-mix(in srgb, var(--theme-brand-primary) 8%, white) 100%)',
-                    }}
-                  >
-                    <h4
-                      className="text-xl font-bold leading-tight"
-                      style={{
-                        fontFamily: 'var(--theme-font-body)',
-                        color: 'var(--theme-stone-900)',
-                      }}
-                    >
-                      {feature.title}
-                    </h4>
-                  </div>
-                  <div className="px-6 pt-4 pb-6 pr-32">
-                    <p
-                      style={{
-                        fontFamily: 'var(--theme-font-body)',
-                        color: 'var(--theme-stone-600)',
-                      }}
-                    >
-                      {feature.description}
-                    </p>
-                  </div>
-                  <div
-                    className="absolute bottom-4 right-4 w-20 h-20 rounded-xl flex items-center justify-center shadow-lg"
-                    style={{
-                      background:
-                        'linear-gradient(135deg, var(--theme-brand-primary) 0%, color-mix(in srgb, var(--theme-brand-primary) 70%, black) 100%)',
-                    }}
-                  >
-                    <Icon className="w-10 h-10 text-white" />
-                  </div>
-                </div>
-              );
-            })}
+                  Get Started Free
+                </Button>
+                <Button
+                  onClick={handleLogin}
+                  size="lg"
+                  variant="outline"
+                  className="text-base sm:text-lg px-6 sm:px-8 py-5 sm:py-6 bg-white hover:bg-stone-50 w-full sm:w-auto"
+                  style={{
+                    color: 'var(--theme-brand-primary)',
+                    borderRadius: 'var(--theme-button-radius)',
+                    boxShadow: 'var(--theme-button-shadow)',
+                    fontFamily: 'var(--theme-font-body)',
+                  }}
+                >
+                  Watch Demo
+                </Button>
+              </div>
+              <p
+                className="text-sm mt-6 mb-8"
+                style={{ fontFamily: 'var(--theme-font-body)', color: 'rgba(255, 255, 255, 0.8)' }}
+              >
+                Try it free for 90 days • Setup in 5 minutes
+              </p>
+
+              {/* MOBILE VERSION - stacked: logo, text, button */}
+              <div
+                className="sm:hidden bg-white p-4 mt-2 flex flex-col items-center gap-3 shadow-2xl border border-stone-100 w-full max-w-sm mx-auto"
+                style={{ borderRadius: 'calc(var(--theme-card-radius) + 0.25rem)' }}
+              >
+                <img
+                  src="/brand/chameleon-logo.png"
+                  alt="HotSeaters"
+                  className="w-10 h-10 object-contain"
+                />
+                <p
+                  className="text-stone-700 font-medium text-sm text-center"
+                  style={{ fontFamily: 'var(--theme-font-body)' }}
+                >
+                  Already have a HotSeaters account?
+                </p>
+                <Button
+                  onClick={handleLogin}
+                  variant="outline"
+                  className="w-full hover:bg-stone-50"
+                  style={{
+                    borderRadius: 'var(--theme-button-radius)',
+                    fontFamily: 'var(--theme-font-body)',
+                    color: 'var(--theme-brand-primary)',
+                  }}
+                >
+                  Login
+                </Button>
+              </div>
+              {/* DESKTOP VERSION - one line: logo, text, button */}
+              <div
+                className="hidden sm:inline-flex bg-white px-6 py-4 mt-2 items-center gap-4 shadow-2xl border border-stone-100"
+                style={{ borderRadius: 'calc(var(--theme-card-radius) + 0.25rem)' }}
+              >
+                <img
+                  src="/brand/chameleon-logo.png"
+                  alt="HotSeaters"
+                  className="w-10 h-10 object-contain flex-shrink-0"
+                />
+                <p
+                  className="text-stone-700 font-medium text-sm whitespace-nowrap"
+                  style={{ fontFamily: 'var(--theme-font-body)' }}
+                >
+                  Already have a HotSeaters account?
+                </p>
+                <Button
+                  onClick={handleLogin}
+                  variant="outline"
+                  className="hover:bg-stone-50"
+                  style={{
+                    borderRadius: 'var(--theme-button-radius)',
+                    fontFamily: 'var(--theme-font-body)',
+                    color: 'var(--theme-brand-primary)',
+                  }}
+                >
+                  Login
+                </Button>
+              </div>
+            </div>
           </div>
         </section>
 
         {/* Transform Section — Before vs After */}
-        <section className="max-w-7xl mx-auto px-6 py-20">
-          <div className="text-center max-w-3xl mx-auto mb-14">
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16 lg:py-20">
+          <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-14">
             <div
               className="inline-flex items-center gap-2 px-4 py-1.5 mb-5 rounded-full"
               style={{
@@ -506,21 +510,14 @@ export function LandingPage() {
               The HotSeaters Difference
             </div>
             <h3
-              className="text-3xl lg:text-5xl font-bold mb-4 leading-tight"
-              style={{
-                fontFamily: 'var(--theme-font-body)',
-                color: 'var(--theme-stone-900)',
-              }}
+              className="text-2xl sm:text-3xl lg:text-5xl font-bold mb-4 leading-tight"
+              style={{ fontFamily: 'var(--theme-font-body)', color: 'var(--theme-stone-900)' }}
             >
-              From Chaos to{' '}
-              <span style={{ color: 'var(--theme-brand-primary)' }}>Clarity</span>
+              From Chaos to <span style={{ color: 'var(--theme-brand-primary)' }}>Clarity</span>
             </h3>
             <p
               className="text-lg text-balance"
-              style={{
-                fontFamily: 'var(--theme-font-body)',
-                color: 'var(--theme-stone-600)',
-              }}
+              style={{ fontFamily: 'var(--theme-font-body)', color: 'var(--theme-stone-600)' }}
             >
               See exactly how HotSeaters replaces the mess most trial-tech firms live with every day.
             </p>
@@ -537,7 +534,7 @@ export function LandingPage() {
               }}
             >
               <div
-                className="flex items-center gap-5 mb-6 -mx-2 -mt-2 px-6 py-6 rounded-xl"
+                className="flex items-center gap-3 sm:gap-5 mb-6 -mx-2 -mt-2 px-4 sm:px-6 py-4 sm:py-6 rounded-xl"
                 style={{
                   background:
                     'linear-gradient(135deg, rgba(254, 202, 202, 0.6) 0%, rgba(254, 215, 170, 0.5) 100%)',
@@ -545,26 +542,21 @@ export function LandingPage() {
                 }}
               >
                 <div
-                  className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0"
-                  style={{
-                    background: 'linear-gradient(135deg, #f97316 0%, #ef4444 100%)',
-                  }}
+                  className="w-12 h-12 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg, #f97316 0%, #ef4444 100%)' }}
                 >
-                  <AlertTriangle className="w-10 h-10 text-white" />
+                  <AlertTriangle className="w-6 h-6 sm:w-10 sm:h-10 text-white" />
                 </div>
                 <div>
                   <p
-                    className="text-base uppercase tracking-wider font-bold text-red-600"
+                    className="text-xs sm:text-base uppercase tracking-wider font-bold text-red-600"
                     style={{ fontFamily: 'var(--theme-font-body)' }}
                   >
                     Before
                   </p>
                   <h4
-                    className="text-3xl lg:text-4xl font-bold leading-tight"
-                    style={{
-                      fontFamily: 'var(--theme-font-body)',
-                      color: 'var(--theme-stone-900)',
-                    }}
+                    className="text-xl sm:text-3xl lg:text-4xl font-bold leading-tight"
+                    style={{ fontFamily: 'var(--theme-font-body)', color: 'var(--theme-stone-900)' }}
                   >
                     The Old Way
                   </h4>
@@ -588,19 +580,13 @@ export function LandingPage() {
                       <div className="flex-1 min-w-0">
                         <p
                           className="font-semibold text-base leading-tight line-through decoration-red-400/60 decoration-1"
-                          style={{
-                            fontFamily: 'var(--theme-font-body)',
-                            color: 'var(--theme-stone-700)',
-                          }}
+                          style={{ fontFamily: 'var(--theme-font-body)', color: 'var(--theme-stone-700)' }}
                         >
                           {pain.title}
                         </p>
                         <p
                           className="text-sm leading-snug mt-0.5 line-through decoration-red-400/40 decoration-1"
-                          style={{
-                            fontFamily: 'var(--theme-font-body)',
-                            color: 'var(--theme-stone-500)',
-                          }}
+                          style={{ fontFamily: 'var(--theme-font-body)', color: 'var(--theme-stone-500)' }}
                         >
                           {pain.text}
                         </p>
@@ -611,7 +597,7 @@ export function LandingPage() {
               </div>
             </div>
 
-            {/* Arrow connector — desktop */}
+            {/* Arrow connector — desktop only, absolutely positioned between panels */}
             <div
               className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-16 h-16 rounded-full items-center justify-center shadow-xl"
               style={{
@@ -623,7 +609,7 @@ export function LandingPage() {
               <ArrowRight className="w-7 h-7 text-white" />
             </div>
 
-            {/* Arrow connector — mobile/tablet */}
+            {/* Mobile/tablet arrow — sits in grid flow between Before and After */}
             <div className="lg:hidden flex justify-center -my-3 z-10">
               <div
                 className="w-14 h-14 rounded-full flex items-center justify-center shadow-xl"
@@ -647,28 +633,25 @@ export function LandingPage() {
                   '0 20px 50px -10px color-mix(in srgb, var(--theme-brand-primary) 40%, transparent)',
               }}
             >
+              {/* Decorative orbs */}
               <div
                 className="absolute -top-12 -right-12 w-40 h-40 rounded-full opacity-20"
-                style={{
-                  background: 'radial-gradient(circle, white 0%, transparent 70%)',
-                }}
+                style={{ background: 'radial-gradient(circle, white 0%, transparent 70%)' }}
               />
               <div
                 className="absolute -bottom-12 -left-12 w-40 h-40 rounded-full opacity-10"
-                style={{
-                  background: 'radial-gradient(circle, white 0%, transparent 70%)',
-                }}
+                style={{ background: 'radial-gradient(circle, white 0%, transparent 70%)' }}
               />
 
               <div
-                className="relative flex items-center gap-5 mb-6 -mx-2 -mt-2 px-6 py-6 rounded-xl"
+                className="relative flex items-center gap-3 sm:gap-5 mb-6 -mx-2 -mt-2 px-4 sm:px-6 py-4 sm:py-6 rounded-xl"
                 style={{
                   background: 'rgba(255, 255, 255, 0.18)',
                   border: '1px solid rgba(255, 255, 255, 0.25)',
                   backdropFilter: 'blur(8px)',
                 }}
               >
-                <div className="w-20 h-20 rounded-2xl bg-white flex items-center justify-center shadow-lg p-2 flex-shrink-0">
+                <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-2xl bg-white flex items-center justify-center shadow-lg p-1.5 sm:p-2 flex-shrink-0">
                   <img
                     src="/brand/chameleon-logo.png"
                     alt="HotSeaters"
@@ -677,13 +660,13 @@ export function LandingPage() {
                 </div>
                 <div>
                   <p
-                    className="text-base uppercase tracking-wider font-bold text-white/90"
+                    className="text-xs sm:text-base uppercase tracking-wider font-bold text-white/90"
                     style={{ fontFamily: 'var(--theme-font-body)' }}
                   >
                     After
                   </p>
                   <h4
-                    className="text-3xl lg:text-4xl font-bold leading-tight"
+                    className="text-xl sm:text-3xl lg:text-4xl font-bold leading-tight"
                     style={{ fontFamily: 'var(--theme-font-body)' }}
                   >
                     The HotSeaters Way
@@ -729,41 +712,40 @@ export function LandingPage() {
 
           {/* Stats banner */}
           <div
-            className="mt-12 rounded-2xl p-8 grid grid-cols-2 md:grid-cols-4 gap-6"
-            style={{
-              backgroundColor: 'var(--theme-card-bg)',
-              border: '1px solid var(--theme-stone-200)',
-              boxShadow: 'var(--theme-card-shadow)',
-            }}
+            className="relative mt-8 sm:mt-12 rounded-2xl p-6 sm:p-8 bg-white border border-stone-200 shadow-lg"
+            style={{ zIndex: 10 }}
           >
-            {STATS.map((stat, idx) => (
-              <div key={idx} className="text-center">
-                <p
-                  className="text-3xl lg:text-4xl font-bold mb-1"
-                  style={{
-                    fontFamily: 'var(--theme-font-body)',
-                    color: 'var(--theme-brand-primary)',
-                  }}
-                >
-                  {stat.value}
-                </p>
-                <p
-                  className="text-sm"
-                  style={{
-                    fontFamily: 'var(--theme-font-body)',
-                    color: 'var(--theme-stone-600)',
-                  }}
-                >
-                  {stat.label}
-                </p>
-              </div>
-            ))}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+              {STATS.map((stat, idx) => {
+                const Icon = stat.icon;
+                return (
+                  <div key={idx} className="flex items-start gap-4 sm:gap-6">
+                    <Icon className="w-6 h-6 sm:w-9 sm:h-9 text-slate-700 flex-shrink-0 mt-1" />
+                    <div className="flex-1">
+                      <p
+                        className="text-2xl sm:text-3xl font-bold leading-none mb-0.5"
+                        style={{ fontFamily: 'var(--theme-font-body)', color: 'var(--theme-brand-primary)' }}
+                      >
+                        {stat.value}
+                        {stat.unit && <span className="text-sm ml-1">{stat.unit}</span>}
+                      </p>
+                      <p
+                        className="text-sm sm:text-sm text-stone-700"
+                        style={{ fontFamily: 'var(--theme-font-body)' }}
+                      >
+                        {stat.label}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </section>
 
         {/* HotSeatHub Section */}
         <section
-          className="max-w-7xl mx-auto px-6 py-20 mt-12"
+          className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-12 lg:py-16 mt-6 sm:mt-12"
           style={{
             background:
               'linear-gradient(to bottom, #1e1b4b 0%, #4c1d95 35%, #7c3aed 65%, var(--theme-hsh-background) 100%)',
@@ -772,7 +754,7 @@ export function LandingPage() {
             border: '1px solid color-mix(in srgb, var(--theme-hsh-primary) 25%, white)',
           }}
         >
-          <div className="flex flex-col items-center text-center mb-16">
+          <div className="flex flex-col items-center text-center mb-8 sm:mb-16">
             <div
               className="inline-flex items-center gap-2 px-4 py-1.5 mb-6 rounded-full backdrop-blur-sm"
               style={{
@@ -790,19 +772,18 @@ export function LandingPage() {
             <img
               src="/brand/hotseathub-header.png"
               alt="HotSeatHub — Trial Tech Marketplace"
-              className="w-full max-w-xl h-auto object-contain mb-6"
+              className="w-full max-w-xs sm:max-w-sm lg:max-w-xl h-auto object-contain mb-4 sm:mb-6"
             />
             <p
-              className="text-lg max-w-3xl"
-              style={{
-                fontFamily: 'var(--theme-font-body)',
-                color: 'rgba(255, 255, 255, 0.95)',
-              }}
+              className="text-xs sm:text-base lg:text-lg leading-snug sm:leading-relaxed max-w-3xl px-2"
+              style={{ fontFamily: 'var(--theme-font-body)', color: 'rgba(255, 255, 255, 0.95)' }}
             >
-              The built-in marketplace where trial technology firms find each other. Hire trusted subcontractors when you're stretched thin, or pick up extra work when you have open capacity — all without leaving HotSeaters.
+              The built-in marketplace where trial technology firms find each other. Hire trusted
+              subcontractors when you're stretched thin, or pick up extra work when you have open
+              capacity — all without leaving HotSeaters.
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
             {HSH_FEATURES.map((feature, idx) => {
               const Icon = feature.icon;
               return (
@@ -815,41 +796,38 @@ export function LandingPage() {
                     boxShadow: 'var(--theme-list-item-shadow)',
                   }}
                 >
+                  {/* Tinted header strip with full-width title */}
                   <div
-                    className="rounded-t-lg px-6 py-5 min-h-[5rem] flex items-center"
+                    className="rounded-t-lg px-4 sm:px-4 py-2 sm:py-2.5 min-h-[2.5rem] sm:min-h-[3rem] flex items-center"
                     style={{
                       background:
                         'linear-gradient(135deg, color-mix(in srgb, var(--theme-hsh-primary) 18%, white) 0%, color-mix(in srgb, var(--theme-hsh-primary) 8%, white) 100%)',
                     }}
                   >
                     <h4
-                      className="text-xl font-bold leading-tight"
-                      style={{
-                        fontFamily: 'var(--theme-font-body)',
-                        color: 'var(--theme-stone-900)',
-                      }}
+                      className="text-base sm:text-base font-bold leading-tight"
+                      style={{ fontFamily: "'Michroma', sans-serif", color: 'var(--theme-stone-900)' }}
                     >
                       {feature.title}
                     </h4>
                   </div>
-                  <div className="px-6 pt-4 pb-6 pr-32">
+                  {/* Body — description with room for icon, icon absolutely pinned bottom-right */}
+                  <div className="px-4 sm:px-4 pt-2 sm:pt-2.5 pb-3 sm:pb-3.5 pr-24 sm:pr-32">
                     <p
-                      style={{
-                        fontFamily: 'var(--theme-font-body)',
-                        color: 'var(--theme-stone-600)',
-                      }}
+                      className="text-sm sm:text-sm"
+                      style={{ fontFamily: 'var(--theme-font-body)', color: 'var(--theme-stone-600)' }}
                     >
                       {feature.description}
                     </p>
                   </div>
                   <div
-                    className="absolute bottom-4 right-4 w-20 h-20 rounded-xl flex items-center justify-center shadow-lg"
+                    className="absolute bottom-3 sm:bottom-4 right-3 sm:right-4 w-14 h-14 sm:w-20 sm:h-20 rounded-full flex items-center justify-center shadow-lg"
                     style={{
                       background:
                         'linear-gradient(135deg, var(--theme-hsh-primary) 0%, color-mix(in srgb, var(--theme-hsh-primary) 70%, black) 100%)',
                     }}
                   >
-                    <Icon className="w-10 h-10 text-white" />
+                    <Icon className="w-7 h-7 sm:w-10 sm:h-10 text-white" />
                   </div>
                 </div>
               );
@@ -858,29 +836,26 @@ export function LandingPage() {
         </section>
 
         {/* CTA Section */}
-        <section className="max-w-7xl mx-auto px-6 py-20">
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16 lg:py-20">
           <div
-            className="p-12 lg:p-20 text-center shadow-2xl"
+            className="p-8 sm:p-12 lg:p-20 text-center shadow-2xl"
             style={{
-              background:
-                'linear-gradient(to right, var(--theme-brand-primary), color-mix(in srgb, var(--theme-brand-primary) 80%, black))',
+              background: 'linear-gradient(to bottom, #0c1e3d 0%, #1E3A8A 35%, #0891B2 100%)',
               borderRadius: 'var(--theme-card-radius)',
             }}
           >
             <h3
-              className="text-3xl lg:text-5xl font-bold text-white mb-6"
-              style={{ fontFamily: 'var(--theme-font-body)' }}
+              className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-4 sm:mb-6"
+              style={{ fontFamily: 'var(--theme-font-brand-subtitle)' }}
             >
               Ready to Transform Your Business?
             </h3>
             <p
-              className="text-xl mb-8 max-w-2xl mx-auto"
-              style={{
-                fontFamily: 'var(--theme-font-body)',
-                color: 'rgba(255, 255, 255, 0.9)',
-              }}
+              className="text-base sm:text-xl mb-8 max-w-2xl mx-auto"
+              style={{ fontFamily: 'var(--theme-font-body)', color: 'rgba(255, 255, 255, 0.9)' }}
             >
-              Join leading trial technology professionals who trust HotSeaters to manage their operations.
+              Join leading trial technology professionals who trust HotSeaters to manage their
+              operations.
             </p>
             <Button
               onClick={handleSignup}
@@ -900,27 +875,21 @@ export function LandingPage() {
         {/* Footer */}
         <footer
           className="border-t"
-          style={{
-            borderColor: 'var(--theme-stone-200)',
-            backgroundColor: 'var(--theme-card-bg)',
-          }}
+          style={{ borderColor: 'var(--theme-stone-200)', backgroundColor: 'var(--theme-card-bg)' }}
         >
           <div
-            className="max-w-7xl mx-auto px-6 py-8"
-            style={{
-              fontFamily: 'var(--theme-font-body)',
-              color: 'var(--theme-stone-600)',
-            }}
+            className="max-w-7xl mx-auto px-4 sm:px-6 py-1 sm:py-8"
+            style={{ fontFamily: 'var(--theme-font-body)', color: 'var(--theme-stone-600)' }}
           >
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <p>&copy; 2026 HotSeaters. All rights reserved.</p>
-              <div className="flex items-center gap-6">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-0.5 sm:gap-4">
+              <p className="text-xs sm:text-sm">&copy; 2026 HotSeaters. All rights reserved.</p>
+              <div className="flex items-center gap-4 sm:gap-6">
                 <button
                   onClick={() => {
                     setPolicyModalData({ type: 'privacy', title: 'Privacy Policy' });
                     setPolicyModalOpen(true);
                   }}
-                  className="hover:text-stone-900 transition-colors text-sm cursor-pointer bg-transparent border-none p-0"
+                  className="hover:text-stone-900 transition-colors text-xs sm:text-sm cursor-pointer bg-transparent border-none p-0"
                 >
                   Privacy Policy
                 </button>
@@ -929,7 +898,7 @@ export function LandingPage() {
                     setPolicyModalData({ type: 'terms', title: 'Terms of Service' });
                     setPolicyModalOpen(true);
                   }}
-                  className="hover:text-stone-900 transition-colors text-sm cursor-pointer bg-transparent border-none p-0"
+                  className="hover:text-stone-900 transition-colors text-xs sm:text-sm cursor-pointer bg-transparent border-none p-0"
                 >
                   Terms of Service
                 </button>
