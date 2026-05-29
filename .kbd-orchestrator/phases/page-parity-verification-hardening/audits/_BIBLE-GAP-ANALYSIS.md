@@ -1,130 +1,77 @@
-# Bible gap analysis — 427-commit drift
+# Bible gap analysis — 427-commit drift (AUTHORITATIVE, name-status verified)
 
-_2026-05-29. Diff of bible app pages: `pre-parity-reset-2026-05-29` (old source
-the port was built from, `6f97312a`) → current `HEAD` (`29ae47e3`). Excludes
-`Doc*` (RULE 7 content). This sizes how much of the port actually drifts from
-the refreshed bible._
+_2026-05-29. Diff of bible: `pre-parity-reset-2026-05-29` (old source the port
+was built from, `6f97312a`) → current `HEAD` (`29ae47e3`). Excludes `Doc*`
+(RULE 7 content)._
 
-## Good news: the gap is bounded, not "the whole port"
+> **Method note (important):** earlier versions of this doc read `git diff
+> --stat` churn numbers and mis-stated some of them as file deletions. This
+> version uses `git diff --name-status` (the authoritative D/M/A signal) and
+> supersedes all prior delete/add claims here.
 
-Of ~33 app surfaces, the 427 commits meaningfully changed **~8 pages**, with a
-clear long tail of trivial 1-line edits that are a single systemic fix.
+## App pages (non-Doc) — name-status old→new
 
-## Tier 1 — substantial re-port (large diffs)
+| Status | Page |
+|--------|------|
+| **D (deleted)** | `Sales.jsx` (Sales-Hub wrapper dissolved — handled in D05) |
+| **M (modified, still alive)** | Approvals, Bills, Clients, Collections, Dashboard, DealTracker, HSHDirectory, HelpWanted, HotSeatHubMarketing, Invoices, Landing, **LeadRadar**, MobileMore, PotentialGigs, Projections, Settings, Team, TimeAndExpenses, Timeline, Trials |
 
-| Page | Δ lines | Nature | Port action |
-|------|--------:|--------|-------------|
-| `Sales.jsx` | −419 | Heavily reduced/refactored — Sales Hub simplified | Re-port `sales/pages/sales-page.tsx` vs current bible |
-| `Landing.jsx` | 354 (±) | Dark navy→cyan gradient hero redesign + `text-cyan-300` accent | Re-port `landing/pages/landing-page.tsx` |
-| `DealTracker.jsx` | 321 (±) | Significant rework | Re-port `deals/pages/deal-tracker-page.tsx` |
+**Key fact for D08:** `LeadRadar.jsx` is **M (modified +18/−52), NOT deleted**.
+The Lead Radar PAGE survives in the current bible (525 LOC), routed in
+`App.jsx`, and nav-linked in `Layout.jsx` (Sales group = **Lead Radar + Deal
+Tracker + Clients**, all three coexist). The pivot ADDED the Deal surface
+alongside Lead Radar; it did not remove the page.
 
-## Tier 2 — moderate drift (re-audit + targeted fixes)
+## Sales/pipeline/deals components — name-status old→new
 
-| Page | Δ lines | Nature |
-|------|--------:|--------|
-| `LeadRadar.jsx` | 70 | Likely tied to the leads→deals pivot |
-| `Clients.jsx` | 55 | Moderate change |
-| `MobileMore.jsx` | 19 | Nav/menu change |
-| `Dashboard.jsx` | 13 | **Functional: leads→deals** — `useMyStaleLeadsCount`→`useMyStaleDealsCount`, LeadRadar→DealTracker nav, copy "leads need attention"→"deals need attention" + Michroma title |
-| `Timeline.jsx` | 12 | Moderate change |
+### Deleted (D) — the old Lead SUB-components (genuinely gone)
+`pipeline/PipelinePageContent.jsx`, `sales/LeadActivityColumn.jsx`,
+`sales/LeadAttachmentControl.jsx`, `sales/LeadCard.jsx`,
+`sales/LeadDetailPanel.jsx`, `sales/LeadEditSheet.jsx`,
+`sales/LeadFilterSheet.jsx`, `sales/LeadFollowUpBanner.jsx`,
+`sales/LeadsKanbanGrid.jsx`, `sales/LeadsRadarTab.jsx`, `sales/NewLeadForm.jsx`,
+`sales/leadWizard/NewLeadStepActivity.jsx`,
+`sales/leadWizard/NewLeadStepContactFirm.jsx`,
+`sales/leadWizard/NewLeadWizard.jsx`.
 
-## Tier 3 — systemic 1-line change (ONE shared fix, not per-page)
+→ These Lead sub-components were removed; their behavior was **inlined into the
+slimmed `LeadRadar.jsx`** (which is why the page shrank to 525 LOC while still
+functioning). The port's `lead-radar-page.tsx` already follows this inlined
+shape (it inlined `LeadsRadarTab` when first built).
 
-These pages each show a **+1 line** diff that is the SAME change: page-title
-headings gained `fontFamily: 'Michroma, sans-serif'`. The bible moved page
-titles to the Michroma display font.
+### Added (A) — the new Deal subsystem (ported in D01–D04)
+`sales/AddContactWizard.jsx`, `CascadeDeleteDialog.jsx`,
+`DealTrackerColumnFrame.jsx`, `DealTrackerKanbanGrid.jsx`,
+`DealTrackerLostList.jsx`, `DealTrackerSalesStageFilters.jsx`,
+`DealTrackerViewModeToggle.jsx`, `DealUrgencyBanner.jsx`, `OpportunityCard.jsx`,
+`QuickPickDateChips.jsx`.
 
-Affected: `Trials`, `TimeAndExpenses`, `Projections`, `HSHDirectory`, `Team`,
-`Settings`, `PotentialGigs`, `Invoices`, `HotSeatHubMarketing`, `HelpWanted`,
-`Collections`, `Bills`, `Approvals` (+ the Tier-1/2 pages also gained it).
+### Modified (M)
+`deals/DealWizard.jsx`, `sales/DealTrackerTab.jsx`,
+`sales/InlineSalesActivityForm.jsx`, `sales/NoNextStepConfirmModal.jsx`,
+`sales/SalesActivityHistoryDialog.jsx`, `sales/SalesNotesSection.jsx`.
 
-**Action (RULE 0.3 — fix in the shared layer):** apply the Michroma page-title
-treatment once — via the shared page-title/heading component or a theme token —
-rather than editing each page. Verify the port's title element + theme tokens
-match the bible's new `fontFamily: 'Michroma, sans-serif'` on page titles.
+## What this means for the phase
 
-## Net remaining re-port scope
+1. **D01–D07 (Deals work) stand** — the Deal subsystem was genuinely ADDED;
+   everything built was real bible parity.
+2. **D05 (Sales.jsx retired)** — correct; `Sales.jsx` IS `D`.
+3. **D08 is a RECONCILE, not a retirement** — `LeadRadar.jsx` is alive (M).
+   The port's `lead-radar-page.tsx` was built against the OLD bible; bring it to
+   parity with the current 525-LOC `LeadRadar.jsx`. The deleted Lead
+   sub-components don't need separate port deletions because the port never
+   created them as separate files (it inlined). Verify no port file references a
+   now-deleted Lead concept that the bible dropped.
+4. **The old "Body B = retire Lead code" framing was wrong** about LeadRadar
+   the page; it was right that the Lead sub-components are gone. Net: no
+   port-side dead-Lead deletion needed beyond what D05 already did.
 
-- **1 systemic fix:** page-title → Michroma (covers the entire Tier-3 list).
-- **1 functional fix:** Dashboard leads→deals (hook + nav + copy).
-- **3 substantial re-ports:** Sales, Landing, DealTracker.
-- **5 moderate re-audits:** LeadRadar, Clients, MobileMore, Dashboard(visual), Timeline.
+## Page-level drift sizes (from --stat, for prioritization only — not delete signals)
+Sales −419 (deleted), DealTracker ±321, Landing ±354, LeadRadar +18/−52,
+Clients ±55, MobileMore ±19, Dashboard ±13, Timeline ±12; long tail of 1-line
+Michroma page-title edits (done in the verification phase).
 
-This is a finish-able body of work, NOT a full re-port. It folds into the
-existing V03–V11 structure with V11 absorbing the remediation. The earlier
-fear ("427 commits → whole port stale") is disproved: most surfaces are
-untouched or share one systemic title-font change.
-
-## Recommended sequencing
-
-1. **Systemic Michroma page-title fix** (one change, unblocks Tier-3 parity).
-2. **Dashboard leads→deals** functional alignment.
-3. **Landing re-port** (highest-visibility; dark-hero redesign).
-4. **Sales + DealTracker re-ports** (largest diffs).
-5. **Tier-2 re-audits** (LeadRadar, Clients, MobileMore, Timeline).
-6. Re-run `pnpm test:bible-parity` + authed VR; confirm drift < gate.
-
-## Component diff — the REAL story: a Leads→Deals re-architecture
-
-The page diff understated the gap. **42 shared components changed**, and they
-reveal a fundamental subsystem rewrite — the bible pivoted the entire sales
-flow from a **Leads** model to a **Deals/Opportunities** model.
-
-### Deleted (old Lead-based subsystem)
-- `pipeline/PipelinePageContent.jsx` (−1163)
-- `sales/LeadCard.jsx` (−550), `sales/LeadsKanbanGrid.jsx` (−212),
-  `sales/LeadsRadarTab.jsx` (−197), `sales/LeadDetailPanel.jsx` (−272),
-  `sales/LeadEditSheet.jsx`, `sales/LeadAttachmentControl.jsx`,
-  `sales/LeadFollowUpBanner.jsx`
-- entire `sales/leadWizard/*` (NewLeadWizard −262, NewLeadStepContactFirm −361,
-  NewLeadStepActivity −103, …)
-
-### Added (new Deal-based subsystem)
-- `sales/DealTrackerKanbanGrid.jsx` (+720), `sales/OpportunityCard.jsx` (+711),
-  `sales/AddContactWizard.jsx` (+695), `sales/DealUrgencyBanner.jsx` (+330),
-  `sales/DealTrackerLostList.jsx` (+206), `sales/DealTrackerColumnFrame.jsx`,
-  `sales/DealTrackerSalesStageFilters.jsx`, `sales/CascadeDeleteDialog.jsx`
-- `trials/SalesActivitySection.jsx` (±249), `clients/ClientDetails.jsx` (±148)
-
-### Interpretation
-
-This is **not parity drift to patch** — it is a **major feature
-re-architecture** in the bible. The port's Sales/Leads/Pipeline surface (built
-on the OLD Lead model) is now architecturally divergent from the current
-bible's Deal/Opportunity model. The Dashboard leads→deals change seen in the
-page diff is the visible tip of this pivot.
-
-## REVISED net scope — two distinct bodies of work
-
-### Body A — small parity fixes (fits in this verification phase)
-1. ✅ **DONE — Systemic Michroma page-title** font. Added
-   `--theme-font-page-title: 'Michroma', sans-serif'` to `src/index.css` and
-   referenced it via `fontFamily: 'var(--theme-font-page-title)'` on all 18
-   in-app page-title `<h1>`s (trials/time-and-expenses/trial-detail/timeline/
-   lead-radar/sales/projections/invoices/deal-tracker/bills/approvals/
-   collections/hsh-directory/potential-gigs/help-wanted/settings/welcome-header
-   + team). One token = one source of truth (RULE 0.3). Gate trio green.
-   Excluded non-title uses: role-guard error screen, app-router debug
-   placeholder, auth-card (marketing-themed, not in bible Michroma set), and
-   the dead/unrouted company-settings-page.
-2. Tier-2 visual re-audits where unaffected by the Deals pivot
-   (MobileMore, Timeline, Clients-visual).
-3. exhaustive-deps paydown (V12), final gate (V13).
-
-### Body B — Leads→Deals re-architecture (its OWN phase, NOT verification)
-- Re-port Sales, DealTracker, LeadRadar, Dashboard-sales-widgets, and the
-  client/trial sales-activity surfaces against the new Deal/Opportunity model.
-- New entities/stores/hooks for Deals/Opportunities; retire Lead-based ones.
-- This is feature work of similar size to an original wave — it should be a
-  dedicated `sales-deals-rearchitecture` phase, planned from the current bible,
-  not folded into "verification & hardening."
-
-## Bottom line for the owner
-
-The 427-commit gap splits cleanly:
-- **Most of the port is fine** — untouched pages + one systemic font fix.
-- **The sales/leads subsystem needs a real re-port** to the bible's new Deals
-  architecture. That is a NEW PHASE, not a V11 bug-fix.
-
-Recommend: finish Body A inside this phase; spin up a separate
-`sales-deals-rearchitecture` phase for Body B with its own assess/plan.
+## Systemic items already handled
+- ✅ Michroma page-title font token (verification phase).
+- ✅ Sales.jsx retirement (D05).
+- ✅ Dashboard leads→deals pivot (D07).
