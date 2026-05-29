@@ -36,6 +36,8 @@ import type { DealViewMode } from '@/features/deals/business-rules/deal-kanban-b
 
 import { DealUrgencyBanner } from '@/features/deals/components/deal-urgency-banner';
 import { DealTrackerTab } from '@/features/deals/components/deal-tracker-tab';
+import { DealWizard } from '@/features/deals/components/deal-wizard';
+import type { DealWritePayload } from '@/features/deals/hooks/use-deals-trials-data';
 import type {
   DealDateFilter,
   DealStatusFilter,
@@ -57,19 +59,6 @@ function PageLoader({ message }: { message: string }) {
         />
         <span style={{ fontSize: 'var(--theme-text-body)' }}>{message}</span>
       </div>
-    </div>
-  );
-}
-
-// ─── Stub: deal create/edit wizard (change-D03) ──────────────────────────────
-
-function DealWizardStub({ onCancel }: { onCancel: () => void }) {
-  return (
-    <div className="rounded-lg border p-6" style={{ borderColor: 'var(--theme-stone-200)', color: 'var(--theme-stone-500)' }}>
-      <p>Deal wizard arrives in change-D03.</p>
-      <button type="button" onClick={onCancel} style={{ marginTop: '1rem', color: 'var(--theme-stone-700)' }}>
-        Cancel
-      </button>
     </div>
   );
 }
@@ -146,8 +135,26 @@ export function DealTrackerPage() {
     pipelineStages,
     isLoading,
     updateStage,
+    createDeal,
+    updateDeal,
   } = useDealsTrialsData({ scope: 'deals' });
   const { clients } = useClientsList();
+
+  // Wizard submit → create or update the deal (D03). Returns the trial so the
+  // wizard can reuse it (e.g. return-to-details on edit).
+  const handleWizardSubmit = useCallback(
+    async (payload: DealWritePayload, isEditing: boolean): Promise<Trial> => {
+      const result = isEditing
+        ? await updateDeal(payload as DealWritePayload & { id: string })
+        : await createDeal(payload);
+      setShowForm(false);
+      if (isEditing && editingTrial) setSelectedTrial(result);
+      else setSelectedTrial(null);
+      setEditingTrial(null);
+      return result;
+    },
+    [createDeal, updateDeal, editingTrial],
+  );
 
   // Sync selectedTrial when live data patches arrive.
   useEffect(() => {
@@ -292,7 +299,10 @@ export function DealTrackerPage() {
 
         {/* Page-level overlays — above the tracker so it stays mounted underneath. */}
         {showForm && (
-          <DealWizardStub
+          <DealWizard
+            trial={editingTrial}
+            mode="deal"
+            onSubmit={handleWizardSubmit}
             onCancel={() => {
               setShowForm(false);
               if (editingTrial) setSelectedTrial(editingTrial);

@@ -214,6 +214,8 @@ export interface Trial {
   client_id?: string | null;
   pipeline_stage_id?: string | null;
   primary_contact_id?: string | null;
+  frp_client_id?: string | null;
+  frp_contact_id?: string | null;
   consultant_id?: string | null;
   case_name?: string | null;
   case_number?: string | null;
@@ -259,6 +261,12 @@ export interface TrialService {
   display_order?: number | null;
   final_billing_method?: string | null;
   split_billing_at_threshold?: boolean | null;
+  pre_trial_estimated_hours?: number | null;
+  estimated_travel_hours?: number | null;
+  days_before_trial?: number | null;
+  projected_daily_revenue?: number | null;
+  pre_trial_projected_daily_revenue?: number | null;
+  in_trial_projected_daily_revenue?: number | null;
   start_date?: string | null;
   end_date?: string | null;
   estimated_quantity?: number | null;
