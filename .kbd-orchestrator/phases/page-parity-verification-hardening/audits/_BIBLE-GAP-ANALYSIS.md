@@ -66,18 +66,27 @@ untouched or share one systemic title-font change.
 
 ## Component diff — the REAL story: a Leads→Deals re-architecture
 
-The page diff understated the gap. **42 shared components changed**, and they
-reveal a fundamental subsystem rewrite — the bible pivoted the entire sales
-flow from a **Leads** model to a **Deals/Opportunities** model.
+> ⚠️ **CORRECTION (2026-05-29, during D08).** The "Deleted (old Lead-based
+> subsystem)" list below was **WRONG** — it misread `git diff --stat` churn
+> numbers as file deletions. Verified with `git diff --name-status
+> pre-parity-reset-2026-05-29 HEAD -- 'src/components/sales/Lead*' src/pages/LeadRadar.jsx`:
+> **every Lead file is `M` (modified) or `A` (added) — ZERO deletions.**
+> `LeadRadar.jsx` is alive (modified +18/−52), nav-linked (Layout.jsx Sales
+> group: Lead Radar + Deal Tracker + Clients), and routed in App.jsx.
+> `LeadAttachmentControl.jsx` + `LeadFollowUpBanner.jsx` were **added**.
+> **The pivot ADDED the Deal surface; it did NOT remove Leads — both coexist.**
+> Consequence: D08 is a RECONCILE of the port's Lead Radar page to the current
+> bible (~70-line drift), NOT a retirement. The D01–D07 Deals work remains
+> valid (Deals were genuinely added). The large `−` numbers below are diff
+> churn, not deletions — retracted.
 
-### Deleted (old Lead-based subsystem)
-- `pipeline/PipelinePageContent.jsx` (−1163)
-- `sales/LeadCard.jsx` (−550), `sales/LeadsKanbanGrid.jsx` (−212),
-  `sales/LeadsRadarTab.jsx` (−197), `sales/LeadDetailPanel.jsx` (−272),
-  `sales/LeadEditSheet.jsx`, `sales/LeadAttachmentControl.jsx`,
-  `sales/LeadFollowUpBanner.jsx`
-- entire `sales/leadWizard/*` (NewLeadWizard −262, NewLeadStepContactFirm −361,
-  NewLeadStepActivity −103, …)
+### ~~Deleted (old Lead-based subsystem)~~ — RETRACTED (all are M/A, not D)
+- ~~`sales/LeadCard.jsx` (−550)~~ → M (modified, still exists)
+- ~~`sales/LeadsKanbanGrid.jsx`, `LeadDetailPanel.jsx`, `LeadsRadarTab.jsx`~~ → all M
+- ~~`sales/leadWizard/*`~~ → all M (NewLeadWizard/Step* modified, still exist)
+- `LeadAttachmentControl.jsx`, `LeadFollowUpBanner.jsx` → A (ADDED in the pivot)
+- (`PipelinePageContent.jsx` churn not re-verified here — treat as churn, not a
+  confirmed delete, until checked with `--name-status`.)
 
 ### Added (new Deal-based subsystem)
 - `sales/DealTrackerKanbanGrid.jsx` (+720), `sales/OpportunityCard.jsx` (+711),
