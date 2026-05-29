@@ -69,8 +69,14 @@ export interface UseDealsTrialsDataResult {
   restoreDeal: (id: string) => Promise<void>;
   revertToDeal: (id: string) => Promise<void>;
   restoreTrial: (id: string) => Promise<void>;
-  /** Hard delete of the trial row. Cascade of children is handled in D04. */
+  /** Hard delete of the trial row itself. */
   deleteDeal: (id: string) => Promise<void>;
+  /**
+   * Delete the trial's child rows the trials-store owns (services + contacts).
+   * Driven by the D04 CascadeDeleteDialog before `deleteDeal`. Wider cascades
+   * (documents / HSH / billing) belong to those surfaces.
+   */
+  deleteDealChildren: (id: string) => Promise<void>;
   // ── Deal create / update orchestration (change-D03) ──
   /**
    * Create a new deal: insert the `trial`, then create its `trial_service`
@@ -174,10 +180,24 @@ export function useDealsTrialsData({ scope }: { scope: DealsScope }): UseDealsTr
   );
 
   const deleteDeal = useCallback(async (id: string) => {
-    // NOTE: child-cascade (services, contacts, time entries, documents, …) is
-    // ported in change-D04 (CascadeDeleteDialog). D01 deletes the trial row;
-    // the HSH-blocker guard + cascade land with the activity surface.
+    // Hard-delete the trial row. The CascadeDeleteDialog (D04) deletes the
+    // children it can reach (sales activities + the trial's services/contacts
+    // via `deleteDealChildren`) first. Wider cascades (documents / HSH /
+    // billing) belong to those surfaces and remain deferred there.
     await deleteTrial(id);
+  }, []);
+
+  const deleteDealChildren = useCallback(async (id: string) => {
+    const [services, contacts] = await Promise.all([
+      fetchTrialServices(id),
+      fetchTrialContacts(id),
+    ]);
+    for (const ts of services) {
+      await deleteTrialService(ts.id);
+    }
+    for (const tc of contacts) {
+      await deleteTrialContact(tc.id);
+    }
   }, []);
 
   const createDeal = useCallback(
@@ -289,6 +309,7 @@ export function useDealsTrialsData({ scope }: { scope: DealsScope }): UseDealsTr
     revertToDeal,
     restoreTrial,
     deleteDeal,
+    deleteDealChildren,
     createDeal,
     updateDeal,
   };

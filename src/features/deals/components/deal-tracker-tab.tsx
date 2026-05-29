@@ -66,6 +66,8 @@ interface DealTrackerTabProps {
   onAddDeal?: () => void;
   onAddContact?: () => void;
   onAddDealForContact?: (attorney: AttorneyRow) => void;
+  onDeleteTrial?: (id: string) => Promise<void>;
+  onDeleteTrialChildren?: (id: string) => Promise<void>;
   viewMode: DealViewMode;
   onViewModeChange: (m: DealViewMode) => void;
   dateFilter: DealDateFilter;
@@ -93,6 +95,8 @@ export function DealTrackerTab({
   onAddDeal,
   onAddContact,
   onAddDealForContact,
+  onDeleteTrial,
+  onDeleteTrialChildren,
   viewMode,
   onViewModeChange,
   dateFilter,
@@ -121,6 +125,8 @@ export function DealTrackerTab({
       showMyDeals,
       onSelectTrial,
       ...(onAddDealForContact ? { onAddDealForContact } : {}),
+      ...(onDeleteTrial ? { onDeleteTrial } : {}),
+      ...(onDeleteTrialChildren ? { onDeleteTrialChildren } : {}),
     }),
     [
       clients,
@@ -133,6 +139,8 @@ export function DealTrackerTab({
       showMyDeals,
       onSelectTrial,
       onAddDealForContact,
+      onDeleteTrial,
+      onDeleteTrialChildren,
     ],
   );
 

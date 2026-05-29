@@ -140,6 +140,7 @@ export function DealWizard({
     companyDefaults,
     companyId,
     createClient,
+    createContact,
   } = data;
   const [dateRange, setDateRange] = useState<DateRangeValue | undefined>(undefined);
   const [activeRangePicker, setActiveRangePicker] = useState<RangePickerSide>('from');
@@ -537,6 +538,25 @@ export function DealWizard({
     });
   };
 
+  const handleCreateContact = async (
+    clientId: string,
+    draft: { first_name: string; last_name: string; email: string; phone: string; title: string },
+  ): Promise<string> => {
+    // D04: inline primary-contact create routes through the wizard data hook's
+    // createContact action (RULE B/C/D).
+    if (!companyId) throw new Error('No active company');
+    if (!clientId) throw new Error('Select a client first');
+    return createContact({
+      company_id: companyId,
+      client_id: clientId,
+      first_name: draft.first_name,
+      last_name: draft.last_name,
+      email: draft.email,
+      phone: draft.phone,
+      title: draft.title,
+    });
+  };
+
   const canProceed = (): boolean => {
     if (currentStep === 1) {
       const basicValid = dealData.consultant_id && dealData.client_id && dealData.primary_contact_id;
@@ -608,6 +628,7 @@ export function DealWizard({
             toggleSecondaryContact={toggleSecondaryContact}
             onCreateClient={handleCreateClient}
             onCreateFRPClient={handleCreateClient}
+            onCreateContact={handleCreateContact}
           />
         )}
 

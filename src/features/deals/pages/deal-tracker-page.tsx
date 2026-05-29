@@ -32,18 +32,25 @@ import { toast } from 'sonner';
 import { useDealsTrialsData } from '@/features/deals/hooks/use-deals-trials-data';
 import { useClientsList } from '@/features/clients/hooks/use-clients-list';
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
+import { useTeam } from '@/features/company/hooks/use-team';
+import { useSalesActivities } from '@/features/deals/hooks/use-sales-activities';
 import type { Trial } from '@/features/trials/entities';
 import type { DealViewMode } from '@/features/deals/business-rules/deal-kanban-buckets';
 
 import { DealUrgencyBanner } from '@/features/deals/components/deal-urgency-banner';
 import { DealTrackerTab } from '@/features/deals/components/deal-tracker-tab';
 import { DealWizard } from '@/features/deals/components/deal-wizard';
+import { AddContactWizard } from '@/features/deals/components/add-contact-wizard';
 import type { DealWritePayload } from '@/features/deals/hooks/use-deals-trials-data';
 import type {
   DealDateFilter,
   DealStatusFilter,
 } from '@/features/deals/components/deal-tracker-sales-stage-filters';
-import type { DealRow } from '@/features/deals/components/deal-card-types';
+import type {
+  AttorneyRow,
+  DealRow,
+  SalesActivityRow,
+} from '@/features/deals/components/deal-card-types';
 
 // ─── Inline page loader (shared PageLoader not yet ported) ───────────────────
 
@@ -60,19 +67,6 @@ function PageLoader({ message }: { message: string }) {
         />
         <span style={{ fontSize: 'var(--theme-text-body)' }}>{message}</span>
       </div>
-    </div>
-  );
-}
-
-// ─── Stub: add-contact wizard (change-D04 sales-activity surface) ────────────
-
-function AddContactWizardStub({ onCancel }: { onCancel: () => void }) {
-  return (
-    <div className="rounded-lg border p-6" style={{ borderColor: 'var(--theme-stone-200)', color: 'var(--theme-stone-500)' }}>
-      <p>Add Contact wizard arrives in change-D04.</p>
-      <button type="button" onClick={onCancel} style={{ marginTop: '1rem', color: 'var(--theme-stone-700)' }}>
-        Cancel
-      </button>
     </div>
   );
 }
@@ -138,9 +132,64 @@ export function DealTrackerPage() {
     updateStage,
     createDeal,
     updateDeal,
+    deleteDeal,
+    deleteDealChildren,
     invalidate,
   } = useDealsTrialsData({ scope: 'deals' });
   const { clients } = useClientsList();
+  const { members } = useTeam(userInfo?.company_id ?? null);
+  const { salesActivities, attorneys, prospects, reload: reloadActivities } =
+    useSalesActivities();
+
+  // Card props mapped to the minimal shapes the cards consume.
+  const cardAttorneys = useMemo<AttorneyRow[]>(
+    () =>
+      attorneys.map((a) => ({
+        id: a.id,
+        client_id: a.client_id,
+        first_name: a.first_name,
+        last_name: a.last_name,
+        email: a.email,
+        phone: a.phone,
+        is_active_prospect: a.is_active_prospect,
+      })),
+    [attorneys],
+  );
+  const cardProspects = useMemo<AttorneyRow[]>(
+    () =>
+      prospects.map((a) => ({
+        id: a.id,
+        client_id: a.client_id,
+        first_name: a.first_name,
+        last_name: a.last_name,
+        email: a.email,
+        phone: a.phone,
+        is_active_prospect: a.is_active_prospect,
+      })),
+    [prospects],
+  );
+  const cardActivities = useMemo<SalesActivityRow[]>(
+    () =>
+      salesActivities.map((a) => ({
+        id: a.id,
+        trial_id: a.trial_id,
+        attorney_id: a.attorney_id,
+        status: a.status,
+        scheduled_date: a.scheduled_date,
+        activity_type: a.activity_type,
+        content: a.content,
+      })),
+    [salesActivities],
+  );
+  const consultants = useMemo(
+    () =>
+      members.map((m) => ({
+        id: m.id,
+        first_name: m.first_name,
+        last_name: m.last_name,
+      })),
+    [members],
+  );
 
   // Wizard submit → create or update the deal (D03). Returns the trial so the
   // wizard can reuse it (e.g. return-to-details on edit). On failure we surface
@@ -271,7 +320,19 @@ export function DealTrackerPage() {
     }));
   }, [trials, pipelineStages, inSalesStageLostMode, showMyDeals, userInfo?.id]);
 
-  const overlayActive = !!selectedTrial || showForm || showAddContact;
+  // AddContactWizard renders as a modal (self-shows via `open`), so it does NOT
+  // hide the tracker underneath — only the deal wizard + details overlays do.
+  const overlayActive = !!selectedTrial || showForm;
+
+  const handleAddDealForContact = useCallback((attorney: AttorneyRow) => {
+    // Bible: "Add Deal" on a contact-only card opens the deal wizard. The
+    // wizard's contact prefill from an attorney is a D-later refinement; for
+    // now this opens the create-deal wizard (same destination as Add Deal).
+    void attorney;
+    setShowForm(true);
+    setEditingTrial(null);
+    setSelectedTrial(null);
+  }, []);
 
   // ── Loading gate ────────────────────────────────────────────────────────
   if (isLoading) {
@@ -324,9 +385,15 @@ export function DealTrackerPage() {
           />
         )}
 
-        {showAddContact && (
-          <AddContactWizardStub onCancel={() => setShowAddContact(false)} />
-        )}
+        <AddContactWizard
+          open={showAddContact}
+          onOpenChange={setShowAddContact}
+          userInfo={userInfo}
+          onCreated={() => {
+            setShowAddContact(false);
+            reloadActivities();
+          }}
+        />
 
         {selectedTrial && !showForm && !showAddContact && (
           <TrialDetailsStub trial={selectedTrial} onClose={() => setSelectedTrial(null)} />
@@ -335,41 +402,43 @@ export function DealTrackerPage() {
         {/* Tracker content — hidden (but still mounted) when an overlay is active. */}
         <div style={overlayActive ? { display: 'none' } : undefined}>
           {/*
-           * salesActivities/attorneys/prospects arrive with the sales-activity
-           * surface (change-D04); banner + contact-only cards stay empty until
-           * then. The DealUrgencyBanner's three sections are derived entirely
-           * from pending sales activities, so with no activity data there is
-           * nothing urgent to surface — we pass empty deals/prospects/activities
-           * and the banner self-suppresses (returns null) for bible parity
-           * (the banner is absent when nothing is urgent).
+           * D04: the urgency banner + cards consume real sales-activity data.
+           * The banner derives its three sections (Needs Attention / Overdue /
+           * Due Today) from pending activities anchored to the active deal pool
+           * and the contact-only prospects; it self-suppresses (returns null)
+           * when nothing is urgent, matching the bible.
            */}
           <DealUrgencyBanner
-            deals={[]}
-            prospects={[]}
-            attorneys={[]}
+            deals={allDeals}
+            prospects={cardProspects}
+            attorneys={cardAttorneys}
             clients={clients}
-            salesActivities={[]}
+            salesActivities={cardActivities}
             viewMode={viewMode}
             onViewModeChange={handleViewModeChange}
           />
           <DealTrackerTab
             allDeals={allDeals}
+            prospectAttorneys={cardProspects}
             clients={clients}
             pipelineStages={pipelineStages}
-            // attorneys/documents/documentSigners/consultants/salesActivities
-            // arrive with the sales-activity surface (change-D04); contact-only
-            // prospect cards + LOE status stay empty until then.
-            attorneys={[]}
+            attorneys={cardAttorneys}
             documents={[]}
             documentSigners={[]}
-            consultants={[]}
-            salesActivities={[]}
+            consultants={consultants}
+            salesActivities={cardActivities}
             userInfo={userInfo}
             showMyDeals={showMyDeals}
             onShowMyDealsChange={setShowMyDeals}
             onSelectTrial={setSelectedTrial}
             onAddDeal={handleAddDeal}
             onAddContact={handleAddContact}
+            onAddDealForContact={handleAddDealForContact}
+            onDeleteTrial={async (id) => {
+              await deleteDeal(id);
+              reloadActivities();
+            }}
+            onDeleteTrialChildren={deleteDealChildren}
             viewMode={viewMode}
             onViewModeChange={handleViewModeChange}
             dateFilter={dateFilter}

@@ -10,16 +10,11 @@
  *
  * Adaptation (RULE 0): the bible's activity zone embeds an inline activity
  * editor (`InlineSalesActivityForm`), an `ActivityToolbar`, a history dialog
- * and `CascadeDeleteDialog` (deal-mode Delete Deal). Those depend on the
- * sales-activity + cascade-delete surfaces that land in later changes (D03/D04
- * + activity). They are OUT OF SCOPE for D02. We reproduce the read-only
- * rendered output (next-activity display, urgency tint, LOE status, quick
- * actions) and cleanly omit the not-yet-wired editors. The card lights up its
- * activity zone automatically once `salesActivities` is wired.
- *
- * The contact-only "Not Pursuing" menu IS rendered for bible parity, but its
- * confirm action is a D04 stub — the single-field is_active_prospect write
- * needs an Attorney store, which the port does not have yet.
+ * and `CascadeDeleteDialog` (deal-mode Delete Deal). D04 wires all of them:
+ * the card consumes `useSalesActivities()` for the next-activity display +
+ * mark-done/edit controls + add-activity + history, the contact-only
+ * "Not Pursuing" action flips `is_active_prospect` through the hook, and the
+ * deal-mode delete opens the cascade dialog.
  *
  * HotSeatersMVP is the bible.
  */
@@ -28,7 +23,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Phone, Mail, ExternalLink, CalendarDays, Send, Building2, MapPin,
-  Clock, User, Plus, MoreVertical, UserX,
+  Clock, User, Plus, MoreVertical, UserX, CheckCircle2, Pencil, Trash2,
 } from 'lucide-react';
 import { differenceInDays, parseISO, format } from 'date-fns';
 
@@ -41,6 +36,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -52,7 +53,14 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { Trial } from '@/features/trials/entities';
 import { stageColorToCss } from '@/features/deals/business-rules/deal-kanban-buckets';
+import { useSalesActivities } from '@/features/deals/hooks/use-sales-activities';
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
+import { useTier1 } from '@/app/tier1-provider';
 import { ACTIVITY_TYPE_ICON } from './deal-card-types';
+import { ActivityToolbar } from './activity-toolbar';
+import { InlineSalesActivityForm, type InlineFormMode } from './inline-sales-activity-form';
+import { SalesActivityHistoryDialog } from './sales-activity-history-dialog';
+import { CascadeDeleteDialog } from './cascade-delete-dialog';
 import type {
   AttorneyRow,
   DealRow,
@@ -81,9 +89,19 @@ export function OpportunityCard({
   onSelectTrial,
   onSendReminder,
   onAddDealForContact,
+  onDeleteTrial,
+  onDeleteTrialChildren,
   disableInitialAnimation = false,
 }: OpportunityCardProps) {
   const [showNotPursuingConfirm, setShowNotPursuingConfirm] = useState(false);
+  const [inlineFormMode, setInlineFormMode] = useState<InlineFormMode | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showCascadeDelete, setShowCascadeDelete] = useState(false);
+
+  const { setAttorneyProspectStatus } = useSalesActivities();
+  const { userInfo } = useCurrentUser();
+  const { company } = useTier1();
+  const companyId = company?.id ?? null;
 
   // ── Resolve actors ─────────────────────────────────────────────────────
   const primaryContact = deal
@@ -330,8 +348,8 @@ export function OpportunityCard({
         )}
       </div>
 
-      {/* LAYER 2 — Activity zone (read-only display) */}
-      <div style={{ padding: '0 0.75rem 0.5rem' }}>
+      {/* LAYER 2 — Activity zone (editable) */}
+      <div style={{ padding: '0 0.75rem 0.5rem' }} onClick={(e) => e.stopPropagation()}>
         <div
           className="rounded-lg overflow-hidden"
           style={{
@@ -343,43 +361,134 @@ export function OpportunityCard({
                 : 'color-mix(in srgb, var(--theme-brand-primary) 3%, white)',
           }}
         >
-          {nextActivity ? (
-            <div className="p-2.5 flex items-start gap-2.5">
-              <div className="flex-shrink-0 mt-0.5">
-                {ActIcon && <ActIcon className={`w-4 h-4 ${actInfo?.color ?? 'text-stone-500'}`} />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span
-                    className={`text-xs font-semibold ${isOverdue ? 'text-red-700' : isDueToday ? 'text-amber-700' : ''}`}
-                    style={{ color: !isOverdue && !isDueToday ? 'var(--theme-stone-800)' : undefined }}
-                  >
-                    {nextActivity.activity_type} — {fuDate && format(parseISO(`${fuDate}T00:00:00`), 'MMM d, yyyy')}
-                  </span>
-                  {daysLabel && (
+          {inlineFormMode !== 'edit' &&
+            inlineFormMode !== 'complete' &&
+            (nextActivity ? (
+              <div className="p-2.5 flex items-start gap-2.5">
+                <div className="flex-shrink-0 mt-0.5">
+                  {ActIcon && <ActIcon className={`w-4 h-4 ${actInfo?.color ?? 'text-stone-500'}`} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span
-                      className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                        isOverdue ? 'bg-red-100 text-red-700' : isDueToday ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'
-                      }`}
+                      className={`text-xs font-semibold ${isOverdue ? 'text-red-700' : isDueToday ? 'text-amber-700' : ''}`}
+                      style={{ color: !isOverdue && !isDueToday ? 'var(--theme-stone-800)' : undefined }}
                     >
-                      {daysLabel}
+                      {nextActivity.activity_type} — {fuDate && format(parseISO(`${fuDate}T00:00:00`), 'MMM d, yyyy')}
                     </span>
+                    {daysLabel && (
+                      <span
+                        className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                          isOverdue ? 'bg-red-100 text-red-700' : isDueToday ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-600'
+                        }`}
+                      >
+                        {daysLabel}
+                      </span>
+                    )}
+                  </div>
+                  {nextActivity.content && (
+                    <p className="text-xs mt-1 leading-relaxed line-clamp-2" style={{ color: 'var(--theme-stone-600)' }}>
+                      {nextActivity.content}
+                    </p>
                   )}
                 </div>
-                {nextActivity.content && (
-                  <p className="text-xs mt-1 leading-relaxed line-clamp-2" style={{ color: 'var(--theme-stone-600)' }}>
-                    {nextActivity.content}
-                  </p>
-                )}
+                <div className="flex flex-col gap-1 flex-shrink-0">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 hover:opacity-90 transition-opacity"
+                            onClick={() => setInlineFormMode('complete')}
+                            style={{
+                              borderRadius: 'var(--theme-button-radius)',
+                              backgroundColor: 'var(--theme-success)',
+                              border: '0.5px solid var(--theme-success)',
+                            }}
+                          >
+                            <CheckCircle2 className="w-4 h-4 text-white" />
+                          </Button>
+                        }
+                      />
+                      <TooltipContent>Mark done</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 hover:bg-stone-50 bg-white"
+                            onClick={() => setInlineFormMode('edit')}
+                            style={{
+                              borderRadius: 'var(--theme-button-radius)',
+                              color: 'var(--theme-stone-400)',
+                              border: '0.5px solid var(--theme-stone-200)',
+                            }}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                        }
+                      />
+                      <TooltipContent>Edit activity</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 px-2.5 py-2">
-              <Clock className="w-3.5 h-3.5" style={{ color: 'var(--theme-stone-300)' }} />
-              <span className="text-xs italic" style={{ color: 'var(--theme-stone-400)' }}>
-                No scheduled activity
+            ) : (
+              inlineFormMode !== 'new' && (
+                <div className="flex items-center gap-1.5 px-2.5 py-2">
+                  <Clock className="w-3.5 h-3.5" style={{ color: 'var(--theme-stone-300)' }} />
+                  <span className="text-xs italic" style={{ color: 'var(--theme-stone-400)' }}>
+                    No scheduled activity
+                  </span>
+                </div>
+              )
+            ))}
+
+          {inlineFormMode === 'new' && (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1.5"
+              style={{
+                borderTop: '1px solid var(--theme-stone-200)',
+                borderBottom: '1px solid var(--theme-stone-200)',
+                backgroundColor: 'var(--theme-stone-100)',
+              }}
+            >
+              <CalendarDays className="w-3 h-3" style={{ color: 'var(--theme-stone-400)' }} />
+              <span className="text-xs font-medium" style={{ color: 'var(--theme-stone-500)' }}>
+                Log New Activity
               </span>
             </div>
+          )}
+
+          {inlineFormMode && (
+            <InlineSalesActivityForm
+              mode={inlineFormMode}
+              activity={inlineFormMode !== 'new' ? nextActivity : null}
+              attorneyId={primaryContact?.id ?? null}
+              clientId={client?.id ?? null}
+              trialId={deal?.id ?? null}
+              companyId={companyId}
+              userInfo={userInfo}
+              onDone={() => setInlineFormMode(null)}
+              onCancel={() => setInlineFormMode(null)}
+            />
+          )}
+
+          {!inlineFormMode && (
+            <ActivityToolbar
+              isOverdue={isOverdue}
+              isDueToday={isDueToday}
+              activityCount={cardActivities.length}
+              onAddActivity={() => setInlineFormMode('new')}
+              onShowHistory={() => setShowHistory(true)}
+              stopPropagation
+            />
           )}
         </div>
       </div>
@@ -474,9 +583,39 @@ export function OpportunityCard({
           </div>
         )}
 
-        {/* Deal: LOE status */}
+        {/* Deal: delete menu + LOE status */}
         {deal && (
           <div className="flex-1 flex justify-end items-center gap-1">
+            {onDeleteTrial && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={(e) => e.stopPropagation()}
+                      title="More actions"
+                    >
+                      <MoreVertical className="w-3.5 h-3.5" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowCascadeDelete(true);
+                    }}
+                    className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                    style={{ fontFamily: 'var(--theme-font-body)', fontSize: 'var(--theme-text-body)' }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete Deal
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             {(() => {
               if (dealStage?.name === 'LOE Sent') {
                 const dealDocs = documents.filter((d) => d.trial_id === deal.id && d.status === 'sent');
@@ -549,9 +688,9 @@ export function OpportunityCard({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                // TODO(D04): flip primaryContact.is_active_prospect → false via
-                // the Attorney store once the sales-activity surface lands.
-                // Until then this just dismisses (no write path exists yet).
+                // D04: flip the contact's is_active_prospect → false through the
+                // sales-activity hook (single-field attorney write).
+                if (primaryContact?.id) void setAttorneyProspectStatus(primaryContact.id, false);
                 setShowNotPursuingConfirm(false);
               }}
               style={{ backgroundColor: 'var(--theme-brand-primary)', color: 'white' }}
@@ -561,6 +700,27 @@ export function OpportunityCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Activity history side panel */}
+      <SalesActivityHistoryDialog
+        open={showHistory}
+        onOpenChange={setShowHistory}
+        trialId={deal?.id ?? null}
+        attorneyId={deal ? null : (primaryContact?.id ?? null)}
+        consultants={consultants}
+      />
+
+      {/* Deal cascade-delete (deal-mode only) */}
+      {deal && onDeleteTrial && onDeleteTrialChildren && (
+        <CascadeDeleteDialog
+          open={showCascadeDelete}
+          onOpenChange={setShowCascadeDelete}
+          entityId={deal.id}
+          entityName={deal.case_name ?? 'this deal'}
+          onDeleteTrial={onDeleteTrial}
+          onDeleteTrialChildren={onDeleteTrialChildren}
+        />
+      )}
     </motion.div>
   );
 }

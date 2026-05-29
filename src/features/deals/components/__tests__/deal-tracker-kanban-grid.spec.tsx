@@ -7,6 +7,51 @@ import type { DealRow, SharedCardProps } from '../deal-card-types';
 // Force desktop so the grid renders the side-by-side columns + DnD path.
 vi.mock('@/shared/hooks/use-mobile', () => ({ useIsMobile: () => false }));
 
+// The Deal Tracker cards now consume the sales-activity surface. Stub the hook
+// + the two cross-cutting reads the cards use so a card can render without a
+// live Tier-1 provider / auth session / Supabase env in the unit-test env.
+vi.mock('@/features/deals/hooks/use-sales-activities', () => ({
+  useSalesActivities: () => ({
+    salesActivities: [],
+    attorneys: [],
+    prospects: [],
+    isLoading: false,
+    error: null,
+    reload: vi.fn(),
+    createSalesActivity: vi.fn(),
+    updateSalesActivity: vi.fn(),
+    deleteSalesActivity: vi.fn(),
+    resolveAnchors: vi.fn(),
+    setAttorneyProspectStatus: vi.fn(),
+    countSalesActivitiesForTrial: vi.fn(),
+    deleteSalesActivitiesForTrial: vi.fn(),
+  }),
+}));
+vi.mock('@/features/auth/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({ userInfo: null, isLoading: false }),
+}));
+vi.mock('@/app/tier1-provider', () => ({
+  useTier1: () => ({ company: null }),
+}));
+vi.mock('@/shared/db/supabase-client', () => {
+  const queryStub: Record<string, unknown> = {
+    select: () => queryStub,
+    eq: () => queryStub,
+    in: () => queryStub,
+    order: () => queryStub,
+    range: () => Promise.resolve({ data: [], error: null }),
+    update: () => queryStub,
+    insert: () => queryStub,
+    delete: () => queryStub,
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
+    single: () => Promise.resolve({ data: null, error: null }),
+  };
+  return {
+    supabase: { from: () => queryStub },
+    getCurrentSession: () => Promise.resolve(null),
+  };
+});
+
 const STAGES: PipelineStage[] = [
   { id: 's1', name: 'Lead', type: 'sales', revenue_probability: 1, is_active: true, order: 1, company_id: null },
   { id: 's2', name: 'LOE Sent', type: 'sales', revenue_probability: 1, is_active: true, order: 2, company_id: null },
