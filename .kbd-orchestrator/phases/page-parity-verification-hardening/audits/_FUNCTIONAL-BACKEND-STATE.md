@@ -202,3 +202,36 @@ effort; I am stating only observed facts from here.
 NEXT (no claims until proven): get the actual sync-gate/electric console error or
 the onInitialSync resolution state during a clean-client login; determine why
 hydration doesn't complete despite 200 shapes.
+
+## ROOT CAUSE of "Preparing your data" FOUND (2026-05-30) — user_info shape where=company_id='undefined'
+
+Captured verbatim from a clean-client (IndexedDB-cleared) browser probe:
+  shape_codes = {"200":42, "400":2}
+  sample_400  = /v1/shape?table=user_info&offset=-1&where=company_id+%3D+%27undefined%27
+So the `user_info` Electric shape is built with the LITERAL string
+`company_id = 'undefined'`. Electric 400s it → its onInitialSync never fires →
+`waitForInitialSync`'s Promise.all never resolves → SyncGate stays on
+"Preparing your data" forever. 42 other shapes 200 fine; this ONE malformed
+shape hangs the whole gate.
+
+Verified NOT the cause: Electric secret (now 200), auth, RLS, the other shapes.
+Verified the where-builder: sync-config user_info shapeWhere =
+`(companyId) => company_id = ${companyId}`, called in electric-sync.ts:138 as
+`config.shapeWhere('${companyId}')`. So `companyId` is the JS value `undefined`
+at the moment the user_info shape is built — even though sync-gate.tsx:156
+guards `if (!companyId) return` before calling startTenantSync. Only ONE caller
+of startTenantSync exists (grep-verified). So companyId is truthy at the guard
+but undefined when the user_info shapeStreamFactory runs — a
+timing/stale-closure or adapter-invocation-order issue specific to the first
+shape (user_info is first in SYNC_CONFIG).
+
+### Fix needed (client, electric-sync.ts / sync-gate.tsx)
+1. Hard-guard shape construction: if companyId is not a valid UUID at
+   shapeStreamFactory time, do NOT emit `'undefined'` — throw/skip so it's
+   obvious, or (better) ensure the factory closes over the validated companyId.
+2. Make hydration resilient: a single shape's initial-sync failure (400) must
+   not hang the gate forever — waitForInitialSync already has an 8s timeout
+   returning false, but the gate still shows splash; ensure phase advances to
+   'ready'/'syncing' (degrade gracefully, Pattern 4) even if one shape errors.
+3. The deeper fix: find why companyId is undefined for the user_info shape
+   specifically and pass the real value.
