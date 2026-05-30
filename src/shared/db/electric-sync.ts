@@ -41,6 +41,31 @@ const ELECTRIC_URL = import.meta.env.VITE_ELECTRIC_URL;
 const ELECTRIC_SECRET = import.meta.env.VITE_ELECTRIC_SECRET;
 const INITIAL_SYNC_TIMEOUT_MS = 8_000;
 
+/**
+ * Overall wall-clock budget for `startTenantSync`'s blocking tail
+ * (`waitForSubs` + `waitForInitialSync`).
+ *
+ * Root cause of the post-login "Preparing your data…" infinite splash:
+ * `attachShape` does `await db.electric.syncShapeToTable(...)`, whose promise
+ * resolves ONLY when the shape reaches its first up-to-date message. When a
+ * shape never reaches up-to-date — a gateway 400 (e.g. an Electric secret
+ * mismatch), a slow/large shape, or a transient upstream error that drops
+ * Electric into its background-retry loop — that `await` NEVER settles. The
+ * per-shape `subPromise` then never settles, so neither its `.then` (push to
+ * `subs`) nor its `.catch` (resolve the initial-sync promise) runs; `subs`
+ * never fills; `waitForSubs` spins; `waitForInitialSync` is never reached.
+ * `sync-gate.tsx` is left awaiting `startTenantSync` forever → the gate never
+ * reaches `ready` → the splash never clears (Dashboard, Clients, and Trials
+ * all stay on "Preparing your data…").
+ *
+ * Bounding the whole tail on the MAIN thread (where `setTimeout` fires
+ * reliably even while the worker-bound shape promises are pending) guarantees
+ * the gate advances within the budget. Shapes that recover later still land
+ * their rows via Electric's background retry and `useLiveQuery` picks them up
+ * with no extra wiring (Pattern 4 — "through the database").
+ */
+const TENANT_SYNC_BUDGET_MS = 12_000;
+
 if (!ELECTRIC_URL) {
   throw new Error(
     'Missing VITE_ELECTRIC_URL — set it to the local docker-compose Envoy ' +
@@ -236,12 +261,36 @@ export async function startTenantSync(
   // resolve so `subs[]` is populated and `unsubscribe` is wired up.
   // Each factory pushed a promise via the closure pattern; reconcile here.
   // We re-iterate SYNC_CONFIG to compute the count of expected subs.
-  await waitForSubs(subs, SYNC_CONFIG.length);
+  // Bound the blocking tail on a wall-clock budget so a shape that never
+  // reaches up-to-date (HTTP 400, slow/large shape, transient gateway error →
+  // Electric background-retry loop) can't trap the gate on the splash forever.
+  // `waitForSubs` + `waitForInitialSync` resolve normally on a healthy login;
+  // on an unhealthy one this race resolves at the budget and the app renders
+  // from PGlite (Pattern 4). The timer runs on the main thread, where it fires
+  // reliably even while the worker-bound shape promises are still pending.
+  const hydrationTail = (async (): Promise<boolean> => {
+    await waitForSubs(subs, SYNC_CONFIG.length);
+    if (!awaitInitialSync) return false;
+    return waitForInitialSync(initialSyncPromises);
+  })();
 
-  let didInitialHydration = false;
-  if (awaitInitialSync) {
-    didInitialHydration = await waitForInitialSync(initialSyncPromises);
-  }
+  const budget = new Promise<boolean>((resolve) => {
+    globalThis.setTimeout(() => {
+      console.warn(
+        `[electric-sync] tenant sync did not settle within ` +
+          `${TENANT_SYNC_BUDGET_MS}ms (${subs.length}/${SYNC_CONFIG.length} ` +
+          `shapes attached); continuing so the app does not hang on the ` +
+          `splash. Rows will appear as shapes reach up-to-date in the ` +
+          `background (check VITE_ELECTRIC_SECRET / gateway if they do not).`,
+      );
+      resolve(false);
+    }, TENANT_SYNC_BUDGET_MS);
+  });
+
+  const didInitialHydration = await Promise.race([hydrationTail, budget]);
+  // Swallow a late tail rejection so it doesn't surface as an unhandled
+  // rejection once we've stopped awaiting it directly.
+  void hydrationTail.catch(() => {});
 
   return {
     didInitialHydration,
@@ -301,7 +350,14 @@ async function waitForInitialSync(promises: Array<Promise<void>>): Promise<boole
   return Promise.race([complete, timeout]);
 }
 
-/** Poll until `subs` has reached `expected` length. */
+/**
+ * Poll until `subs` has reached `expected` length, bounded by a grace
+ * deadline. Resolves (not throws) at the deadline: the overall
+ * `TENANT_SYNC_BUDGET_MS` race in `startTenantSync` is the real backstop, and
+ * throwing here would reject the hydration tail for no benefit. A shape stuck
+ * past this deadline simply hasn't pushed into `subs` yet; the gate proceeds
+ * and the shape lands its rows in the background if/when it recovers.
+ */
 async function waitForSubs(
   subs: ShapeSubscription[],
   expected: number,
@@ -309,9 +365,11 @@ async function waitForSubs(
   const deadline = Date.now() + 30_000;
   while (subs.length < expected) {
     if (Date.now() > deadline) {
-      throw new Error(
-        `electric-sync: only ${subs.length}/${expected} shapes attached within 30s`,
+      console.warn(
+        `[electric-sync] only ${subs.length}/${expected} shapes attached ` +
+          `within 30s; continuing without the rest.`,
       );
+      return;
     }
     await new Promise((r) => setTimeout(r, 10));
   }
