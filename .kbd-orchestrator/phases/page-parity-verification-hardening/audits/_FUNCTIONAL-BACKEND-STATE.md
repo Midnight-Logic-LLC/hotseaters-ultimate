@@ -78,3 +78,44 @@ isolation intact).
 - Client-side confirmation: drive the DEPLOYED app's real sign-in in a browser
   to confirm Dashboard/Clients/Trials now populate end-to-end (the backend half
   is now proven; this confirms the JWT→PostgREST/Electric→render half).
+
+## ✅ SIGN-IN VERIFIED + #2 BLOCKER FOUND (2026-05-30) — auth-callback bounce race
+
+Drove the REAL deployed sign-in headlessly with todd.white creds (todd's
+auth uid f966bd07). Second-by-second trace:
+
+  t1-2s  /login   session=true  splash="Opening local"
+  t3-12s /login   session=true  splash="Preparing your data"   (SyncGate hydrating)
+  t13s+  /login   session=true  login-page-visible
+  path_trail = /login -> /auth/callback -> /login
+
+CONFIRMED: password sign-in SUCCEEDS and the session PERSISTS (localStorage
+sb-*-auth-token present with access_token the whole time). The backend +
+current_company_id() fix are fine. But the user never reaches /Dashboard — the
+app bounces /login -> /auth/callback -> back to /login.
+
+### Root cause — race in use-auth-callback.ts
+SignInForm navigates to /auth/callback after sign-in (sign-in-form.tsx:46).
+`useAuthCallback`:
+  - effect A (mount): no `?code` -> refreshClaims() (awaits a user_info REST call)
+  - effect B (deps state/isAuthenticated/hasCompany): when state==='done', if
+    !isAuthenticated -> setRedirectTo('/login') [line 73-75]
+`redirectTo` is set ONCE and then <Navigate> commits it irreversibly
+(auth-callback-page.tsx:15). During the async hydration the store's
+`isAuthenticated` is transiently false (refreshClaims in flight / SyncGate
+churn), effect B fires on that transient, latches '/login', and the redirect
+is permanent — even though the session is valid throughout.
+
+### Fix direction (small, well-scoped)
+Make the callback redirect decision robust to the loading race:
+  - Do NOT decide redirect until `isLoading===false` AND the claims refresh has
+    completed (gate effect B on a local "claimsResolved" flag, not just `state`).
+  - Derive `isAuthenticated` for the decision from the actual session presence
+    (the localStorage/supabase session), not a possibly-stale store flag.
+  - Treat a present session with not-yet-resolved company as "keep waiting",
+    never as "-> /login". Only redirect to /login when there is genuinely no
+    session after loading settles.
+
+This is the #2 functional blocker (the signed-in app is unreachable via
+email/password). Backend (#1, current_company_id) is already fixed; this is the
+client-auth-routing half.
