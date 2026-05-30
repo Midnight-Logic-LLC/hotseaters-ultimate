@@ -221,3 +221,20 @@ Note: `Tier1Provider` hardcodes `isError: false`, so the old `/Landing` bounce
 was partly dead code; the real anon signal is `userInfo === null`.
 
 Both fixes deployed via main; live verification pending ArgoCD roll.
+
+## Blast-radius audit of the rem-base fix (2026-05-30) — CLEAN, ship it
+
+A read-only Explore audit checked whether the 14px→16px rem-base change could
+overflow/clip anything app-wide. Verdict: **no genuine risks; the change is
+corrective.**
+- Sidebar width 16rem → 256px (canonical shadcn/bible width); icon rail 3rem →
+  48px (≥44pt — RULE 4 win). App shell uses h-svh/viewport units (unaffected).
+- bottom-tab-bar touch targets are px literals (min-h-[44px]) → unaffected.
+- Dialogs cap with max-w-lg + w-full → no horizontal overflow at 375px.
+- recharts heights are JS numeric px props → unaffected.
+- No rem-fixed-height box wraps rem text → no vertical clip.
+Net: brings sidebar/dialog/icon-rail to the sizes they were designed for at a
+16px base. No code change needed.
+
+Deploy of the rem-base + /Pricing fixes completed (run 26677084391, success);
+ArgoCD roll + live drift re-verification pending (scheduled).
