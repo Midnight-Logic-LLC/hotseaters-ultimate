@@ -219,19 +219,27 @@
   }
 }
 
+/* Do NOT set `font-size` on `html`/`:root` — the bible (HotSeatersMVP/
+   src/index.css) declares no `html { font-size }` and relies on the UA-default
+   16px rem base. Setting it here would drop every rem-based and Tailwind size
+   to 0.875× app-wide. The default text size lives on `body` only (below),
+   matching the bible's body=14px (0.875rem at a 16px rem base). */
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
   font-family: var(--theme-font-body);
-  font-size: var(--theme-text-body);
   line-height: 1.5;
   color: var(--theme-stone-900);
   background: var(--theme-page-bg);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+}
+
+body {
+  font-size: var(--theme-text-body);
 }
 
 /* ─── Bible base layer (HotSeatersMVP/src/index.css lines 99-109) ────────
