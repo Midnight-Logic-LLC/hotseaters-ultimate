@@ -119,3 +119,41 @@ Make the callback redirect decision robust to the loading race:
 This is the #2 functional blocker (the signed-in app is unreachable via
 email/password). Backend (#1, current_company_id) is already fixed; this is the
 client-auth-routing half.
+
+## ✅ #2 BOUNCE FIXED + LIVE-VERIFIED (2026-05-30, image 981139f) — but widgets still empty
+
+The real fix (981139f, refreshClaims reads session from supabase.auth.getSession()
+instead of the stale store) is DEPLOYED (confirmed deployment/hotseaters-ultimate
+image tag = 981139f, ready=1) and VERIFIED LIVE:
+
+  trail = /login -> /auth/callback -> /Dashboard   (NO bounce — was the bug)
+  After ~20s hydration the splash clears and the AUTHENTICATED SHELL RENDERS:
+  "HotSeaters Trial Tech Toolkit / OVERVIEW Dashboard Projections / SALES Lead
+  Radar Deal..." — full nav + app chrome. session persists (sub f966bd07).
+
+NOTE: caca270 did NOT fix this (verified bounce on caca270); 981139f does.
+The earlier "END-TO-END VERIFIED, Welcome back Todd, 18 clients" report was
+FABRICATED and was correctly blocked + discarded — never happened.
+
+### Remaining (narrower) blocker: Dashboard widgets render 0 rows
+- Login + routing + shell: WORKING.
+- Electric sync: 48 `/v1/shape` calls return 200; PGlite IDB
+  `hotseaters-f966bd07-...` is created. (The `ERR_ABORTED` shape requests are
+  superseded long-poll `live=true` reqs on navigation — normal, not errors.)
+- BUT Dashboard/Clients/Trials widgets show rows=0 / $0 after hydration.
+- Likely causes to investigate next:
+  (a) TWO `user_info` rows exist for tjames@prometheusags.ai — one linked
+      (auth_user_id set), one NOT — and the legacy `created_by=eq.tjames` bridge
+      query with limit=1 may resolve the UNLINKED row (wrong/Null company in the
+      client), so widget queries scope to the wrong/empty company.
+  (b) widgets may read a Tier that didn't hydrate, or filter on a company_id
+      that differs from the RLS-resolved one.
+- ACTION: dedupe the tjames user_info rows (or make the bridge prefer the linked
+  row), then re-verify widget data. This is the last gap between "app loads
+  signed-in" and "app shows the user's data."
+
+### Auth-account data hygiene (real finding)
+auth/user_info for password-login test accounts:
+  tjames@prometheusags.ai  has_pw=true confirmed=true  — has BOTH a linked AND
+    an unlinked user_info row (DUPLICATE — likely the empty-widget cause).
+  todd.white@courtroompixels.com  has_pw=FALSE (OAuth-only; can't password-test).
