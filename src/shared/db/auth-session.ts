@@ -197,9 +197,21 @@ export const useAuthSession = create<AuthSessionState>((set, get) => ({
   },
 
   async refreshClaims() {
-    const { user, session } = get();
+    // Read the session AUTHORITATIVELY from the Supabase SDK, not from the
+    // store. After signInWithPassword resolves the SDK has persisted the
+    // session synchronously, but the store's `session`/`user` stay null until
+    // the async `onAuthStateChange` listener fires. signInWithPassword() calls
+    // this immediately, so reading get() here saw user===null and zeroed the
+    // claims → the callback then decided "no session" → bounced to /login.
+    // Resolve from the SDK and write session/user back into the store so the
+    // whole app sees a consistent, populated state right away.
+    const { data } = await supabase.auth.getSession();
+    const session = data.session ?? null;
+    const user = session?.user ?? null;
     if (!user) {
       set({
+        session,
+        user,
         currentUserInfoId: null,
         companyId: null,
         hasCompany: false,
@@ -209,6 +221,8 @@ export const useAuthSession = create<AuthSessionState>((set, get) => ({
     }
     const { currentUserInfoId, companyId } = await fetchCurrentUserInfoClaims(user);
     set({
+      session,
+      user,
       currentUserInfoId,
       companyId,
       hasCompany: companyId !== null,
