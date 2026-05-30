@@ -189,3 +189,35 @@ same source-vs-deployment ground-truth call the owner made for Landing.
 | `/ReferralLanding` (15-17%) | ~16% | re-port/audit |
 | `/TermsOfService`, `/PrivacyPolicy` (7-13%) | 7-13% | policy-content audit (MDX, RULE 7) |
 | `/login`, auth utilities | ≤5% | 🟢 at/near parity |
+
+## RESOLVED root cause of Landing drift (2026-05-30) — global rem-base bug
+
+The ~50.8% desktop / 30.2% mobile Landing drift was NOT a pixel-diff artifact and
+NOT a hero-spacing issue (both earlier guesses were wrong). Root cause, found via
+computed-value diagnostics (RULE 0.4) on the deployed pages:
+
+- The port's `src/index.css` applied `font-size: var(--theme-text-body)` (0.875rem)
+  to a `html, body, #root` GROUP selector. Because `html` was in the group, the
+  **rem base dropped to 14px** (bible uses UA-default 16px). Every rem/Tailwind
+  size then rendered at **0.875×** app-wide. Mobile compounded to **12.25px** body
+  (0.875 × 14) because the `@media` override stacked on the already-shrunk base.
+
+Verified computed (deployed): bible html=16px/body=16px/1rem=16px;
+port html=14px/body=12.25px/1rem=14px. This single bug = the entire 418px
+height delta (3434 vs 3852) and ~50.8% pixel drift.
+
+**Fix (merged to main):** removed `font-size` from the `html,body,#root` group
+selector; added `body { font-size: var(--theme-text-body) }` alone. End state
+matches the bible exactly: html/:root = 16px rem base, body = 14px. App-wide
+type-scale parity restored (not just Landing — Dashboard/all pages benefit).
+
+## RESOLVED `/Pricing` (2026-05-30) — anon redirect relaxed
+
+`/Pricing` (public route, outside AuthGate) copied the bible's in-app auth
+redirect and bounced anonymous visitors to /login. Owner decision: anon must see
+the pricing card. Fix (merged): redirect only fires for an AUTHENTICATED user
+with no company_id (→ /Onboarding); anon falls through to render pricing.
+Note: `Tier1Provider` hardcodes `isError: false`, so the old `/Landing` bounce
+was partly dead code; the real anon signal is `userInfo === null`.
+
+Both fixes deployed via main; live verification pending ArgoCD roll.
