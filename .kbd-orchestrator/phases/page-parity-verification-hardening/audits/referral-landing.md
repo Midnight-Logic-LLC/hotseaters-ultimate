@@ -36,10 +36,14 @@ BIBLE total=2562  PORT total=2741  (port is +179px TALLER)
 - Content/structure/order MATCH (sections 1 & 3 are byte-identical; mobile = 3.9%).
 - The drift is **vertical-offset amplification** from the port hero being **+134px
   taller** than the bible hero. Hero container padding is byte-identical
-  (`px-6 py-16 sm:py-20 lg:py-24`), so the excess is INSIDE the hero — most
-  likely the `--theme-font-display` (Zen Dots) headline rendering taller (font
-  not loading → taller fallback metrics, or wrapping to an extra line) at
-  `text-4xl sm:text-5xl lg:text-6xl`. Secondary +38px in section [2].
+  (`px-6 py-16 sm:py-20 lg:py-24`).
+- **Zen-Dots hypothesis DISPROVEN by live probe:** the headline `<h1>` is
+  IDENTICAL on both — `Zen Dots, 60px/60lh, h1 height=120px` on bible AND port.
+  zenDots loads true on both. The headline is not the cause.
+- **Localized:** with the container padding + headline both identical, the +134px
+  excess lives in the hero's content BELOW the headline (subhead / benefit chips
+  / invite-stat block / CTA group). That sub-block is where the port adds ~134px
+  vs the bible. Secondary +38px in section [2] (real-reason).
 
 ## Overall
 
