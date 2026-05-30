@@ -7,53 +7,41 @@
   "execution_complete": false,
   "reflection_complete": false,
   "change_backend": "openspec",
-  "assessment_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/assessment.md",
-  "plan_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/plan.md",
-  "progress_path": ".kbd-orchestrator/phases/sales-deals-rearchitecture/progress.json",
-  "active_wave": "V11 \u2014 marketing-page re-port (Landing dark-hero redesign)",
-  "phase_summary": "Re-port the port's Lead-based sales surface to the bible's Deals/Opportunities model (bible @ 29ae47e3). KEY: no schema migration needed \u2014 a 'deal' IS a trial at an early pipeline stage; the port trial entity already has pipeline_stage_id + deal_document_id and is synced. 9 changes D01-D09. UI/store re-port, not a data-model build.",
-  "next_step": "Re-port Landing to the current bible (623 LOC, dark navy\u2192cyan gradient hero + text-cyan-300 accent) to resolve the ~79% deployed marketing drift. Then Pricing/Privacy/Terms/Referral per-page audits.",
+  "assessment_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/assessment.md",
+  "plan_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/plan.md",
+  "progress_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/progress.json",
+  "active_wave": "V03 — public/marketing surface audit + VR",
+  "phase_summary": "Prove RULE-0 parity across all ported pages (audit + bible-vs-port VR). Does NOT re-port wholesale, but V03 surfaced real drift that is being remediated as found. 13 changes V01-V13.",
+  "next_step": "Finish V03: /ReferralLanding desktop (24.1%) audit/re-port + /PrivacyPolicy /TermsOfService MDX content audit (RULE 7). Optional: Landing residual spacing pass (24.5% desktop, now a small vertical-offset after the rem-base fix). Then close V03 -> V04.",
   "execution_order": [
-    [
-      "change-D01"
-    ],
-    [
-      "change-D02",
-      "change-D03",
-      "change-D04"
-    ],
-    [
-      "change-D05",
-      "change-D06",
-      "change-D07"
-    ],
-    [
-      "change-D08"
-    ],
-    [
-      "change-D09"
-    ]
+    ["change-V01", "change-V02"],
+    ["change-V03", "change-V04"],
+    ["change-V05", "change-V06", "change-V07", "change-V08", "change-V09", "change-V10"],
+    ["change-V11"],
+    ["change-V12"],
+    ["change-V13"]
   ],
-  "schema_finding": "No deal/opportunity migration required \u2014 deals are trials at early pipeline stages. See phase progress.json schema_finding.",
-  "open_decisions": [
-    "LeadRadar fate (D08): retire vs repurpose (default retire)",
-    "Sales-activity\u2192deal creation rule (replace ensure-lead-for-attorney?)",
-    "Legacy lead-row data migration (likely greenfield)"
-  ],
-  "other_active_phase": {
-    "phase": "page-parity-verification-hardening",
-    "status": "execution in progress (V01,V02 DONE; V03 in progress; Michroma systemic fix shipped)",
-    "note": "Body A parity work. Resume after or alongside the deals re-port. The marketing-page re-ports (V11) overlap with this phase's Landing work \u2014 coordinate."
+  "v03_progress": {
+    "landing_report": "DONE — dark-hero redesign merged + deployed + verified",
+    "rem_base_fix": "DONE — html 14px->16px (was 0.875x app-wide). Landing desktop 50.8%->24.5%, mobile 30.2%->12.8%; ReferralLanding mobile 17.3%->3.9%. Deployed + live-verified.",
+    "pricing_public": "DONE — anon /Pricing now renders pricing (was bouncing to /login). Deployed + live-verified (path=/Pricing, login=false, pricing=true).",
+    "referral_landing": "TODO — desktop 24.1% audit/re-port",
+    "policy_pages": "TODO — /Privacy /Terms 7-13% MDX content audit (RULE 7)",
+    "landing_residual": "OPTIONAL — 24.5% desktop is now a small vertical-offset (type scale fixed); cosmetic spacing pass"
+  },
+  "verified_live_drift_2026_05_30": {
+    "pricing": "~80% but HARNESS ARTIFACT (bible deploy bounces anon /Pricing->Landing; port renders real pricing). Recommend excluding /Pricing from deployment harness.",
+    "landing": "24.5% desktop / 12.8% mobile",
+    "referral_landing": "24.1% desktop / 3.9% mobile",
+    "policy_pages": "7-13%",
+    "auth_utilities": "<=5% (parity)"
   },
   "previous_phases": [
     "dashboard-and-data-architecture-parity (complete, archived 2026-05-25)",
     "dashboard-bible-parity-build (complete, reflected 2026-05-26)",
-    "hotseaters-page-parity-port (complete, reflected 2026-05-29)"
+    "hotseaters-page-parity-port (complete, reflected 2026-05-29)",
+    "sales-deals-rearchitecture (COMPLETE 2026-05-29, 9/9 reflected, deployed)"
   ],
   "bible_baseline": "29ae47e3 (refreshed 2026-05-29; old state tagged pre-parity-reset-2026-05-29)",
-  "phase_note": "sales-deals-rearchitecture COMPLETE (9/9, reflected, deployed). Now resuming page-parity-verification-hardening: V01/V02 done; V03 marketing re-port is the active high-value item (Landing dark-hero redesign = the 79% drift).",
-  "completed_phases": [
-    "sales-deals-rearchitecture (COMPLETE 2026-05-29, 9/9 reflected)"
-  ],
-  "last_updated": "2026-05-29"
+  "last_updated": "2026-05-30"
 }
