@@ -47,15 +47,27 @@ BIBLE total=2562  PORT total=2741  (port is +179px TALLER)
 
 ## Overall
 
-**STATUS:** PASS-WITH-DEFECT — content parity holds; one localized layout defect
-(hero +134px) drives the desktop drift. NOT a re-port; a surgical spacing/font fix.
+**STATUS:** REF-1 FIXED (merged eef2a78). Content parity held throughout; the
+desktop drift was a single Tailwind-v4 syntax bug, now corrected.
 
 ## Defects → remediation
 
-- **REF-1 (hero +134px):** localize why the port hero is taller than the bible
-  (Zen Dots load state? headline wrap? motion initial height?) and close it.
-  Closing REF-1 should drop desktop drift toward the mobile 3.9%.
-- **REF-2 (section[2] +38px):** secondary; assess after REF-1.
+- **REF-1 (hero +134px) — ✅ FIXED + merged (eef2a78), deploying.**
+  ROOT CAUSE: the hero letter-card grid used `md:grid-cols-[auto,1fr]` — Tailwind
+  **v3** comma syntax. The port runs Tailwind **v4**, which requires underscore
+  (`[auto_1fr]`); the comma form compiles to invalid `grid-template-columns:
+  auto,1fr` which the browser silently drops → grid collapses to 1 column →
+  avatar (95px col) blows to full-width 878px and stacks above the message =
+  +134px. Independently confirmed via live child-probe: card 337px→471px, avatar
+  column 95px→878px. Fix = 1 char (`,`→`_`). Mobile unaffected (md: breakpoint).
+  Grep-verified: ONLY instance of this comma-syntax grid bug in src/ (RULE 0.3
+  class-check done — nothing else to sweep).
+- **REF-2 (section[2] +38px):** secondary residual; re-measure after the REF-1
+  deploy rolls — much of it may have been the same collapse bleeding downward.
+
+## Post-fix verification (pending deploy roll)
+Expect desktop drift to drop from 24.1% toward the mobile 3.9% once eef2a78
+deploys. Re-run `pnpm test:bible-parity` after ArgoCD roll to confirm.
 
 ## Accepted deviations
 - Port file is larger (738 vs 525 LOC) due to target-architecture adaptation
