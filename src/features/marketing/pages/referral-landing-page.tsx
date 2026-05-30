@@ -237,7 +237,7 @@ export function ReferralLandingPage() {
               />
             </div>
 
-            <div className="relative grid md:grid-cols-[auto,1fr] gap-8 p-8 md:p-12 items-center">
+            <div className="relative grid md:grid-cols-[auto_1fr] gap-8 p-8 md:p-12 items-center">
               {/* Referrer avatar — big and prominent */}
               <div className="flex flex-col items-center md:items-start">
                 <div className="relative">
