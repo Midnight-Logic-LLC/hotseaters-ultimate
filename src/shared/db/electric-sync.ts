@@ -69,6 +69,47 @@ export interface ShapeSyncHandle {
   unsubscribe: () => Promise<void>;
 }
 
+/**
+ * Matches a canonical (lower- or upper-case) UUID — the shape of `company_id`.
+ */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Pure predicate: is `companyId` a non-empty UUID, safe to interpolate into a
+ * tenant-scoped Electric shape `where` clause?
+ *
+ * Rejects `undefined`, `null`, the empty string, and the literal `"undefined"`
+ * that a coerced JS `undefined` produces — the exact value behind the
+ * production `company_id = 'undefined'` 400 that hung the SyncGate splash.
+ */
+export function isValidCompanyId(
+  companyId: string | null | undefined,
+): companyId is string {
+  return typeof companyId === 'string' && UUID_RE.test(companyId);
+}
+
+/**
+ * Guard tenant-scoped shape construction: `companyId` MUST be a non-empty UUID
+ * before it is interpolated into any Electric shape `where` clause.
+ *
+ * Without this, a JS `undefined` companyId produced the malformed predicate
+ * `company_id = 'undefined'`, which Electric rejects with HTTP 400. That
+ * shape's `onInitialSync` never fired, so `waitForInitialSync()`'s
+ * `Promise.all(...)` never resolved and SyncGate hung forever on "Preparing
+ * your data…". Throwing here surfaces the real cause loudly instead of
+ * emitting a poisoned shape (RULE 5: shapes must be tenant-scoped).
+ */
+function assertValidCompanyId(companyId: string): void {
+  if (!isValidCompanyId(companyId)) {
+    throw new Error(
+      'startTenantSync: refusing to build tenant-scoped Electric shapes — ' +
+        `companyId is not a valid UUID (received ${JSON.stringify(companyId)}). ` +
+        'This usually means the Supabase JWT lacks app_metadata.company_id.',
+    );
+  }
+}
+
 export interface TenantSyncResult extends ShapeSyncHandle {
   /**
    * True when this run performed a full first-time hydration (every shape
@@ -104,11 +145,10 @@ export async function startTenantSync(
       'startTenantSync requires a userId (change-403: per-user PGlite isolation).',
     );
   }
-  if (!companyId) {
-    throw new Error(
-      'startTenantSync requires a companyId — shapes must be tenant-scoped (RULE 5).',
-    );
-  }
+  // Validate the tenant scope BEFORE any shape is built. Rejects null/empty
+  // AND non-UUID values (e.g. the coerced literal "undefined") so the
+  // where-builder below can never emit `company_id = 'undefined'` (RULE 5).
+  assertValidCompanyId(companyId);
 
   const { db } = await openForUser(userId);
 
@@ -149,7 +189,19 @@ export async function startTenantSync(
         });
 
         // Stash subscription bookkeeping by appending once the attach resolves.
-        void subPromise.then((s) => subs.push(s));
+        // On failure (e.g. Electric rejects a shape), still count this shape as
+        // "attached" with a no-op unsubscribe AND resolve its initial-sync
+        // promise. Otherwise `waitForSubs` would stall until its 30s deadline
+        // and a single bad shape would trap the user on the splash. The app
+        // then renders from PGlite (Pattern 4) for the shapes that did land.
+        void subPromise
+          .then((s) => subs.push(s))
+          .catch((err) => {
+
+            console.error(`[electric-sync] shape "${table}" failed to attach`, err);
+            subs.push({ unsubscribe: () => {}, isUpToDate: false });
+            resolveInitial();
+          });
 
         // Return a ShapeStream-shaped stub. We don't drive the entity graph
         // via the adapter's ChangeSet pipeline — data lands in PGlite tables
