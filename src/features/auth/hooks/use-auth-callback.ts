@@ -11,8 +11,12 @@ import {
   exchangeOAuthCode,
   acceptInvitation,
 } from '@/features/auth/stores/auth-store';
+import {
+  decideCallbackRedirect,
+  type CallbackState,
+} from '@/features/auth/business-rules/callback-redirect';
 
-export type CallbackState = 'exchanging' | 'accepting-invite' | 'done' | 'error';
+export type { CallbackState };
 
 export interface UseAuthCallbackResult {
   state: CallbackState;
@@ -21,13 +25,16 @@ export interface UseAuthCallbackResult {
 }
 
 export function useAuthCallback(): UseAuthCallbackResult {
-  const isAuthenticated = useAuthSession((s) => s.isAuthenticated);
   const hasCompany = useAuthSession((s) => s.hasCompany);
   const isLoading = useAuthSession((s) => s.isLoading);
 
   const [state, setState] = useState<CallbackState>('exchanging');
   const [error, setError] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<string | null>(null);
+  // True only after THIS hook's claims refresh / OAuth exchange has actually
+  // resolved. Gates the redirect decision so Effect B cannot latch `/login`
+  // on a transient `isAuthenticated === false` mid-refresh.
+  const [claimsResolved, setClaimsResolved] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +60,7 @@ export function useAuthCallback(): UseAuthCallbackResult {
         }
 
         if (!cancelled) {
+          setClaimsResolved(true);
           setState('done');
         }
       } catch (err) {
@@ -65,23 +73,22 @@ export function useAuthCallback(): UseAuthCallbackResult {
     return () => {
       cancelled = true;
     };
-     
+    // Mount-only: the callback flow runs exactly once on mount.
   }, []);
 
   useEffect(() => {
-    if (state !== 'done' || isLoading) return;
-    if (!isAuthenticated) {
-      // No session at all — OAuth exchange genuinely failed. Send to /login.
-      setRedirectTo('/login');
-      return;
-    }
-    if (!hasCompany) {
-      // Session exists but no user_info row → first-time user. Onboard.
-      setRedirectTo('/onboarding');
-      return;
-    }
-    if (!redirectTo) setRedirectTo('/Dashboard');
-  }, [state, isLoading, isAuthenticated, hasCompany, redirectTo]);
+    // Decide from the ACTUAL session, not the (possibly stale during an
+    // in-flight claims refresh) `isAuthenticated` store flag.
+    const next = decideCallbackRedirect({
+      claimsResolved,
+      state,
+      isLoading,
+      alreadyRedirecting: redirectTo !== null,
+      hasSession: useAuthSession.getState().session !== null,
+      hasCompany,
+    });
+    if (next) setRedirectTo(next);
+  }, [claimsResolved, state, isLoading, hasCompany, redirectTo]);
 
   return { state, error, redirectTo };
 }
