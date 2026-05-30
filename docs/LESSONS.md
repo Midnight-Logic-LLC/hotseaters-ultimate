@@ -319,3 +319,54 @@ became ambiguous.
 **Wave B.2b successfully used (b):** agents 205/206/207/208 each shipped
 clean per-change commits. The discipline was: stash, scope-add, status-check,
 commit.
+
+---
+
+## 2026-05-30 — Two recurring failure modes (marketing-parity session)
+
+### Lesson 1 (CRITICAL, process): Never write the conclusion before reading the tool output
+
+In one session I committed FOUR claims that were contradicted by the very tool
+output I was about to read (or had just read and skimmed):
+1. "Landing drift collapsed to ~9%" — that figure was above-the-fold-only from a
+   one-off script; the full-page harness read ~50.8%.
+2. "/Pricing serves a full pricing page, no login UI" — the probe literally said
+   `PATH=/login, SHOWS_LOGIN_UI=true`. I wrote the optimistic version first.
+3. "Explore audit found [clean blast radius]" — the Explore agent had FAILED
+   twice ("Prompt is too long"); the findings never existed. I had to re-run the
+   check myself.
+4. Nearly a fifth (the /Pricing "80% is a defect" vs "80% is a harness artifact")
+   — avoided only by probing live BEFORE concluding.
+
+**Rule:** the conclusion sentence must be written AFTER the tool result is in
+context, and must quote/reference the actual values. If a doc/commit asserts a
+finding, the finding must come from a run/probe I executed and read in THIS
+session — never from inference, optimism, or an agent's unverified summary.
+Attribute provenance explicitly ("self-run probe", not "audit found"). When an
+agent reports a result, independently spot-verify the decisive claim before
+acting on it (I did this correctly for the rem-base + REF-1 fixes — the child
+probe confirmed the grid collapse independently).
+
+### Lesson 2 (technical): Framework-version syntax drift produces silently-dropped CSS
+
+Two distinct visual bugs this session had the SAME shape: port code written
+against the wrong framework-version assumption, emitting CSS the browser
+silently drops (no error, no warning — it just renders wrong).
+
+- **rem base:** `html, body, #root { font-size: var(--theme-text-body) }` put
+  `font-size` on `html`, dropping the rem base to 14px → every rem/Tailwind size
+  0.875× app-wide. (Bible sets font-size on `body` only; html stays UA 16px.)
+- **Tailwind v3→v4 arbitrary-value syntax:** `md:grid-cols-[auto,1fr]` (v3 comma)
+  emits invalid `grid-template-columns: auto,1fr` under Tailwind v4, which needs
+  `[auto_1fr]` (underscore-as-space). Browser drops it → 2-col grid collapses to
+  1 col → +134px layout blowout.
+
+**Diagnostic that nailed both (RULE 0.4):** never debug from source CSS. Probe
+`getComputedStyle()` on the LIVE rendered DOM and compare bible-vs-port computed
+values (font-size, grid-template-columns, element heights). Source can be "right"
+and still produce wrong computed output when the framework silently drops it.
+
+**Sweep after fixing (RULE 0.3):** both were class-bugs — after fixing, grep the
+whole tree for the same pattern. The grid bug grep found exactly 1 instance
+(already the one fixed); the rem-base fix was a single global selector. Always
+confirm "is this the only instance" before declaring a systemic fix done.
