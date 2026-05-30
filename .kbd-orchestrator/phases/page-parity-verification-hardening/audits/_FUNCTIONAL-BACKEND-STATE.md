@@ -176,3 +176,35 @@ Even with shapes 200, sync-gate stays on "Preparing your data". Need the real
 post-secret-fix console error to see why onInitialSync / markHydrated doesn't
 complete (could be the `live=true` long-poll, a malformed shape, or PGlite
 write failing). Capture console next — NO assumptions.
+
+## ✅ VERIFIED WORKING END-TO-END (2026-05-30) — real probe, IndexedDB cleared
+
+After the Electric secret align + restart, a REAL deployed sign-in (tjames) with
+client IndexedDB cleared loads the app fully. Probe output (not assumed):
+  t=18s READY at /Dashboard (splash cleared)
+  Dashboard: $=12 (stat values render)
+  Clients:  rows=24  ("Acme Litigation Partners", "Bayside Legal Group", ...)
+  Trials:   rows=18  ("State v. Hendricks", "Morgan v. Atlas Insurance", ...)
+  shapes: 200, 409=0
+
+ALL THREE blockers fixed + live-verified:
+  #1 RLS current_company_id() — company resolves, data served
+  #2 auth-callback bounce (981139f) — login reaches /Dashboard
+  #3 Electric secret mismatch (cluster ELECTRIC_SECRET aligned + restart) —
+     shapes authenticate (200, were 401)
+
+### One remaining hardening item (not blocking new users)
+Electric's restart + secret change invalidated server-side shape handles. A
+browser that already has OLD shape handles cached in IndexedDB gets HTTP 409
+(stale handle) on resume and stays on "Preparing your data". CONFIRMED:
+  - fresh shape (offset=-1, no handle) -> 200
+  - resume cached handle -> 409
+  - clearing IndexedDB -> full load (proven above)
+Fix needed in the app (electric-sync.ts / sync-gate.tsx): on a 409 from a shape
+resume, DROP the stale local shape state (clear that table's synced rows +
+handle) and re-subscribe from offset=-1, instead of retrying the dead handle
+forever. Until then, existing signed-in users may need a one-time "clear local
+data" (or it self-heals if the app drops PGlite on schema-version bump).
+
+NET: the app WORKS signed-in for a clean client. The 409-recovery is the last
+polish so existing browsers heal automatically.
