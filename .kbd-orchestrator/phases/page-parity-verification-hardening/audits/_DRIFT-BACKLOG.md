@@ -290,3 +290,30 @@ bible-Landing will always read ~80% and is not actionable.
 
 The rem-base fix was the single highest-leverage win: it improved Landing,
 ReferralLanding-mobile, AND every authenticated page's type scale at once.
+
+## REF-1 VERIFIED LIVE (2026-05-30) — ReferralLanding desktop 24.1% -> 4.4%
+
+After the Tailwind-v4 grid-syntax fix (md:grid-cols-[auto,1fr] -> [auto_1fr])
+deployed + rolled, fresh bible-parity confirms ReferralLanding desktop dropped
+24.1% -> 4.4% (mobile 3.9%). Both under the <5% gate. REF-2 secondary +38px
+absorbed by the same fix. ReferralLanding = PASS.
+
+### Current marketing-surface drift snapshot (post all fixes, live)
+| Surface | desktop | mobile | status |
+|---------|--------:|-------:|--------|
+| /ReferralLanding | 4.4% | 3.9% | 🟢 PASS |
+| /login | 4.9% | 11.5% | desktop PASS; mobile minor |
+| /TermsOfService | 7.5% | 12.5% | MDX content audit (RULE 7) |
+| /PrivacyPolicy | 8.5% | 12.0% | MDX content audit (RULE 7) |
+| / + /Landing | 24.5% | 12.8% | residual offset post rem-base (small) |
+| /Pricing | 57.9% | 58.2% | HARNESS ARTIFACT (bible bounces anon->Landing; port renders pricing) |
+
+Note: /Pricing dropped 80%->58% as a side-effect of the rem-base fix shrinking
+the diff area, but it remains a harness artifact (comparing port-pricing vs
+bible-Landing), not a real defect — see the /Pricing section above.
+
+### Remaining REAL marketing drift (next)
+1. policy pages (/Privacy, /Terms) 7-13% — MDX content audit, RULE 7.
+2. / + /Landing 24.5% desktop — residual vertical offset after rem-base fix
+   (type scale correct; small accumulated spacing delta). Lower priority —
+   page is content-correct.

@@ -65,9 +65,15 @@ desktop drift was a single Tailwind-v4 syntax bug, now corrected.
 - **REF-2 (section[2] +38px):** secondary residual; re-measure after the REF-1
   deploy rolls — much of it may have been the same collapse bleeding downward.
 
-## Post-fix verification (pending deploy roll)
-Expect desktop drift to drop from 24.1% toward the mobile 3.9% once eef2a78
-deploys. Re-run `pnpm test:bible-parity` after ArgoCD roll to confirm.
+## Post-fix verification — CONFIRMED LIVE (2026-05-30)
+
+REF-1 deploy rolled; fresh `bible-parity` run (artifacts <1min old):
+**ReferralLanding desktop 24.1% → 4.4%** (mobile 3.9%). Both now UNDER the <5%
+parity gate. The one-char Tailwind-v4 grid fix closed the entire +134px hero
+delta exactly as diagnosed. Gate 7 (VR ≤5%) now PASS at both viewports.
+
+**ReferralLanding STATUS: PASS** (9/9 gates). REF-2 (the secondary section[2]
++38px) absorbed by the same fix — no separate work needed.
 
 ## Accepted deviations
 - Port file is larger (738 vs 525 LOC) due to target-architecture adaptation
