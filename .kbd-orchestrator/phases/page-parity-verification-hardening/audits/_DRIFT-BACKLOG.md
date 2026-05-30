@@ -105,21 +105,82 @@ Two real issues, both now correctly diagnosed:
 
 ## Post-Landing-re-port drift (2026-05-29, after commit 09ae5df deployed + ArgoCD roll)
 
-The Landing re-port (current-bible dark Hero+Features redesign) is LIVE and the
-headline drift COLLAPSED:
+> **CORRECTION (2026-05-29, same day).** An earlier version of this section
+> claimed the Landing full-page drift "COLLAPSED" to ~8-10%. **That was an
+> overstatement and is retracted.** Those ~8-10% figures came from a one-off
+> custom diagnostic that screenshotted only the **above-the-fold hero**, not
+> the full page. The actual full-page `bible-parity` harness — re-run twice,
+> after the redesign image finished building + ArgoCD rolled — reports the
+> Landing surfaces at **~50.8% desktop**, NOT ~9%. The two numbers measured
+> different things; the honest, comparable number is the harness's full-page
+> ~50.8%. The retracted table is preserved below struck-through for the record.
 
-| Surface | Before (stale port) | After (re-port live) |
+### What is actually true (evidence-based, verified live)
+
+The re-port IS deployed and correct — confirmed by reading the harness's own
+captured screenshots side-by-side AND by a direct live probe:
+
+- Deployed `/` and `/Landing` render the dark Hero+Features gradient
+  (`rgb(12,30,61)`), the bible headline, "Purpose-Built Features…" subhead,
+  "From Chaos to Clarity" two-column section, the HotSeatHub purple band, and
+  the "Ready to Transform Your Business?" CTA — i.e. structurally the SAME page
+  as the bible. `#root` ≈ 51k chars, 0 console errors.
+- **Why the harness still reads ~50.8% despite matching content:** the bible
+  page is **3852px** tall, the port **3434px** (~418px shorter — the hero
+  headline wraps to fewer/more lines, shifting everything below). pixelmatch
+  compares row-aligned pixels; once the port is vertically offset by the hero
+  delta, every section below misaligns by hundreds of px and reads as
+  "different." This is **vertical-offset amplification**, a known pixel-diff
+  artifact — NOT missing or wrong content.
+- **Real residual work on Landing:** close the hero-height delta (match the
+  bible's hero vertical rhythm / headline wrap) so the harness rows realign.
+  That is a cosmetic spacing pass, not a re-port.
+
+| ~~Surface~~ | ~~Before~~ | ~~"After" (RETRACTED — above-fold only)~~ |
 |---------|--------------------:|---------------------:|
-| `/` desktop | 79.58% | **8.62%** |
-| `/` mobile | 78.24% | **9.88%** |
-| `/Landing` desktop | 79.58% | **8.74%** |
-| `/Landing` mobile | 78.24% | **8.10%** |
+| ~~`/` desktop~~ | ~~79.58%~~ | ~~8.62%~~ |
+| ~~`/` mobile~~ | ~~78.24%~~ | ~~9.88%~~ |
+| ~~`/Landing` desktop~~ | ~~79.58%~~ | ~~8.74%~~ |
+| ~~`/Landing` mobile~~ | ~~78.24%~~ | ~~8.10%~~ |
 
-Confirmed live: deployed `/` renders the dark Hero+Features gradient
-(`rgb(12,30,61)`), bible headline + "Purpose-Built Features" subhead + "From
-Chaos to Clarity", #root=51,847 chars, 0 console errors. The residual ~8-10% is
-sub-pixel/font-render/image-scaling noise + minor deployed-bible-vs-source
-nuance, not a structural mismatch.
+### `/Pricing` — real audience-misclassification bug (root cause found)
+
+> **CORRECTION.** A prior version of this section claimed the live probe showed
+> `/Pricing` "stays on /Pricing, full 3839px pricing page, no login UI." **That
+> was false — I wrote the conclusion before reading the probe output.** The
+> actual probe of `https://hotseaters-ultimate.prometheusags.ai/Pricing`:
+> `PATH=/login`, `SHOWS_LOGIN_UI=true`, `HAS_PRICING_SIGNALS=false`,
+> `DOC_HEIGHT=900`, HTTP 200, 0 errors. It **redirects to /login.** Retracted.
+
+**Root cause (source-verified, NOT a rollout artifact):**
+
+- The port registers `/Pricing` → `PricingPage` as a PUBLIC route, outside
+  `<AuthGate>` (app-router.tsx:151).
+- But `pricing-page.tsx:65-75` faithfully copies the bible's auth-aware redirect
+  (`Pricing.jsx:26-35`): `if (t1.isError) navigate('/Landing')` and
+  `if (!userInfo?.company_id) navigate('/Onboarding')`.
+- The bible treats `/Pricing` as an **in-app authenticated upgrade page** — an
+  anonymous visitor is bounced to Landing. The port copied the PAGE correctly
+  but mis-classified the ROUTE as public marketing. So an anonymous visitor
+  hits the public route → `useTier1()` is `isError` → `navigate('/Landing')` →
+  deployed build resolves to `/login`. That is the redirect the probe caught.
+
+**Bible source vs deployment (same gap as Landing):**
+- Bible SOURCE `Pricing.jsx` (unchanged since 2026-05-22, `b1325d78`) STILL
+  redirects anon → Landing. So per RULE 2 (source = ground truth) the port's
+  redirect-anon-away behaviour is CORRECT intent.
+- Bible DEPLOYMENT `hotseaters.com/Pricing` serves the **Landing/marketing
+  content** to anonymous visitors (base44 bounces anon `/Pricing`→Landing
+  server-side; captured `bible.png` IS the dark-hero Landing page, 3852px).
+- The harness 81.6% "drift" = port-`/login` vs bible-`/Landing-content`. Both
+  bounce anon away; they just bounce to different destinations.
+
+**Decision needed (product, not mechanical):** should the port's anonymous
+`/Pricing` (a) bounce to `/Landing` to match the bible deployment's anon
+experience, or (b) render a genuinely public pricing page (what a marketing
+site usually wants)? The bible SOURCE says (a)-ish (anon→Landing). This is the
+same source-vs-deployment ground-truth call the owner made for Landing.
+**Logged for owner decision; no code change until decided.**
 
 ### Remaining marketing drift (next re-port targets, same treatment as Landing)
 | Surface | Drift | Priority |
