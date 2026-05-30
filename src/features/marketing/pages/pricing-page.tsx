@@ -2,8 +2,13 @@
  * PricingPage — port of HotSeatersMVP/src/pages/Pricing.jsx.
  *
  * Bible facts:
- *   - Auth-aware: spinner while loading, redirect to /Landing on error,
- *     redirect to /Onboarding when no company_id.
+ *   - Public pricing page: anonymous/unauthenticated visitors SEE the
+ *     pricing card (they are NOT redirected). This route is registered as
+ *     a public marketing route (outside <AuthGate>), so the bible's
+ *     in-app auth bounce is intentionally relaxed here.
+ *   - Spinner only while auth state is genuinely loading.
+ *   - Onboarding redirect applies ONLY to an AUTHENTICATED user with no
+ *     company_id (the "finish onboarding before you can subscribe" case).
  *   - Monthly/Yearly billing toggle with "Save 20%" badge.
  *   - Prices: MONTHLY=$45/user/month, YEARLY=$36/user/month.
  *   - Single "HotSeaters" plan card with 9 features.
@@ -62,17 +67,17 @@ export function PricingPage() {
   const navigate = useNavigate();
   const t1 = useTier1();
 
-  // Auth-aware redirect — mirrors bible lines 26-35.
+  // Public pricing page. Anonymous/unauthenticated visitors fall through
+  // and see the pricing card — they are NOT redirected (this route lives
+  // outside <AuthGate>). Only an AUTHENTICATED user (t1.userInfo present)
+  // who hasn't completed onboarding (no company_id) is sent to /Onboarding,
+  // matching the in-app "finish onboarding before you can subscribe" rule.
   useEffect(() => {
     if (t1.isLoading) return;
-    if (t1.isError) {
-      navigate('/Landing');
-      return;
-    }
-    if (!t1.userInfo || !t1.userInfo.company_id) {
+    if (t1.userInfo && !t1.userInfo.company_id) {
       navigate('/Onboarding');
     }
-  }, [t1.isLoading, t1.isError, t1.userInfo, navigate]);
+  }, [t1.isLoading, t1.userInfo, navigate]);
 
   const handleGetStarted = async () => {
     setIsCheckingOut(true);
