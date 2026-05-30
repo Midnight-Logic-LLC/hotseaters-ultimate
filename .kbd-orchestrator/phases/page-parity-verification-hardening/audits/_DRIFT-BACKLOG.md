@@ -250,3 +250,43 @@ these components were designed for at a 16px base). No code change needed.
 Deploys of the rem-base + /Pricing fixes completed (runs 26677069457 +
 26677084391, both success). ArgoCD roll + live full-page drift re-verification
 is pending (a scheduled wakeup will re-run bible-parity once the roll settles).
+
+## VERIFIED post-fix drift (2026-05-30, both deploys rolled) — measured live
+
+Fresh full-page bible-parity run AFTER the rem-base + /Pricing deploys rolled
+(artifacts <4min old). Honest, comparable, full-page numbers:
+
+| Surface | Pre-fix | Post-fix (live) | Note |
+|---------|--------:|----------------:|------|
+| `/` + `/Landing` desktop | 50.8% | **24.5%** | rem-base fix ~halved it |
+| `/` + `/Landing` mobile | 30.2% | **12.8%** | " |
+| `/ReferralLanding` mobile | 17.3% | **3.9%** | collapsed (inherited global fix) |
+| `/ReferralLanding` desktop | 17.2% | 24.1% | now type-correct; residual layout |
+| `/PrivacyPolicy` desktop | 8.4% | 8.5% | unchanged (policy content) |
+| `/TermsOfService` desktop | 7.3% | 7.5% | unchanged |
+| `/login` desktop | 4.9% | 4.9% | 🟢 parity |
+| `/Pricing` desktop/mobile | 80% | **80% (ARTIFACT)** | see below |
+
+### `/Pricing` 80% is a harness artifact, NOT a defect — VERIFIED LIVE
+
+Direct probe of deployed `https://hotseaters-ultimate.prometheusags.ai/Pricing`:
+`HTTP=200, path=/Pricing (no redirect), html=16px, login=false, pricing=true,
+docH=1118, 0 errors`. The /Pricing fix IS live — anon visitors now SEE the
+pricing card. The 80% harness number is because the bible DEPLOYMENT
+(`hotseaters.com/Pricing`) bounces anon → its full 3852px Landing page
+server-side, so the harness diffs the port's short (1118px) pricing page against
+the bible's Landing page — two intentionally-different pages. The port is now
+MORE correct than the bible deployment here (renders a real pricing page vs a
+redirect). Recommend: exclude /Pricing from the bible-vs-deployment harness (or
+point it at an authenticated bible pricing capture) — comparing port-pricing vs
+bible-Landing will always read ~80% and is not actionable.
+
+### Remaining REAL drift (next, in priority order)
+1. `/` + `/Landing` desktop 24.5% / mobile 12.8% — residual after rem fix. Type
+   scale now correct; remaining is a smaller secondary layout delta (needs a
+   focused diff-image read to localize).
+2. `/ReferralLanding` desktop 24.1% — re-port/audit vs current bible.
+3. policy pages 7-13% — MDX content audit (RULE 7).
+
+The rem-base fix was the single highest-leverage win: it improved Landing,
+ReferralLanding-mobile, AND every authenticated page's type scale at once.
