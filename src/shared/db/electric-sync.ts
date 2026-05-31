@@ -159,11 +159,21 @@ interface ShapeSubscription {
  * @param awaitInitialSync when true (first login), await every shape's first
  *   full bulk-load before resolving so the caller can show "preparing your
  *   data" and then stamp `_sync_meta`.
+ * @param onHydrated called EXACTLY ONCE when the genuine initial hydration
+ *   completes (every Tier-A shape reached up-to-date). This fires even when it
+ *   happens AFTER `TENANT_SYNC_BUDGET_MS` — i.e. after the budget already
+ *   unblocked the UI by resolving the return value with `didInitialHydration:
+ *   false`. The caller wires this to `markHydrated` so a slow-but-successful
+ *   first login (observed 12–20s) still stamps `_sync_meta.hydrated_at` and the
+ *   NEXT login resumes incrementally instead of re-hydrating everything. Only
+ *   invoked on a first-login run (`awaitInitialSync === true`); never on a
+ *   resume run.
  */
 export async function startTenantSync(
   userId: string,
   companyId: string,
   awaitInitialSync: boolean,
+  onHydrated?: () => void | Promise<void>,
 ): Promise<TenantSyncResult> {
   if (!userId) {
     throw new Error(
@@ -274,8 +284,11 @@ export async function startTenantSync(
     return waitForInitialSync(initialSyncPromises);
   })();
 
-  const budget = new Promise<boolean>((resolve) => {
-    globalThis.setTimeout(() => {
+  const didInitialHydration = await raceHydrationAgainstBudget({
+    hydrationTail,
+    budgetMs: TENANT_SYNC_BUDGET_MS,
+    onHydrated,
+    onBudgetExpired: () => {
       console.warn(
         `[electric-sync] tenant sync did not settle within ` +
           `${TENANT_SYNC_BUDGET_MS}ms (${subs.length}/${SYNC_CONFIG.length} ` +
@@ -283,14 +296,8 @@ export async function startTenantSync(
           `splash. Rows will appear as shapes reach up-to-date in the ` +
           `background (check VITE_ELECTRIC_SECRET / gateway if they do not).`,
       );
-      resolve(false);
-    }, TENANT_SYNC_BUDGET_MS);
+    },
   });
-
-  const didInitialHydration = await Promise.race([hydrationTail, budget]);
-  // Swallow a late tail rejection so it doesn't surface as an unhandled
-  // rejection once we've stopped awaiting it directly.
-  void hydrationTail.catch(() => {});
 
   return {
     didInitialHydration,
@@ -300,6 +307,57 @@ export async function startTenantSync(
       }
     },
   };
+}
+
+/**
+ * Race a hydration tail against a wall-clock budget, decoupling "unblock the
+ * UI" from "record that hydration finished".
+ *
+ * This is the fix for the re-hydrate-on-every-login regression. The returned
+ * promise resolves as soon as EITHER the tail settles OR the budget expires —
+ * whichever is first — so the caller (sync-gate) can clear the splash within
+ * the budget even when first-login hydration of all Tier-A shapes takes longer
+ * than `budgetMs` (observed 12–20s). The return value is the tail's boolean if
+ * it won, or `false` if the budget won.
+ *
+ * Critically, `onHydrated` is wired to the tail INDEPENDENTLY of the race: it
+ * fires exactly once if and when the tail resolves `true`, EVEN IF that happens
+ * after the budget already resolved the returned promise `false`. That late
+ * call is what lets a slow-but-successful first login still stamp
+ * `_sync_meta.hydrated_at`, so the NEXT login resumes incrementally instead of
+ * re-hydrating everything. A resume run's tail resolves `false`, so
+ * `onHydrated` does not fire then.
+ *
+ * Pure + dependency-injected (timer/callbacks) so it is unit-testable with fake
+ * timers and without PGlite or Electric.
+ */
+export function raceHydrationAgainstBudget(opts: {
+  hydrationTail: Promise<boolean>;
+  budgetMs: number;
+  // Explicit `| undefined` (not just `?`) for exactOptionalPropertyTypes: the
+  // caller forwards `startTenantSync`'s optional `onHydrated`, which is
+  // `(() => …) | undefined`, into this field.
+  onHydrated?: (() => void | Promise<void>) | undefined;
+  onBudgetExpired?: (() => void) | undefined;
+}): Promise<boolean> {
+  const { hydrationTail, budgetMs, onHydrated, onBudgetExpired } = opts;
+
+  // Fire onHydrated when the GENUINE tail resolves true — independent of the
+  // race below, so it still runs after a budget timeout. Swallow late
+  // rejections (tail or onHydrated) so they don't surface as unhandled once we
+  // stop awaiting the tail directly.
+  void hydrationTail
+    .then((done) => (done ? onHydrated?.() : undefined))
+    .catch(() => {});
+
+  const budget = new Promise<boolean>((resolve) => {
+    globalThis.setTimeout(() => {
+      onBudgetExpired?.();
+      resolve(false);
+    }, budgetMs);
+  });
+
+  return Promise.race([hydrationTail, budget]);
 }
 
 interface AttachShapeOptions {

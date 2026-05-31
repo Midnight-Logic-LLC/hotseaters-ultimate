@@ -220,13 +220,35 @@ export function SyncGate({ children }: PropsWithChildren) {
           db: bootRes.db,
         });
 
-        const tenantSync = await startTenantSync(userId, companyId, isFirstLogin);
+        // Stamp `_sync_meta.hydrated_at` exactly once per boot when the genuine
+        // initial hydration completes. Two callers race to do this:
+        //   1. The synchronous `didInitialHydration` path below — the healthy,
+        //      fast case where hydration finishes within TENANT_SYNC_BUDGET_MS.
+        //   2. The `onHydrated` callback — the slow case where hydration
+        //      finishes AFTER the budget already unblocked the UI.
+        // A `let` guard makes the stamp idempotent so a slow login that ALSO
+        // happens to satisfy `didInitialHydration` (boundary timing) doesn't
+        // double-stamp. Stamping is what lets the NEXT login resume
+        // incrementally instead of re-hydrating everything (the regression).
+        let didStampHydrated = false;
+        const stampHydratedOnce = async (): Promise<void> => {
+          if (didStampHydrated) return;
+          didStampHydrated = true;
+          await markHydrated(userId, companyId);
+        };
+
+        const tenantSync = await startTenantSync(
+          userId,
+          companyId,
+          isFirstLogin,
+          stampHydratedOnce,
+        );
         if (cancelled) {
           await tenantSync.unsubscribe();
           return;
         }
         if (tenantSync.didInitialHydration) {
-          await markHydrated(userId, companyId);
+          await stampHydratedOnce();
         }
 
         // ── Step 3: write-sync drain ────────────────────────────────────────
