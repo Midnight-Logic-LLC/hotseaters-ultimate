@@ -102,6 +102,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The entity-mgmt workspace package ships its types from dist/ (gitignored
+      # in its repo, no `prepare` script), so a fresh `pnpm install` leaves no
+      # dist/. Without it `tsc` reports TS2307 (cannot find module) for every
+      # import and the whole noImplicitAny cascade fails. Build it explicitly.
+      - name: Build entity-mgmt workspace package
+        run: pnpm --filter @prometheus-ags/prometheus-entity-management build
+
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium webkit
