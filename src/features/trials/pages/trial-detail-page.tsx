@@ -265,7 +265,7 @@ export function TrialDetailPage() {
             className="p-3"
           >
             <div className="text-xs uppercase" style={{ color: 'var(--theme-stone-500)' }}>Est. Value</div>
-            <div className="text-lg font-semibold text-green-600">
+            <div className="text-lg font-semibold text-green-600" data-testid="services-total">
               {fmtMoney(trial.estimated_value ?? servicesTotal)}
             </div>
           </Card>

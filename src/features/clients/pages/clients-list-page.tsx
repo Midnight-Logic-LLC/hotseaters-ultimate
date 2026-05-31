@@ -217,6 +217,7 @@ export function ClientsListPage() {
       </div>
       <div
         ref={parentRef}
+        data-testid="clients-virtualizer"
         className="h-[60vh] overflow-auto rounded-lg border border-stone-200 bg-white"
       >
         <table className="w-full text-sm">
@@ -246,6 +247,7 @@ export function ClientsListPage() {
               return (
                 <tr
                   key={row.id}
+                  data-testid="client-row"
                   onClick={() => navigate(`/Clients/${row.original.id}`)}
                   className="cursor-pointer border-t border-stone-100 hover:bg-stone-50"
                   style={{
