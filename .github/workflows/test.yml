@@ -63,6 +63,15 @@ jobs:
             submodule update --init --force --depth=1 \
             packages/prometheus-entity-management
 
+      # actions/checkout creates the target `path` with a non-recursive mkdir,
+      # so the parent must exist (fresh runner → ENOENT) and the path itself
+      # must NOT pre-exist as a populated dir (reused runner → "File exists").
+      # Reset it idempotently to satisfy both cases.
+      - name: Prepare latest-data directory
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/latest-data"
+          mkdir -p "${GITHUB_WORKSPACE}/latest-data"
+
       - name: Checkout latest-data (migrations only)
         uses: actions/checkout@v4
         with:
