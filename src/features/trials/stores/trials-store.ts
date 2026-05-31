@@ -10,7 +10,7 @@
  *
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
-import { getLocalDB } from '@/shared/db/pglite-client';
+import { getCurrentLocalDB } from '@/shared/db/pglite-client';
 import type {
   Trial,
   TrialService,
@@ -33,7 +33,7 @@ async function selectAll<T>(
   where: Record<string, string | null> | undefined,
   orderBy: string | null,
 ): Promise<T[]> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const clauses: string[] = [];
   const params: unknown[] = [];
   if (where) {
@@ -54,7 +54,7 @@ async function selectAll<T>(
 }
 
 async function selectById<T>(table: string, id: string): Promise<T | null> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const { rows } = await db.query<Row>(
     `SELECT * FROM ${quoteIdent(table)} WHERE id = $1 LIMIT 1`,
     [id],
@@ -66,7 +66,7 @@ async function insertRow(
   table: string,
   data: Record<string, unknown>,
 ): Promise<Row> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const cols = Object.keys(data);
   const vals = Object.values(data);
   const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
@@ -81,7 +81,7 @@ async function updateRow(
   id: string,
   patch: Record<string, unknown>,
 ): Promise<Row> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const entries = Object.entries(patch).filter(([k]) => k !== 'id');
   if (entries.length === 0) {
     const row = await selectById<Row>(table, id);
@@ -97,7 +97,7 @@ async function updateRow(
 }
 
 async function deleteRow(table: string, id: string): Promise<void> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   await db.query(`DELETE FROM ${quoteIdent(table)} WHERE id = $1`, [id]);
 }
 

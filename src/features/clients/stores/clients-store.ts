@@ -13,7 +13,7 @@
  * `client_service_override` is not synced in v0.1 (see entities.ts).
  */
 
-import { getLocalDB } from '@/shared/db/pglite-client';
+import { getCurrentLocalDB } from '@/shared/db/pglite-client';
 import { supabase } from '@/shared/db/supabase-client';
 
 // ── Types mirroring the PGlite view columns ────────────────────────────────
@@ -69,7 +69,7 @@ export interface ClientServiceOverrideRow {
 // ── Reads ──────────────────────────────────────────────────────────────────
 
 export async function loadClients(companyId: string): Promise<ClientRow[]> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const { rows } = await db.query<ClientRow>(
     `SELECT * FROM client
      WHERE company_id = $1
@@ -80,7 +80,7 @@ export async function loadClients(companyId: string): Promise<ClientRow[]> {
 }
 
 export async function loadClient(id: string): Promise<ClientRow | null> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const { rows } = await db.query<ClientRow>(
     `SELECT * FROM client WHERE id = $1 LIMIT 1`,
     [id],
@@ -92,7 +92,7 @@ export async function loadAddresses(
   companyId: string,
   clientId?: string,
 ): Promise<ClientAddressRow[]> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const sql = clientId
     ? `SELECT * FROM client_address WHERE company_id = $1 AND client_id = $2 ORDER BY is_primary DESC NULLS LAST, label ASC`
     : `SELECT * FROM client_address WHERE company_id = $1 ORDER BY is_primary DESC NULLS LAST, label ASC`;
@@ -118,7 +118,7 @@ export interface CreateClientInput {
 }
 
 export async function createClient(input: CreateClientInput): Promise<string> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const now = new Date().toISOString();
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO client
@@ -152,7 +152,7 @@ export async function updateClient(
   id: string,
   patch: Partial<CreateClientInput>,
 ): Promise<void> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const now = new Date().toISOString();
   // Pull the current row, splat in the patch, write the merged row back
   // through the view so the INSTEAD-OF trigger receives a complete tuple.
@@ -193,7 +193,7 @@ export async function updateClient(
 }
 
 export async function deleteClient(id: string): Promise<void> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   await db.query(`DELETE FROM client WHERE id = $1`, [id]);
 }
 
@@ -211,7 +211,7 @@ export interface CreateAddressInput {
 }
 
 export async function createAddress(input: CreateAddressInput): Promise<string> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const now = new Date().toISOString();
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO client_address
@@ -241,7 +241,7 @@ export async function updateAddress(
   id: string,
   patch: Partial<CreateAddressInput>,
 ): Promise<void> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const now = new Date().toISOString();
   const { rows: existing } = await db.query<ClientAddressRow>(
     `SELECT * FROM client_address WHERE id = $1`,
@@ -276,7 +276,7 @@ export async function updateAddress(
 }
 
 export async function deleteAddress(id: string): Promise<void> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   await db.query(`DELETE FROM client_address WHERE id = $1`, [id]);
 }
 
@@ -292,7 +292,7 @@ export interface ClientTypeMetadataRow {
 export async function loadClientTypes(
   companyId: string,
 ): Promise<ClientTypeMetadataRow[]> {
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const { rows } = await db.query<ClientTypeMetadataRow>(
     `SELECT em.id, em.name, em.multiplier, em.company_id
        FROM entity_metadata em
@@ -309,7 +309,7 @@ export async function loadClientTiers(
   companyId: string,
 ): Promise<ClientTypeMetadataRow[]> {
   // Tiers share the metadata_type/entity_metadata pattern with a different scope.
-  const db = await getLocalDB();
+  const db = await getCurrentLocalDB();
   const { rows } = await db.query<ClientTypeMetadataRow>(
     `SELECT em.id, em.name, em.multiplier, em.company_id
        FROM entity_metadata em

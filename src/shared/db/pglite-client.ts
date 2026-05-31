@@ -189,6 +189,31 @@ export function getLocalDB(userId?: string): Promise<LocalDB> {
 }
 
 /**
+ * Resolve the PGlite handle for the *currently signed-in* user.
+ *
+ * Feature stores (clients, trials, …) call this so they don't have to thread
+ * the auth UUID through every hook → store function. It reads the live auth
+ * UUID from the `useAuthSession` store (the single auth surface in `shared/db`)
+ * and delegates to the per-user `openForUser(userId)` cache — so it returns the
+ * exact same instance the sync gate already booted, never a second one. This is
+ * NOT a global singleton (change-403): the instance is still keyed per-user;
+ * when no user is signed in it throws rather than returning a stale handle.
+ */
+export async function getCurrentLocalDB(): Promise<LocalDB> {
+  // Lazy import breaks the module cycle (auth-session imports closeForUser
+  // from this file). Resolved once, then memoized by the module system.
+  const { useAuthSession } = await import('./auth-session');
+  const userId = useAuthSession.getState().user?.id ?? null;
+  if (!userId) {
+    throw new Error(
+      'getCurrentLocalDB() called with no signed-in user. ' +
+        'A store write/read ran before authentication settled.',
+    );
+  }
+  return getLocalDB(userId);
+}
+
+/**
  * Drop all tenant data from the local database and reset the sync gate.
  * Called on sign-out so a different user's session never sees the previous
  * tenant's rows and re-hydrates from scratch.
