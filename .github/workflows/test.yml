@@ -63,9 +63,6 @@ jobs:
             submodule update --init --force --depth=1 \
             packages/prometheus-entity-management
 
-      - name: Prepare latest-data directory
-        run: mkdir -p latest-data
-
       - name: Checkout latest-data (migrations only)
         uses: actions/checkout@v4
         with:
