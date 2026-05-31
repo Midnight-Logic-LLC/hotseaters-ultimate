@@ -16,7 +16,7 @@
 -- confirmation clears the optimistic row.
 --
 -- Self-hosted Supabase only. HotSeatersMVP is the bible.
--- Generated from migrations through 20260528000001.
+-- Generated from migrations through 20260530000001.
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS _pglite_schema_version (
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS _pglite_schema_version (
 );
 
 INSERT INTO _pglite_schema_version (id, version)
-  VALUES (1, '20260528000001')
+  VALUES (1, '20260530000001')
   ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version;
 
 CREATE TABLE IF NOT EXISTS _sync_meta (
