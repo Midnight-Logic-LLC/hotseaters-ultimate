@@ -40,10 +40,11 @@ export function useProjectionsData(): UseProjectionsDataResult {
   });
   const { clients, isLoading: clientsLoading } = useClientsList();
 
-  const { items: trialServices, isLoading: tsLoading } = useEntities<TrialService>('TrialService', {
-    filter: companyId ? [{ field: 'company_id', op: 'eq', value: companyId }] : null,
-    enabled: !!companyId,
-  });
+  const { items: trialServices, isLoading: tsLoading }: { items: TrialService[]; isLoading: boolean } =
+    useEntities<TrialService>('TrialService', {
+      filter: companyId ? [{ field: 'company_id', op: 'eq', value: companyId }] : null,
+      enabled: !!companyId,
+    });
 
   return {
     isLoading: dealsLoading || clientsLoading || tsLoading,
