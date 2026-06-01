@@ -4,7 +4,7 @@
   "assessment_complete": true,
   "plan_complete": true,
   "execution_complete": true,
-  "reflection_complete": false,
+  "reflection_complete": true,
   "changes_total": 7,
   "changes_completed": 7,
   "changes": [
