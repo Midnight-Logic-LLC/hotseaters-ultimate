@@ -1,5 +1,6 @@
 import type { PGliteInterfaceExtensions } from '@electric-sql/pglite';
 import { live } from '@electric-sql/pglite/live';
+import { vector } from '@electric-sql/pglite/vector';
 import { electricSync } from '@electric-sql/pglite-sync';
 import { PGliteWorker } from '@electric-sql/pglite/worker';
 
@@ -34,7 +35,7 @@ import { stopRealtimeChannels } from './realtime-channels';
  * Self-hosted Supabase only (`localhost:8000` or `hotbase.prometheusags.ai`).
  */
 
-const EXTENSIONS = { live, electric: electricSync() };
+const EXTENSIONS = { live, vector, electric: electricSync() };
 
 export type LocalDB = PGliteWorker &
   PGliteInterfaceExtensions<typeof EXTENSIONS>;
@@ -45,7 +46,7 @@ export type LocalDB = PGliteWorker &
  * stamps the latest supabase migration's timestamp prefix; whenever you
  * regenerate the SQL you also bump this constant.
  */
-export const BUNDLED_PGLITE_SCHEMA_VERSION = '20260526000001';
+export const BUNDLED_PGLITE_SCHEMA_VERSION = '20260530000001';
 
 export interface LocalDBBootResult {
   db: LocalDB;

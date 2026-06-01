@@ -15,15 +15,14 @@
  * HotSeatersMVP is the bible.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTier1 } from '@/app/tier1-provider';
+import { useTierAQuery } from '@/shared/hooks/use-tier-a-query';
 import {
   resolveSalesActivityAnchors,
   type SalesActivityAnchors,
 } from '@/features/deals/business-rules/resolve-sales-activity-anchors';
 import {
-  fetchSalesActivitiesForCompany,
-  fetchAttorneysForCompany,
   fetchSalesActivitiesForTrial,
   fetchSalesActivitiesForAttorney,
   createSalesActivity,
@@ -90,53 +89,37 @@ export function useSalesActivities(): UseSalesActivitiesResult {
   const { company } = useTier1();
   const companyId = company?.id ?? null;
 
-  const [salesActivities, setSalesActivities] = useState<SalesActivityRow[]>([]);
-  const [attorneys, setAttorneys] = useState<AttorneyRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const aliveRef = useRef(true);
+  // S03: read the now-synced sales_activity / attorney company slices directly
+  // from PGlite via the Tier-A live query instead of REST-fetching on mount.
+  // Electric pushes new rows into the local view, so writes no longer need a
+  // manual refetch — `reload()` is retained as a stable no-op for callers.
+  const { rows: rawActivities, loading: activitiesLoading } =
+    useTierAQuery<SalesActivityRow>('sales_activity', companyId);
+  const { rows: attorneys, loading: attorneysLoading } =
+    useTierAQuery<AttorneyRecord>('attorney', companyId);
 
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
+  const isLoading = activitiesLoading || attorneysLoading;
+  // Local reads degrade to an empty result rather than throwing; preserved in
+  // the return shape so callers don't break.
+  const error: string | null = null;
 
-  useEffect(() => {
-    if (!companyId) {
-      setSalesActivities([]);
-      setAttorneys([]);
-      return;
-    }
-    let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-    (async () => {
-      try {
-        const [acts, atts] = await Promise.all([
-          fetchSalesActivitiesForCompany(companyId),
-          fetchAttorneysForCompany(companyId),
-        ]);
-        if (cancelled) return;
-        setSalesActivities(acts);
-        setAttorneys(atts);
-      } catch (err: unknown) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Failed to load activity.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [companyId, reloadKey]);
+  // useTierAQuery orders by `id`; the bible (getSalesPageData) shows activities
+  // newest-first by created_at, so re-sort to preserve that contract.
+  const salesActivities = useMemo(
+    () =>
+      [...rawActivities].sort((a, b) => {
+        const aTs = a.created_at ?? '';
+        const bTs = b.created_at ?? '';
+        if (aTs < bTs) return 1;
+        if (aTs > bTs) return -1;
+        return 0;
+      }),
+    [rawActivities],
+  );
 
-  const reload = useCallback(() => {
-    if (aliveRef.current) setReloadKey((k) => k + 1);
-  }, []);
+  // Local reads are reactive; nothing to refetch. Kept as a stable no-op so the
+  // write paths that call reload() after a mutation keep their signatures.
+  const reload = useCallback(() => {}, []);
 
   const resolveAnchors = useCallback(
     (

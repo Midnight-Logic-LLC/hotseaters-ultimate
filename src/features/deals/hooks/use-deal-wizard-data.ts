@@ -15,7 +15,7 @@
  *   • serviceCategories   → `useTier1().serviceCategories`
  *   • pipelineStages      → `useTier1().pipelineStages`
  *   • consultants         → `useTeam(companyId)` (user_info rows)
- *   • attorneys           → `fetchAttorneysForCompany` (lead-radar store, REST)
+ *   • attorneys           → `useTierAQuery('attorney')` (local live query, S03)
  *   • clientOverrides     → `loadOverrides(clientId)` (clients store, REST)
  *   • existing trial data → `fetchTrialServices/Contacts/Segments` (trials store)
  *
@@ -24,15 +24,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTier1 } from '@/app/tier1-provider';
+import { useTierAQuery } from '@/shared/hooks/use-tier-a-query';
 import { useCurrentCompany } from '@/features/auth/hooks/use-current-company';
 import { useServices, type ServiceRecord } from '@/features/company/hooks/use-services';
 import { useClientsList } from '@/features/clients/hooks/use-clients-list';
 import type { ClientRow } from '@/features/clients/stores/clients-store';
 import { useTeam, type TeamMember } from '@/features/company/hooks/use-team';
-import {
-  fetchAttorneysForCompany,
-  type AttorneyRow,
-} from '@/features/lead-radar/stores/lead-radar-store';
+import type { AttorneyRow } from '@/features/lead-radar/stores/lead-radar-store';
 import {
   loadOverrides,
   createClient,
@@ -154,31 +152,16 @@ export function useDealWizardData({
 
   const consultants = useMemo(() => members.map(toConsultant), [members]);
 
-  // ── Attorneys (REST — not a live query) ──
-  // `attorneysReloadKey` bumps after a wizard-side contact create (D04) so the
-  // freshly-created Attorney appears in the contact picker without a remount.
-  const [attorneys, setAttorneys] = useState<AttorneyRow[]>([]);
-  const [attorneysLoading, setAttorneysLoading] = useState(false);
-  const [attorneysReloadKey, setAttorneysReloadKey] = useState(0);
-  const reloadAttorneys = useCallback(() => setAttorneysReloadKey((k) => k + 1), []);
-  useEffect(() => {
-    if (!companyId) return;
-    let cancelled = false;
-    setAttorneysLoading(true);
-    fetchAttorneysForCompany(companyId)
-      .then((rows) => {
-        if (!cancelled) setAttorneys(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setAttorneys([]);
-      })
-      .finally(() => {
-        if (!cancelled) setAttorneysLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [companyId, attorneysReloadKey]);
+  // ── Attorneys (S03: local live query — was REST) ──
+  // `attorney` is now synced into PGlite, so we read it reactively. A
+  // wizard-side contact create (D04) lands in the local view and shows up in
+  // the contact picker automatically — no manual reload needed. `reloadAttorneys`
+  // is retained as a stable no-op so `createContact` keeps its signature.
+  const { rows: attorneys, loading: attorneysLoading } = useTierAQuery<AttorneyRow>(
+    'attorney',
+    companyId,
+  );
+  const reloadAttorneys = useCallback(() => {}, []);
 
   // ── Client service overrides (REST — depends on the selected client) ──
   const [clientOverrides, setClientOverrides] = useState<ClientServiceOverrideRow[]>([]);

@@ -77,24 +77,11 @@ const DEFAULT_LIMIT = 5000;
 // ── sales_activity reads ──────────────────────────────────────────────────────
 
 /**
- * All sales activities for a company. The Deal Tracker reads the full slice
- * (cards filter by trial_id / attorney_id client-side, exactly like the bible's
- * page-level `getSalesPageData`).
+ * S03: the company-slice activity read (`fetchSalesActivitiesForCompany`) was
+ * removed — `sales_activity` is now synced into PGlite and read locally via
+ * `useTierAQuery` in `use-sales-activities.ts`. The targeted single-entity
+ * history reads below remain REST (on-demand, out of S03 scope).
  */
-export async function fetchSalesActivitiesForCompany(
-  companyId: string,
-  options: { limit?: number } = {},
-): Promise<SalesActivityRow[]> {
-  const { limit = DEFAULT_LIMIT } = options;
-  const { data, error } = await supabase
-    .from('sales_activity')
-    .select(ACTIVITY_COLS)
-    .eq('company_id', companyId)
-    .order('created_at', { ascending: false })
-    .range(0, limit - 1);
-  if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as SalesActivityRow[];
-}
 
 /** Activity history for one trial (deal) — used by the history side panel. */
 export async function fetchSalesActivitiesForTrial(
@@ -162,19 +149,10 @@ export async function deleteSalesActivity(id: string): Promise<void> {
 
 // ── attorney reads / writes ────────────────────────────────────────────────────
 
-export async function fetchAttorneysForCompany(
-  companyId: string,
-  options: { limit?: number } = {},
-): Promise<AttorneyRecord[]> {
-  const { limit = DEFAULT_LIMIT } = options;
-  const { data, error } = await supabase
-    .from('attorney')
-    .select(ATTORNEY_COLS)
-    .eq('company_id', companyId)
-    .range(0, limit - 1);
-  if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as AttorneyRecord[];
-}
+// S03: the company-slice attorney read (`fetchAttorneysForCompany`) was removed
+// — `attorney` is now synced into PGlite and read locally via `useTierAQuery`
+// (use-sales-activities.ts, use-deal-wizard-data.ts). The single-entity lookup
+// and the write paths below remain REST.
 
 /** Single attorney — write-side anchor lookup for the resolver. */
 export async function getAttorney(id: string): Promise<AnchorAttorney | null> {

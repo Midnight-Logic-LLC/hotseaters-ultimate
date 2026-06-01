@@ -1,0 +1,32 @@
+{
+  "phase": "local-first-sync-architecture",
+  "project": "hotseaters-ultimate",
+  "status": "planned",
+  "assessment_complete": true,
+  "plan_complete": true,
+  "execution_complete": false,
+  "reflection_complete": false,
+  "change_backend": "openspec",
+  "assessment_path": ".kbd-orchestrator/phases/local-first-sync-architecture/assessment.md",
+  "plan_path": ".kbd-orchestrator/phases/local-first-sync-architecture/plan.md",
+  "progress_path": ".kbd-orchestrator/phases/local-first-sync-architecture/progress.json",
+  "phase_summary": "Option B — complete the through-the-database local-first pattern: migrate Electric ingress to one transactional syncShapesToTables, add all duplicate-fetching domains to SYNC_CONFIG, convert non-synced stores to write-only (reads via useLiveQuery), add server-generated synced pgvector embeddings (D1). Goal: zero duplicate entity-read network calls + local semantic search.",
+  "decisions": {
+    "option": "B (not C — avoids re-opening abandoned Change-13 entity-graph)",
+    "pgvector": "D1 — server-generated embeddings synced as vector columns (user-confirmed 2026-06-01)"
+  },
+  "execution_order": [
+    ["change-S01-multitable-sync-engine"],
+    ["change-S02-sync-config-coverage"],
+    ["change-S03-sales-leadradar-local-reads", "change-S04-billing-ops-local-reads", "change-S05-settings-company-local-reads", "change-S06-pgvector-semantic-search"],
+    ["change-S07-verify-and-doc-correction"]
+  ],
+  "next_step": "Begin change-S01: migrate electric-sync.ts to syncShapesToTables. NOTE: project active phase is still 'page-parity-verification-hardening' (executing) — confirm with user whether to switch active phase before /kbd-execute.",
+  "open_decisions": [
+    "S02: tier table — custom shapeWhere vs stay-REST (indirect tenant scope)",
+    "S02: attorney — prove direct company_id predicate ⊆ EXISTS RLS policy",
+    "S05: entity_setting v0.1 company-only gap — close or document",
+    "S06: embedding dimension N, server model, search entities, index type"
+  ],
+  "last_updated": "2026-06-01"
+}

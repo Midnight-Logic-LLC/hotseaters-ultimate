@@ -8,11 +8,8 @@
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
 
-import { useEntity } from '@prometheus-ags/prometheus-entity-management';
-import {
-  useAuthSession,
-  fetchUserInfoById,
-} from '@/features/auth/stores/auth-store';
+import { useTierAById } from '@/shared/hooks/use-tier-a-query';
+import { useAuthSession } from '@/features/auth/stores/auth-store';
 
 export type Role = 'Owner' | 'Admin' | 'Sales' | 'Trial Consultant' | 'System Admin';
 
@@ -53,15 +50,15 @@ export function useCurrentRoles(): UseCurrentRolesResult {
   const userInfoId = useAuthSession((s) => s.currentUserInfoId);
   const authLoading = useAuthSession((s) => s.isLoading);
 
-  const { data, isLoading } = useEntity<UserInfoRoleShape, UserInfoRoleShape>({
-    type: 'UserInfo',
-    id: userInfoId ?? '',
-    enabled: !!userInfoId,
-    fetch: (id) => fetchUserInfoById(String(id)) as Promise<UserInfoRoleShape>,
-    normalize: (raw) => raw,
-  });
+  // S05: read the user_info row directly from the synced PGlite view
+  // (Pattern 4) instead of the entity-graph `useEntity({ fetch })` bridge,
+  // which round-tripped to Supabase REST. `user_info` is Tier-A synced.
+  const { row, loading: isLoading } = useTierAById<UserInfoRoleShape>(
+    'user_info',
+    userInfoId,
+  );
 
-  const role = normalizeRole(data?.company_role);
+  const role = normalizeRole(row?.company_role);
 
   return {
     role,

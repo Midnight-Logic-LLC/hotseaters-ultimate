@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { PGlite } from '@electric-sql/pglite';
 import { live } from '@electric-sql/pglite/live';
+import { vector } from '@electric-sql/pglite/vector';
 import { electricSync } from '@electric-sql/pglite-sync';
 import { worker } from '@electric-sql/pglite/worker';
 import type { PGliteWorkerOptions } from '@electric-sql/pglite/worker';
@@ -33,7 +34,7 @@ worker({
       ...options,
       // Fall back to a shared name if no dataDir is provided (dev / tests).
       dataDir: options.dataDir ?? 'idb://hotseaters-ultimate',
-      extensions: { live, electric: electricSync() },
+      extensions: { live, vector, electric: electricSync() },
     });
     return db;
   },

@@ -1,25 +1,36 @@
+import type { ShapeToTableOptions } from '@electric-sql/pglite-sync';
 import {
   createTenantScopedElectricAdapter,
   type TenantScopedTableConfig,
 } from '@prometheus-ags/prometheus-entity-management';
 
-import { openForUser, type LocalDB } from './pglite-client';
+import { openForUser } from './pglite-client';
 import { SYNC_CONFIG } from './sync-config';
 
 /**
  * electric-sync.ts — ElectricSQL read-path sync.
  *
- * Subscribes one Electric shape per Tier-A entity in `SYNC_CONFIG`. Each
- * shape's `WHERE` predicate is built through the v1.3 tenant-scoped adapter
- * (`createTenantScopedElectricAdapter`), which enforces:
+ * Syncs ALL Tier-A entities in `SYNC_CONFIG` through a SINGLE transactional
+ * `pglite.electric.syncShapesToTables(...)` subscription (change-S01). Every
+ * shape's `WHERE` predicate is still validated through the v1.3 tenant-scoped
+ * adapter (`createTenantScopedElectricAdapter`), which enforces:
  *
  *   - `companyId` is a UUID;
  *   - every shape declares `tenantColumn` (string or explicit `null`);
- *   - unscoped shapes are REFUSED at attach time (RULE 5: PGlite has no RLS).
+ *   - unscoped shapes are REFUSED at build time (RULE 5: PGlite has no RLS).
  *
- * The actual row-landing happens via `pglite.electric.syncShapeToTable(...)`,
- * which writes server rows into the local `<entity>_synced` table. Stores
- * read from there through the PGlite-backed entity graph (Change 13).
+ * Why one multi-table call instead of a per-entity `syncShapeToTable` loop:
+ *   - **Transactional consistency** — a server transaction that touches
+ *     several tables lands atomically in PGlite (`syncShapesToTables` wraps the
+ *     apply in one PGlite transaction). The old loop could land a half-applied
+ *     cross-table update mid-render.
+ *   - **One initial-sync signal** — the whole set fires a single
+ *     `onInitialSync`, so the boot gate flips "synced" once instead of racing N
+ *     independent per-shape promises (the source of the historic
+ *     hydration-race the gate had to defend against).
+ *
+ * Rows land into each entity's local `<entity>_synced` table; stores read from
+ * the unified view via `useLiveQuery` (Pattern 4 — "through the database").
  *
  * Self-hosted Supabase only. The module refuses to load against any URL
  * matching `*.supabase.co` (RULE 1).
@@ -32,14 +43,21 @@ import { SYNC_CONFIG } from './sync-config';
  * of the secret. See docs/RUNBOOKS.md "Electric routing in dev + prod".
  *
  * Load-once-on-login: the first login for a tenant runs full hydration —
- * `startTenantSync` awaits every shape's `onInitialSync` before resolving and
- * the caller stamps `_sync_meta.hydrated_at`. Subsequent logins resume
- * incrementally from Electric's persisted offsets.
+ * `startTenantSync` awaits the single `onInitialSync` before resolving and the
+ * caller stamps `_sync_meta.hydrated_at`. Subsequent logins resume
+ * incrementally from Electric's persisted offsets (keyed by `SYNC_KEY`).
  */
 
 const ELECTRIC_URL = import.meta.env.VITE_ELECTRIC_URL;
 const ELECTRIC_SECRET = import.meta.env.VITE_ELECTRIC_SECRET;
-const INITIAL_SYNC_TIMEOUT_MS = 8_000;
+
+/**
+ * Resumable subscription key for the single multi-table sync. Electric
+ * persists per-shape offsets under this key so a returning login resumes
+ * incrementally instead of re-bulk-loading. Scoped per tenant so a different
+ * company on a shared device never resumes another tenant's offsets.
+ */
+const syncKeyForTenant = (companyId: string): string => `tenant:${companyId}`;
 
 /**
  * Overall wall-clock budget for `startTenantSync`'s blocking tail
@@ -137,28 +155,25 @@ function assertValidCompanyId(companyId: string): void {
 
 export interface TenantSyncResult extends ShapeSyncHandle {
   /**
-   * True when this run performed a full first-time hydration (every shape
-   * fired `onInitialSync`). False when shapes resumed from persisted offsets.
-   * The caller uses this to decide whether to stamp `_sync_meta.hydrated_at`.
+   * True when this run performed a full first-time hydration (the multi-table
+   * sync fired its single `onInitialSync`). False when the sync resumed from
+   * persisted offsets. The caller uses this to decide whether to stamp
+   * `_sync_meta.hydrated_at`.
    */
   didInitialHydration: boolean;
 }
 
-interface ShapeSubscription {
-  unsubscribe: () => Promise<void> | void;
-  isUpToDate: boolean;
-}
-
 /**
- * Start syncing all Tier-A shapes for one tenant.
+ * Start syncing all Tier-A shapes for one tenant via a single transactional
+ * multi-table subscription.
  *
  * @param userId   the signed-in user's auth UUID — used to obtain the per-user
  *   PGlite instance (change-403: no global singleton).
  * @param companyId tenant scope from the signed-in user's JWT claims. Refused
  *   if empty/non-UUID — shapes must be tenant-scoped (RULE 5).
- * @param awaitInitialSync when true (first login), await every shape's first
- *   full bulk-load before resolving so the caller can show "preparing your
- *   data" and then stamp `_sync_meta`.
+ * @param awaitInitialSync when true (first login), await the multi-table sync's
+ *   single full bulk-load before resolving so the caller can show "preparing
+ *   your data" and then stamp `_sync_meta`.
  * @param onHydrated called EXACTLY ONCE when the genuine initial hydration
  *   completes (every Tier-A shape reached up-to-date). This fires even when it
  *   happens AFTER `TENANT_SYNC_BUDGET_MS` — i.e. after the budget already
@@ -187,101 +202,115 @@ export async function startTenantSync(
 
   const { db } = await openForUser(userId);
 
-  // ── Build TenantScopedTableConfig array ────────────────────────────────
-  // The factory does the real work: it calls `syncShapeToTable` to land rows
-  // in PGlite. The returned object satisfies the ShapeStream<T> contract so
-  // the tenant-scoped adapter accepts it for validation purposes.
-  const subs: ShapeSubscription[] = [];
-  const initialSyncPromises: Array<Promise<void>> = [];
+  // ── Validate every shape predicate via the tenant-scoped adapter ────────
+  // The adapter does not drive the sync (the single `syncShapesToTables` call
+  // below does). Its construction is the safety gate (RULE 5): it throws if any
+  // shape lacks a `tenantColumn` or if `companyId` isn't a UUID, and it returns
+  // the validated tenant `where` predicate per table. The `shapeStreamFactory`
+  // is invoked purely to surface each table's validated `where` to us; it
+  // returns an inert stub (no rows ever flow through this path).
+  const tenantWhereByTable = new Map<string, string>();
 
-  const tables: TenantScopedTableConfig[] = SYNC_CONFIG.map((config) => {
-    let resolveInitial: () => void = () => {};
-    const initialPromise = new Promise<void>((r) => {
-      resolveInitial = r;
-    });
-    initialSyncPromises.push(initialPromise);
+  const tables: TenantScopedTableConfig[] = SYNC_CONFIG.map((config) => ({
+    type: config.name,
+    table: config.name,
+    tenantColumn: config.tenantColumn,
+    primaryKey: config.primaryKey ?? ['id'],
+    shapeStreamFactory: ({ table, where }) => {
+      // Per-entity custom predicate trumps the tenant-scoped default; both go
+      // through the adapter's validation first, the custom predicate is
+      // honoured for the actual shape `where` (e.g. metadata_type's
+      // "(company_id = … OR company_id IS NULL)").
+      const finalWhere = config.shapeWhere
+        ? config.shapeWhere(`'${companyId}'`)
+        : where;
+      tenantWhereByTable.set(table, finalWhere);
+      return {
+        subscribe: () => () => {},
+        isUpToDate: false,
+        lastOffset: '',
+      };
+    },
+  }));
 
-    return {
-      type: config.name,
-      table: config.name,
-      tenantColumn: config.tenantColumn,
-      primaryKey: config.primaryKey ?? ['id'],
-      shapeStreamFactory: ({ table, where }) => {
-        // Per-entity custom predicate trumps the tenant-scoped default. Both
-        // paths go through buildTenantWhere first for validation; the custom
-        // predicate is honoured here.
-        const finalWhere = config.shapeWhere
-          ? config.shapeWhere(`'${companyId}'`)
-          : where;
-
-        const subPromise: Promise<ShapeSubscription> = attachShape(db, {
-          tableName: table,
-          syncedTable: `${table}_synced`,
-          where: finalWhere,
-          primaryKey: config.primaryKey ?? ['id'],
-          companyId,
-          onInitialSync: resolveInitial,
-        });
-
-        // Stash subscription bookkeeping by appending once the attach resolves.
-        // On failure (e.g. Electric rejects a shape), still count this shape as
-        // "attached" with a no-op unsubscribe AND resolve its initial-sync
-        // promise. Otherwise `waitForSubs` would stall until its 30s deadline
-        // and a single bad shape would trap the user on the splash. The app
-        // then renders from PGlite (Pattern 4) for the shapes that did land.
-        void subPromise
-          .then((s) => subs.push(s))
-          .catch((err) => {
-
-            console.error(`[electric-sync] shape "${table}" failed to attach`, err);
-            subs.push({ unsubscribe: () => {}, isUpToDate: false });
-            resolveInitial();
-          });
-
-        // Return a ShapeStream-shaped stub. We don't drive the entity graph
-        // via the adapter's ChangeSet pipeline — data lands in PGlite tables
-        // and stores read from there. This stub satisfies the type contract
-        // and never delivers messages.
-        return {
-          subscribe: (
-            _onMsg: (msgs: never[]) => void,
-            _onErr?: (e: Error) => void,
-          ) => () => {},
-          isUpToDate: false,
-          lastOffset: '',
-        };
-      },
-    };
-  });
-
-  // Validate every shape predicate via the tenant-scoped adapter. The adapter
-  // itself doesn't drive sync (we use syncShapeToTable inside the factory)
-  // but its construction is the safety gate — it throws if any shape lacks
-  // a tenantColumn or if companyId isn't a UUID.
   createTenantScopedElectricAdapter({
     pglite: db,
     tenantClaim: { companyId },
     tables,
     onSynced: () => {
-      /* graph-level callback unused; see comments above */
+      /* graph-level callback unused; sync is driven by syncShapesToTables */
     },
   });
 
-  // The factories above kicked off `attachShape` calls; wait for them to
-  // resolve so `subs[]` is populated and `unsubscribe` is wired up.
-  // Each factory pushed a promise via the closure pattern; reconcile here.
-  // We re-iterate SYNC_CONFIG to compute the count of expected subs.
-  // Bound the blocking tail on a wall-clock budget so a shape that never
-  // reaches up-to-date (HTTP 400, slow/large shape, transient gateway error →
-  // Electric background-retry loop) can't trap the gate on the splash forever.
-  // `waitForSubs` + `waitForInitialSync` resolve normally on a healthy login;
-  // on an unhealthy one this race resolves at the budget and the app renders
-  // from PGlite (Pattern 4). The timer runs on the main thread, where it fires
-  // reliably even while the worker-bound shape promises are still pending.
+  // ── Single transactional multi-table sync ───────────────────────────────
+  // One subscription lands ALL Tier-A shapes with cross-table transactional
+  // consistency and fires ONE `onInitialSync` when the whole set is up to date.
+  const shapes: Record<string, ShapeToTableOptions> = {};
+  for (const config of SYNC_CONFIG) {
+    const where = tenantWhereByTable.get(config.name);
+    if (where === undefined) {
+      // The adapter rejected/skipped this table — fail loud rather than sync an
+      // unscoped shape (RULE 5).
+      throw new Error(
+        `[electric-sync] no validated tenant predicate for "${config.name}". ` +
+          'The tenant-scoped adapter did not produce a where clause — refusing ' +
+          'to sync an unscoped shape (RULE 5: PGlite has no RLS).',
+      );
+    }
+    shapes[config.name] = {
+      shape: {
+        url: `${ELECTRIC_URL}/v1/shape`,
+        params: {
+          table: config.name,
+          where,
+          // Shared API key — Electric validates this on every shape request.
+          // See file-header comment for the auth model.
+          secret: ELECTRIC_SECRET,
+        },
+      },
+      table: `${config.name}_synced`,
+      primaryKey: config.primaryKey ?? ['id'],
+    };
+  }
+
+  let resolveInitial: () => void = () => {};
+  const initialSyncPromise = new Promise<void>((r) => {
+    resolveInitial = r;
+  });
+
+  // `syncShapesToTables` resolves once the subscription is established; the
+  // bulk load completes when `onInitialSync` fires (or `isUpToDate` is already
+  // true on a warm resume). If establishment REJECTS (e.g. Electric rejects a
+  // shape predicate with HTTP 400), degrade gracefully: log, resolve the
+  // initial-sync promise, and hand back a no-op unsubscribe. The boot gate then
+  // proceeds (no infinite splash) and renders from whatever PGlite already
+  // holds (Pattern 4) — mirroring the old per-shape `.catch` behaviour, now at
+  // the single-subscription granularity.
+  let unsubscribe: () => void = () => {};
+  try {
+    const sync = await db.electric.syncShapesToTables({
+      key: syncKeyForTenant(companyId),
+      shapes,
+      onInitialSync: () => resolveInitial(),
+    });
+    unsubscribe = () => sync.unsubscribe();
+    if (sync.isUpToDate) resolveInitial();
+  } catch (err) {
+    console.error('[electric-sync] multi-table sync failed to establish', err);
+    resolveInitial();
+  }
+
+  // Bound the blocking tail on a wall-clock budget so a sync that never reaches
+  // up-to-date (HTTP 400, slow/large shapes, transient gateway error → Electric
+  // background-retry loop) can't trap the boot gate on the splash forever. On a
+  // healthy first login the tail resolves on `onInitialSync`; on an unhealthy
+  // one the race resolves at the budget and the app renders from whatever has
+  // landed so far in PGlite (Pattern 4). The timer runs on the main thread,
+  // where it fires reliably even while the worker-bound sync promise is pending.
   const hydrationTail = (async (): Promise<boolean> => {
-    await waitForSubs(subs, SYNC_CONFIG.length);
     if (!awaitInitialSync) return false;
-    return waitForInitialSync(initialSyncPromises);
+    await initialSyncPromise;
+    return true;
   })();
 
   const didInitialHydration = await raceHydrationAgainstBudget({
@@ -290,10 +319,9 @@ export async function startTenantSync(
     onHydrated,
     onBudgetExpired: () => {
       console.warn(
-        `[electric-sync] tenant sync did not settle within ` +
-          `${TENANT_SYNC_BUDGET_MS}ms (${subs.length}/${SYNC_CONFIG.length} ` +
-          `shapes attached); continuing so the app does not hang on the ` +
-          `splash. Rows will appear as shapes reach up-to-date in the ` +
+        `[electric-sync] tenant sync did not reach up-to-date within ` +
+          `${TENANT_SYNC_BUDGET_MS}ms; continuing so the app does not hang on ` +
+          `the splash. Rows will appear as the sync reaches up-to-date in the ` +
           `background (check VITE_ELECTRIC_SECRET / gateway if they do not).`,
       );
     },
@@ -302,9 +330,7 @@ export async function startTenantSync(
   return {
     didInitialHydration,
     unsubscribe: async () => {
-      for (const s of subs) {
-        await s.unsubscribe();
-      }
+      unsubscribe();
     },
   };
 }
@@ -358,77 +384,4 @@ export function raceHydrationAgainstBudget(opts: {
   });
 
   return Promise.race([hydrationTail, budget]);
-}
-
-interface AttachShapeOptions {
-  tableName: string;
-  syncedTable: string;
-  where: string;
-  primaryKey: string[];
-  companyId: string;
-  onInitialSync: () => void;
-}
-
-async function attachShape(
-  db: LocalDB,
-  opts: AttachShapeOptions,
-): Promise<ShapeSubscription> {
-  const sub = await db.electric.syncShapeToTable({
-    shape: {
-      url: `${ELECTRIC_URL}/v1/shape`,
-      params: {
-        table: opts.tableName,
-        where: opts.where,
-        // Shared API key — Electric validates this on every shape request.
-        // See file-header comment for the auth model.
-        secret: ELECTRIC_SECRET,
-      },
-    },
-    table: opts.syncedTable,
-    primaryKey: opts.primaryKey,
-    shapeKey: `${opts.tableName}:${opts.companyId}`,
-    onInitialSync: () => opts.onInitialSync(),
-  });
-
-  if (sub.isUpToDate) {
-    opts.onInitialSync();
-  }
-
-  return {
-    unsubscribe: () => sub.unsubscribe(),
-    isUpToDate: sub.isUpToDate,
-  };
-}
-
-async function waitForInitialSync(promises: Array<Promise<void>>): Promise<boolean> {
-  const complete = Promise.all(promises).then(() => true);
-  const timeout = new Promise<false>((resolve) => {
-    globalThis.setTimeout(() => resolve(false), INITIAL_SYNC_TIMEOUT_MS);
-  });
-  return Promise.race([complete, timeout]);
-}
-
-/**
- * Poll until `subs` has reached `expected` length, bounded by a grace
- * deadline. Resolves (not throws) at the deadline: the overall
- * `TENANT_SYNC_BUDGET_MS` race in `startTenantSync` is the real backstop, and
- * throwing here would reject the hydration tail for no benefit. A shape stuck
- * past this deadline simply hasn't pushed into `subs` yet; the gate proceeds
- * and the shape lands its rows in the background if/when it recovers.
- */
-async function waitForSubs(
-  subs: ShapeSubscription[],
-  expected: number,
-): Promise<void> {
-  const deadline = Date.now() + 30_000;
-  while (subs.length < expected) {
-    if (Date.now() > deadline) {
-      console.warn(
-        `[electric-sync] only ${subs.length}/${expected} shapes attached ` +
-          `within 30s; continuing without the rest.`,
-      );
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 10));
-  }
 }

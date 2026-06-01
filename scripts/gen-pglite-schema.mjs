@@ -27,6 +27,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const CONFIG_PATH = join(REPO_ROOT, 'src/shared/db/sync-config.ts');
 const OUT_PATH = join(REPO_ROOT, 'src/shared/db/local-schema.sql');
+const OUT_COMMON_PATH = join(REPO_ROOT, 'src/shared/db/local-schema-common.sql');
+const OUT_USER_PATH = join(REPO_ROOT, 'src/shared/db/local-schema-user.sql');
 // Resolve migrations dir — check CI layout (./latest-data inside repo) first,
 // then fall back to local dev layout (../latest-data as sibling).
 function findMigrationsDir(repoRoot) {
@@ -72,6 +74,71 @@ function mapType(serverType) {
   return 'TEXT';
 }
 
+// ── split a TS array body into top-level `{ ... }` object literals ──────────
+/**
+ * Brace-depth scanner that ignores line and block comments and string
+ * contents, so it cannot be fooled by braces/commas inside `notes:` strings or
+ * by comments placed BETWEEN array entries. Returns the inner text of each
+ * top-level object literal. Replaces the old naive regex that silently merged
+ * adjacent entries when a comment sat between them (change-S02 dropped `lead`).
+ */
+function splitTopLevelObjects(body) {
+  const blocks = [];
+  let depth = 0;
+  let start = -1;
+  let inString = null; // quote char when inside a string
+  let inLineComment = false;
+  let inBlockComment = false;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    const next = body[i + 1];
+    if (inLineComment) {
+      if (ch === '\n') inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+    if (inString) {
+      if (ch === '\\') {
+        i++; // skip escaped char
+      } else if (ch === inString) {
+        inString = null;
+      }
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (ch === "'" || ch === '"' || ch === '`') {
+      inString = ch;
+      continue;
+    }
+    if (ch === '{') {
+      if (depth === 0) start = i + 1;
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        blocks.push(body.slice(start, i));
+        start = -1;
+      }
+    }
+  }
+  return blocks;
+}
+
 // ── parse sync-config.ts (text mode) ───────────────────────────────────────
 /**
  * Extracts entity names + tier + tenantColumn from the TS source. We avoid
@@ -87,11 +154,13 @@ async function parseSyncConfig() {
   if (!arrMatch) throw new Error('Could not locate SYNC_CONFIG array');
   const body = arrMatch[1];
 
-  // Split on top-level objects: `{ ... }`. Naive but adequate for our shape.
-  const objRe = /\{\s*([\s\S]*?)\s*\}\s*,?\s*(?=\{|$)/g;
-  let m;
-  while ((m = objRe.exec(body)) !== null) {
-    const obj = m[1];
+  // Split into top-level object literals by brace depth, ignoring line
+  // comments and string contents. Robust to inter-object comments and `{}` in
+  // notes (the old naive regex silently merged adjacent entries — see
+  // change-S02). We then count the object literals so a parse-level drop fails
+  // loudly instead of silently shipping a short schema.
+  const objectBlocks = splitTopLevelObjects(body);
+  for (const obj of objectBlocks) {
     const name = (obj.match(/name:\s*['"]([^'"]+)['"]/) || [])[1];
     const tier = (obj.match(/tier:\s*['"]([AB])['"]/) || [])[1];
     const tenantMatch = obj.match(/tenantColumn:\s*(null|['"][^'"]+['"])/);
@@ -100,9 +169,21 @@ async function parseSyncConfig() {
         ? null
         : tenantMatch[1].slice(1, -1)
       : null;
-    if (name && tier) entries.push({ name, tier, tenantColumn });
+    const domain =
+      (obj.match(/domain:\s*['"](common|user)['"]/) || [])[1] || 'user';
+    const embMatch = obj.match(/embedding:\s*\{\s*dim:\s*(\d+)\s*\}/);
+    const embedding = embMatch ? { dim: Number(embMatch[1]) } : null;
+    if (name && tier) entries.push({ name, tier, tenantColumn, domain, embedding });
   }
   if (!entries.length) throw new Error('SYNC_CONFIG parsed empty');
+  if (entries.length !== objectBlocks.length) {
+    throw new Error(
+      `[gen-pglite-schema] parsed ${entries.length} entities but found ` +
+        `${objectBlocks.length} object literals in SYNC_CONFIG — an entry is ` +
+        `missing name/tier or the splitter mis-grouped. Refusing to emit a ` +
+        `short schema.`,
+    );
+  }
   return entries;
 }
 
@@ -147,8 +228,15 @@ function extractColumns(sql, entity) {
     if (/^(CONSTRAINT|PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK)\b/i.test(line)) {
       continue;
     }
-    // Match: <ident-or-quoted>  <type>  [rest...]
-    const colMatch = line.match(/^("?[a-zA-Z_][a-zA-Z0-9_]*"?)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?(?:\([^)]*\))?)/);
+    // Match: <ident-or-quoted>  <type>  [modifiers...]
+    // The type is EITHER the two-word `double precision` OR a single word with
+    // an optional `(...)` parameter. We must NOT let an optional second word
+    // greedily swallow modifier keywords like `NOT NULL` / `PRIMARY KEY` —
+    // that produced `BOOLEAN NOT` → unmapped → TEXT (the is_active/is_default
+    // regression). `double precision` is the only multi-word type we emit.
+    const colMatch = line.match(
+      /^("?[a-zA-Z_][a-zA-Z0-9_]*"?)\s+(double\s+precision|[A-Za-z]+(?:\([^)]*\))?)/i,
+    );
     if (!colMatch) continue;
     const rawName = colMatch[1];
     const isReserved = rawName.startsWith('"');
@@ -163,7 +251,16 @@ function extractColumns(sql, entity) {
 }
 
 // ── emit SQL for one Tier-A entity ─────────────────────────────────────────
-function emitTierA(entity, cols) {
+function emitTierA(entity, cols, embedding) {
+  // S06: server-generated embeddings sync as an ordinary column. Append a
+  // pgvector column so it rides the same synced/local/view/trigger plumbing as
+  // every other column (no special-casing downstream).
+  if (embedding) {
+    cols = [
+      ...cols,
+      { name: 'embedding', quoted: 'embedding', pgliteType: `vector(${embedding.dim})` },
+    ];
+  }
   const colDefs = cols
     .map((c) => `  ${c.quoted.padEnd(28)} ${c.pgliteType}`)
     .join(',\n');
@@ -246,7 +343,13 @@ CREATE TRIGGER ${entity}_delete_trg INSTEAD OF DELETE ON ${entity}
 }
 
 // ── emit Tier-B (synced-only) ──────────────────────────────────────────────
-function emitTierB(entity, cols) {
+function emitTierB(entity, cols, embedding) {
+  if (embedding) {
+    cols = [
+      ...cols,
+      { name: 'embedding', quoted: 'embedding', pgliteType: `vector(${embedding.dim})` },
+    ];
+  }
   const colDefs = cols
     .map((c) => `  ${c.quoted.padEnd(28)} ${c.pgliteType}`)
     .join(',\n');
@@ -261,36 +364,36 @@ CREATE OR REPLACE VIEW ${entity} AS SELECT * FROM ${entity}_synced;
 }
 
 // ── header / preamble ──────────────────────────────────────────────────────
-function emitHeader(schemaVersion) {
-  return `-- GENERATED by scripts/gen-pglite-schema.mjs from supabase migrations. DO NOT HAND-EDIT.
--- =============================================================================
--- local-schema.sql — PGlite (in-browser Postgres) local schema for
--- hotseaters-ultimate.
---
--- Implements ElectricSQL's "through-the-database" write pattern. For each
--- Tier-A entity (sync-config.ts) there are three objects:
---
---   <entity>_synced   immutable — Electric writes server rows here
---   <entity>_local    shadow    — optimistic local writes live here
---   <entity>          view      — synced + local merged; the app reads/writes
---
--- INSTEAD OF triggers on the view route writes to <entity>_local and append
--- a row to \`local_writes\`. A pg_notify on \`local_write\` drives the
--- write-path sync utility, which POSTs pending writes to Supabase and on
--- confirmation clears the optimistic row.
---
--- Self-hosted Supabase only. HotSeatersMVP is the bible.
--- Generated from migrations through ${schemaVersion}.
--- =============================================================================
+const DO_NOT_EDIT =
+  '-- GENERATED by scripts/gen-pglite-schema.mjs from supabase migrations. DO NOT HAND-EDIT.';
 
-CREATE TABLE IF NOT EXISTS _pglite_schema_version (
+/**
+ * Infra preamble — version row, sync meta, the write-ahead queue, and (when any
+ * synced entity carries an embedding) the pgvector extension. Lives in the
+ * COMMON file (applied first) and in the full reference file.
+ */
+function emitInfraPreamble(schemaVersion, needsVector) {
+  const vectorExt = needsVector
+    ? `-- pgvector for local semantic search (S06). Embeddings are server-generated
+-- and sync as ordinary vector columns; similarity runs locally via <=>.
+CREATE EXTENSION IF NOT EXISTS vector;
+
+`
+    : '';
+  return `${vectorExt}CREATE TABLE IF NOT EXISTS _pglite_schema_version (
   id      INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   version TEXT    NOT NULL
 );
 
+-- DO NOTHING (not DO UPDATE): the boot-time migration check in
+-- pglite-client.ts reads the STORED version AFTER re-applying this schema and
+-- compares it to BUNDLED_PGLITE_SCHEMA_VERSION. Overwriting it here would make
+-- the stored version always equal the bundled one, so a schema upgrade would
+-- never be detected. Preserve the prior version; pglite-client stamps the new
+-- one explicitly once the drop/re-hydrate migration has run.
 INSERT INTO _pglite_schema_version (id, version)
   VALUES (1, '${schemaVersion}')
-  ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version;
+  ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS _sync_meta (
   id              INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
@@ -315,9 +418,75 @@ CREATE TABLE IF NOT EXISTS local_writes (
 
 CREATE INDEX IF NOT EXISTS idx_local_writes_pending
   ON local_writes (created_at) WHERE synced_at IS NULL;
+`;
+}
 
+const THRU_DB_BLURB = `-- Implements ElectricSQL's "through-the-database" write pattern. For each
+-- Tier-A entity (sync-config.ts) there are three objects:
+--
+--   <entity>_synced   immutable — Electric writes server rows here
+--   <entity>_local    shadow    — optimistic local writes live here
+--   <entity>          view      — synced + local merged; the app reads/writes
+--
+-- INSTEAD OF triggers on the view route writes to <entity>_local and append
+-- a row to \`local_writes\`. A pg_notify on \`local_write\` drives the
+-- write-path sync utility, which POSTs pending writes to Supabase and on
+-- confirmation clears the optimistic row.
+--
+-- Self-hosted Supabase only. HotSeatersMVP is the bible.`;
+
+// Full reference file (committed; CI drift gate runs against it).
+function emitFullHeader(schemaVersion, needsVector) {
+  return `${DO_NOT_EDIT}
+-- =============================================================================
+-- local-schema.sql — FULL PGlite local schema (reference + CI drift gate).
+-- The RUNTIME applies local-schema-common.sql then local-schema-user.sql;
+-- this file is the union of both and is NOT loaded directly. All three are
+-- generated together from sync-config.ts — there is no hand-curation step.
+--
+${THRU_DB_BLURB}
+-- Generated from migrations through ${schemaVersion}.
+-- =============================================================================
+
+${emitInfraPreamble(schemaVersion, needsVector)}
 -- =============================================================================
 -- TIER-A / TIER-B ENTITIES (FK-dependency order)
+-- =============================================================================
+`;
+}
+
+// COMMON runtime file — infra + tenant-agnostic / system tables. Applied first.
+function emitCommonHeader(schemaVersion, needsVector) {
+  return `${DO_NOT_EDIT}
+-- =============================================================================
+-- local-schema-common.sql — REFERENCE / SYSTEM tables + infra for
+-- hotseaters-ultimate. Applied FIRST on every per-user PGlite first-boot
+-- (change-403 §403.b). Carries the version row, sync meta, the write-ahead
+-- queue, and the system/reference entities (domain:'common' in sync-config.ts).
+--
+${THRU_DB_BLURB}
+-- Generated from migrations through ${schemaVersion}.
+-- =============================================================================
+
+${emitInfraPreamble(schemaVersion, needsVector)}
+-- =============================================================================
+-- COMMON (domain:'common') ENTITIES
+-- =============================================================================
+`;
+}
+
+// USER runtime file — tenant tables. Applied second (after common).
+function emitUserHeader(schemaVersion) {
+  return `${DO_NOT_EDIT}
+-- =============================================================================
+-- local-schema-user.sql — TENANTED tables for hotseaters-ultimate. Applied
+-- SECOND on every per-user PGlite first-boot (change-403 §403.b), after
+-- local-schema-common.sql (which defines local_writes + the infra this file's
+-- triggers reference). Carries the tenant entities (domain:'user', the
+-- default, in sync-config.ts).
+--
+${THRU_DB_BLURB}
+-- Generated from migrations through ${schemaVersion}.
 -- =============================================================================
 `;
 }
@@ -385,10 +554,14 @@ async function main() {
     if (!ordered.find((o) => o.name === c.name)) ordered.push(c);
   }
 
-  let sql = emitHeader(schemaVersion);
-
   const allMigrations = migrations.map((m) => m.sql).join('\n');
+  const needsVector = ordered.some((e) => e.embedding);
 
+  // Emit each entity's DDL once, tagged with its domain so we can route it into
+  // the common vs user runtime file. The full file is the union (reference +
+  // CI drift gate).
+  const commonBody = [];
+  const userBody = [];
   for (const entry of ordered) {
     const found = extractColumns(allMigrations, entry.name);
     if (!found) {
@@ -397,26 +570,46 @@ async function main() {
       );
       process.exit(1);
     }
-    console.log(
-      `[gen-pglite-schema] ${entry.name} (tier ${entry.tier}): ${found.columns.length} columns`
-    );
-    sql +=
+    const ddl =
       entry.tier === 'A'
-        ? emitTierA(entry.name, found.columns)
-        : emitTierB(entry.name, found.columns);
+        ? emitTierA(entry.name, found.columns, entry.embedding)
+        : emitTierB(entry.name, found.columns, entry.embedding);
+    console.log(
+      `[gen-pglite-schema] ${entry.name} (tier ${entry.tier}, domain ${entry.domain}` +
+        `${entry.embedding ? `, embedding vector(${entry.embedding.dim})` : ''}): ` +
+        `${found.columns.length} columns`,
+    );
+    if (entry.domain === 'common') commonBody.push(ddl);
+    else userBody.push(ddl);
   }
 
-  // Idempotency: byte-equal short-circuit.
-  if (existsSync(OUT_PATH)) {
-    const current = await readFile(OUT_PATH, 'utf8');
-    if (current === sql) {
-      console.log('[gen-pglite-schema] unchanged');
-      process.exit(0);
+  const fullSql =
+    emitFullHeader(schemaVersion, needsVector) +
+    commonBody.join('') +
+    userBody.join('');
+  const commonSql = emitCommonHeader(schemaVersion, needsVector) + commonBody.join('');
+  const userSql = emitUserHeader(schemaVersion) + userBody.join('');
+
+  const targets = [
+    { path: OUT_PATH, sql: fullSql, label: 'local-schema.sql' },
+    { path: OUT_COMMON_PATH, sql: commonSql, label: 'local-schema-common.sql' },
+    { path: OUT_USER_PATH, sql: userSql, label: 'local-schema-user.sql' },
+  ];
+
+  let wrote = 0;
+  for (const t of targets) {
+    if (existsSync(t.path)) {
+      const current = await readFile(t.path, 'utf8');
+      if (current === t.sql) {
+        console.log(`[gen-pglite-schema] ${t.label} unchanged`);
+        continue;
+      }
     }
+    await writeFile(t.path, t.sql, 'utf8');
+    console.log(`[gen-pglite-schema] wrote ${t.label} (version=${schemaVersion})`);
+    wrote++;
   }
-
-  await writeFile(OUT_PATH, sql, 'utf8');
-  console.log(`[gen-pglite-schema] wrote ${OUT_PATH} (version=${schemaVersion})`);
+  if (wrote === 0) console.log('[gen-pglite-schema] all files unchanged');
 }
 
 main().catch((err) => {

@@ -37,6 +37,23 @@
 export type SyncTier = 'A' | 'B';
 
 /**
+ * Which generated runtime schema file an entity's DDL is emitted into.
+ *
+ *   'common' — tenant-agnostic / system tables (rows shared across users in a
+ *              browser, e.g. metadata_type / entity_metadata system rows).
+ *              Emitted into `local-schema-common.sql`, applied FIRST on boot
+ *              alongside the infra tables (`local_writes`, `_sync_meta`,
+ *              `_pglite_schema_version`).
+ *   'user'   — tenant-scoped tables. Emitted into `local-schema-user.sql`,
+ *              applied SECOND (after common).
+ *
+ * Defaults to 'user' when omitted. The generator
+ * (`scripts/gen-pglite-schema.mjs`) reads this to write both runtime files
+ * directly — there is NO hand-curation step.
+ */
+export type SyncDomain = 'common' | 'user';
+
+/**
  * Configuration entry for a single server table that participates in sync.
  *
  * @property name          server table name (also the local view name)
@@ -55,6 +72,13 @@ export type SyncTier = 'A' | 'B';
  *                         clause. Receives the current company id (as a
  *                         single-quoted SQL literal) and returns a complete
  *                         predicate without the leading `WHERE`.
+ * @property domain        which runtime schema file the DDL is emitted into
+ *                         (`'common'` | `'user'`); defaults to `'user'`.
+ * @property embedding     when set, the generator adds a pgvector
+ *                         `embedding vector(<dim>)` column to this entity's
+ *                         synced/local tables for local semantic search (S06,
+ *                         method D1 — server generates the embeddings; they
+ *                         sync as an ordinary column).
  * @property notes         human comment surfaced in the generated SQL header
  *                         and in code review.
  */
@@ -65,6 +89,8 @@ export interface SyncEntityConfig {
   primaryKey?: string[];
   columns?: string[];
   shapeWhere?: (companyId: string) => string;
+  domain?: SyncDomain;
+  embedding?: { dim: number };
   notes?: string;
 }
 
@@ -95,6 +121,7 @@ export const SYNC_CONFIG: SyncEntityConfig[] = [
     name: 'metadata_type',
     tier: 'A',
     tenantColumn: 'company_id',
+    domain: 'common',
     // Two-class shape: system-wide rows (company_id IS NULL) AND company rows.
     shapeWhere: (cid) => `(company_id = ${cid} OR company_id IS NULL)`,
     notes:
@@ -106,6 +133,7 @@ export const SYNC_CONFIG: SyncEntityConfig[] = [
     name: 'entity_metadata',
     tier: 'A',
     tenantColumn: 'company_id',
+    domain: 'common',
     // Electric's HTTP shape API does not support subqueries in `where`.
     // Scope directly to tenant rows plus system-wide rows.
     shapeWhere: (cid) => `(company_id = ${cid} OR company_id IS NULL)`,
@@ -132,6 +160,7 @@ export const SYNC_CONFIG: SyncEntityConfig[] = [
     name: 'client',
     tier: 'A',
     tenantColumn: 'company_id',
+    embedding: { dim: 1536 },
   },
   {
     name: 'client_address',
@@ -142,6 +171,7 @@ export const SYNC_CONFIG: SyncEntityConfig[] = [
     name: 'trial',
     tier: 'A',
     tenantColumn: 'company_id',
+    embedding: { dim: 1536 },
   },
   {
     name: 'trial_service',
@@ -167,6 +197,74 @@ export const SYNC_CONFIG: SyncEntityConfig[] = [
       'Consultant ↔ service assignments needed for the in-detail matrix and ' +
       'time-entry available-services resolution.',
   },
+  {
+    name: 'lead',
+    tier: 'A',
+    tenantColumn: 'company_id',
+    embedding: { dim: 1536 },
+    notes:
+      'LeadRadar roster. RLS: company_id = current_company_id() — direct ' +
+      'tenant predicate is exact.',
+  },
+  {
+    name: 'attorney',
+    tier: 'A',
+    tenantColumn: 'company_id',
+    notes:
+      'Sales/Clients attorney directory. attorney has its own company_id ' +
+      'column; the RLS SELECT policy is EXISTS(client c WHERE c.id = ' +
+      'attorney.client_id AND c.company_id = current_company_id()). Electric ' +
+      'shapes reject subqueries, so we scope by the direct company_id column, ' +
+      'which is a subset of the EXISTS policy (an attorney shares its client’s ' +
+      'company_id by construction). RULE 5 satisfied.',
+    embedding: { dim: 1536 },
+  },
+  {
+    name: 'sales_activity',
+    tier: 'A',
+    tenantColumn: 'company_id',
+    notes:
+      'Deal activity feed. RLS: company_id = current_company_id() — exact.',
+  },
+  {
+    name: 'invoice',
+    tier: 'A',
+    tenantColumn: 'company_id',
+    notes: 'Billing. RLS: company_id = current_company_id() — exact.',
+  },
+  {
+    name: 'time_entry',
+    tier: 'A',
+    tenantColumn: 'company_id',
+    notes:
+      'Time & expenses. RLS: company_id = current_company_id() — exact. ' +
+      'Read-heavy historical; revisit column projection if shape memory grows.',
+  },
+  {
+    name: 'subcontract_request',
+    tier: 'A',
+    tenantColumn: 'company_id',
+    notes:
+      'HotSeatHub requests OWNED by this tenant. RLS also admits rows where ' +
+      'current company is in invited_company_ids (JSONB ? operator), which ' +
+      'Electric shapes cannot express — so we sync only company_id-owned rows, ' +
+      'a strict subset of the policy. GAP: invited-but-not-owned requests stay ' +
+      'REST until a sub-shape or server view exposes them. RULE 5 satisfied.',
+  },
+  {
+    name: 'subcontract_assignment',
+    tier: 'A',
+    tenantColumn: null,
+    // subcontract_assignment has NO company_id column; it is tenant-scoped by
+    // EITHER side of the hiring relationship. The custom predicate is exactly
+    // the RLS SELECT USING clause, so it is trivially a subset (RULE 5).
+    shapeWhere: (cid) =>
+      `(hiring_company_id = ${cid} OR subcontractor_company_id = ${cid})`,
+    notes:
+      'HotSeatHub assignments visible to either the hiring or subcontractor ' +
+      'company. No company_id column — scoped by the two company FKs, matching ' +
+      'the RLS both_select policy exactly.',
+  },
 ];
 
 /**
@@ -182,9 +280,16 @@ export const EMIT_ORDER: readonly string[] = [
   'entity_setting',
   'client',
   'client_address',
+  'attorney',
+  'lead',
   'trial',
   'trial_segment',
   'trial_service',
   'trial_contact',
   'trial_service_assignment',
+  'sales_activity',
+  'invoice',
+  'time_entry',
+  'subcontract_request',
+  'subcontract_assignment',
 ];
