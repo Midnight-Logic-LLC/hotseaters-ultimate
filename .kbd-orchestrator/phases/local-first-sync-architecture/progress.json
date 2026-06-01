@@ -1,0 +1,64 @@
+{
+  "phase": "local-first-sync-architecture",
+  "change_backend": "openspec",
+  "assessment_complete": true,
+  "plan_complete": true,
+  "execution_complete": true,
+  "reflection_complete": true,
+  "changes_total": 7,
+  "changes_completed": 7,
+  "changes": [
+    {
+      "id": "change-S01-multitable-sync-engine",
+      "change_state": "DONE",
+      "depends_on": []
+    },
+    {
+      "id": "change-S02-sync-config-coverage",
+      "change_state": "DONE",
+      "depends_on": [
+        "change-S01-multitable-sync-engine"
+      ]
+    },
+    {
+      "id": "change-S03-sales-leadradar-local-reads",
+      "change_state": "DONE",
+      "depends_on": [
+        "change-S02-sync-config-coverage"
+      ]
+    },
+    {
+      "id": "change-S04-billing-ops-local-reads",
+      "change_state": "DONE",
+      "depends_on": [
+        "change-S02-sync-config-coverage"
+      ]
+    },
+    {
+      "id": "change-S05-settings-company-local-reads",
+      "change_state": "DONE",
+      "depends_on": [
+        "change-S02-sync-config-coverage"
+      ]
+    },
+    {
+      "id": "change-S06-pgvector-semantic-search",
+      "change_state": "DONE",
+      "depends_on": [
+        "change-S02-sync-config-coverage"
+      ]
+    },
+    {
+      "id": "change-S07-verify-and-doc-correction",
+      "change_state": "DONE",
+      "depends_on": [
+        "change-S03-sales-leadradar-local-reads",
+        "change-S04-billing-ops-local-reads",
+        "change-S05-settings-company-local-reads",
+        "change-S06-pgvector-semantic-search"
+      ]
+    }
+  ],
+  "last_updated": "2026-06-01",
+  "execution_started": true
+}

@@ -17,9 +17,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useEntity } from '@prometheus-ags/prometheus-entity-management';
+import { useCompanyRow } from '@/shared/hooks/use-tier-a-query';
 import {
-  fetchCompanyById,
   updateCompany,
   updateCompanyImmediate as storeUpdateCompanyImmediate,
   uploadCompanyLogo,
@@ -157,13 +156,12 @@ export interface UseCompanySettingsResult {
 }
 
 export function useCompanySettings(companyId: string | null): UseCompanySettingsResult {
-  const { data, isLoading } = useEntity<CompanySettingsRecord, CompanySettingsRecord>({
-    type: 'Company',
-    id: companyId ?? '',
-    enabled: !!companyId,
-    fetch: (id) => fetchCompanyById(String(id)) as Promise<CompanySettingsRecord>,
-    normalize: (raw) => raw,
-  });
+  // S05: read the company row directly from the synced PGlite `company` view
+  // (Pattern 4) instead of the entity-graph `useEntity({ fetch })` bridge,
+  // which round-tripped to Supabase REST on every mount. `company` is a Tier-A
+  // synced table, so this is a local read with zero network.
+  const { rows, loading: isLoading } = useCompanyRow<CompanySettingsRecord>(companyId);
+  const data = rows[0] ?? null;
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

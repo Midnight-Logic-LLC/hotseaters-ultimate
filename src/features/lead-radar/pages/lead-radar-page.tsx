@@ -19,18 +19,16 @@
  * Self-hosted Supabase only. HotSeatersMVP is the bible.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Plus, Search, Radar, Users, User as UserIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { useTier1 } from '@/app/tier1-provider';
-import {
-  fetchLeadsForCompany,
-  fetchPendingActivitiesForCompany,
-  fetchAttorneysForCompany,
-  type LeadRow,
-  type SalesActivityRow,
-  type AttorneyRow,
+import { useTierAQuery } from '@/shared/hooks/use-tier-a-query';
+import type {
+  LeadRow,
+  SalesActivityRow,
+  AttorneyRow,
 } from '@/features/lead-radar/stores/lead-radar-store';
 import type { PipelineStage } from '@/shared/db/lookups-selectors';
 
@@ -46,35 +44,33 @@ interface EnrichedLead extends LeadRow {
 // ─── Hook: useLeadRadarData ───────────────────────────────────────────────────
 
 function useLeadRadarData(companyId: string | null) {
-  const [leads, setLeads] = useState<LeadRow[]>([]);
-  const [pendingActivities, setPendingActivities] = useState<SalesActivityRow[]>([]);
-  const [attorneys, setAttorneys] = useState<AttorneyRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // S03: read the now-synced lead / sales_activity / attorney tables directly
+  // from PGlite via the Tier-A live-query hook instead of REST-fetching the
+  // company slice on every mount. useTierAQuery is reactive — Electric pushes
+  // new rows into the local view and these update with no manual refetch.
+  const { rows: leads, loading: leadsLoading } = useTierAQuery<LeadRow>(
+    'lead',
+    companyId,
+  );
+  const { rows: pendingActivities, loading: activitiesLoading } =
+    useTierAQuery<SalesActivityRow>(
+      'sales_activity',
+      companyId,
+      '*',
+      "status = 'pending'",
+    );
+  const { rows: attorneys, loading: attorneysLoading } = useTierAQuery<AttorneyRow>(
+    'attorney',
+    companyId,
+  );
 
-  const load = useCallback(async () => {
-    if (!companyId) return;
-    setIsLoading(true);
-    try {
-      const [l, a, atty] = await Promise.all([
-        fetchLeadsForCompany(companyId),
-        fetchPendingActivitiesForCompany(companyId),
-        fetchAttorneysForCompany(companyId),
-      ]);
-      setLeads(l);
-      setPendingActivities(a);
-      setAttorneys(atty);
-    } catch {
-      // silently degrade — data shows empty state rather than crashing
-    } finally {
-      setIsLoading(false);
-    }
-  }, [companyId]);
+  const isLoading = leadsLoading || activitiesLoading || attorneysLoading;
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // Local reads are reactive, so there is nothing to invalidate. Kept as a
+  // stable no-op async fn so callers (LeadsRadarTab) don't break.
+  const invalidate = useCallback(async () => {}, []);
 
-  return { leads, pendingActivities, attorneys, isLoading, invalidate: load };
+  return { leads, pendingActivities, attorneys, isLoading, invalidate };
 }
 
 // ─── LeadFollowUpBanner ───────────────────────────────────────────────────────

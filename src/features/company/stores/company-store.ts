@@ -21,17 +21,9 @@ function ensureRegistered() {
 }
 ensureRegistered();
 
-// ─── Read fetchers (used by hooks as REST fallback for the entity graph) ──
-
-export async function fetchCompanyById(id: string): Promise<unknown> {
-  const { data, error } = await supabase
-    .from('company')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
-}
+// ─── Read fetchers ────────────────────────────────────────────────────────
+// S05: `fetchCompanyById` removed — `useCompanySettings` now reads the synced
+// `company` PGlite view via `useCompanyRow` (Pattern 4, zero network on read).
 
 export async function fetchUserInfoById(id: string): Promise<unknown> {
   const { data, error } = await supabase

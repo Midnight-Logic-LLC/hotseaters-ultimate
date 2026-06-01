@@ -19,12 +19,28 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // Import the pure, exported helpers from the generator script directly.
-import {
-  stripComments,
-  splitTopLevelObjects,
-  countTopLevelObjects,
-  parseSyncConfigSource,
-} from '../../../../scripts/gen-pglite-schema.mjs';
+// The generator is plain `.mjs` with no type declarations, so the import is
+// untyped (`any`); we re-type its surface locally below to keep the spec under
+// strict settings (noImplicitAny / noUncheckedIndexedAccess).
+// @ts-expect-error — no .d.ts for the .mjs generator script (intentional)
+import * as gen from '../../../../scripts/gen-pglite-schema.mjs';
+
+interface ParsedEntry {
+  name: string;
+  tier: string;
+  tenantColumn: string | null;
+}
+
+const stripComments = gen.stripComments as (src: string) => string;
+const splitTopLevelObjects = gen.splitTopLevelObjects as (
+  body: string,
+) => string[];
+const countTopLevelObjects = gen.countTopLevelObjects as (
+  body: string,
+) => number;
+const parseSyncConfigSource = gen.parseSyncConfigSource as (
+  src: string,
+) => ParsedEntry[];
 
 /** Wrap object-literal text in the minimal SYNC_CONFIG array shell the parser expects. */
 function wrapConfig(arrayBody: string): string {
@@ -92,10 +108,10 @@ describe('gen-pglite-schema SYNC_CONFIG parser', () => {
   },`,
     );
 
-    const entries = parseSyncConfigSource(src);
+    const entries: ParsedEntry[] = parseSyncConfigSource(src);
     expect(entries.map((e) => e.name)).toEqual(['company', 'user_info']);
-    expect(entries[0].tenantColumn).toBeNull();
-    expect(entries[1].tenantColumn).toBe('company_id');
+    expect(entries[0]?.tenantColumn).toBeNull();
+    expect(entries[1]?.tenantColumn).toBe('company_id');
   });
 
   it('counts top-level object literals correctly with comments and nested braces', () => {

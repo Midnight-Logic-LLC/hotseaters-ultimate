@@ -12,7 +12,9 @@ truth for transport decisions; changes to `sync-config.ts` or
 | Domain | Transport | Reason |
 |---|---|---|
 | Clients, Trials, TrialService, TrialContact, TrialSegment, TrialServiceAssignment | ElectricSQL shapes | Large historical set, offline replay, resumable from persisted offsets |
-| Invoice, BillPayment, TimeEntry, Expense | ElectricSQL shapes (future Tier-A) | Read-heavy historical; server-canonical; safe for bulk replay |
+| Lead, Attorney, SalesActivity | ElectricSQL shapes (Tier-A, added S02) | Sales/LeadRadar working set; read locally via useLiveQuery |
+| Invoice, TimeEntry, SubcontractRequest, SubcontractAssignment | ElectricSQL shapes (Tier-A, added S02) | Read-heavy historical; server-canonical; safe for bulk replay |
+| BillPayment, Expense | ElectricSQL shapes (future Tier-A) | Not yet in SYNC_CONFIG |
 | UserInfo (current row), Company (current row) | Supabase Realtime | Single row, latency-sensitive (theme, role changes must propagate in < 2 s) |
 | Notifications | Supabase Realtime | Push-driven; no historical bulk-load needed |
 | Reference data (metadata_type, entity_metadata — system-wide rows) | ElectricSQL via `system-shapes.ts` | Rarely changes; loaded once per session independent of tenant |

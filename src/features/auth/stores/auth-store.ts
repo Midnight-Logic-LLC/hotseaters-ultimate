@@ -205,29 +205,11 @@ export async function sendInvitation(payload: SendInvitationPayload): Promise<vo
   if (error) throw error;
 }
 
-// ─── Entity fetchers (used as REST fallback by feature hooks) ─────────────
-// The local-first runtime keeps these rows in PGlite; these REST fetchers are
-// only invoked on a cold graph cache miss (first paint after install).
-
-export async function fetchUserInfoById(id: string): Promise<unknown> {
-  const { data, error } = await supabase
-    .from('user_info')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
-}
-
-export async function fetchCompanyById(id: string): Promise<unknown> {
-  const { data, error } = await supabase
-    .from('company')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
-}
+// ─── Entity fetchers ──────────────────────────────────────────────────────
+// S05: `fetchUserInfoById` / `fetchCompanyById` REST fallbacks were removed.
+// All readers (use-current-user, use-current-company, use-current-roles) now
+// read the synced `user_info` / `company` PGlite views directly via
+// useTierAById / useCompanyRow (Pattern 4) — zero network on read.
 
 export interface CreateCompanyInput {
   name: string;

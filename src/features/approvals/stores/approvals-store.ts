@@ -17,16 +17,10 @@ export interface PendingMember {
   created_at: string;
 }
 
-export async function fetchPendingMembers(companyId: string): Promise<PendingMember[]> {
-  const { data, error } = await supabase
-    .from('user_info')
-    .select('id, first_name, last_name, email, company_role, account_status, created_at')
-    .eq('company_id', companyId)
-    .eq('account_status', 'pending')
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as PendingMember[];
-}
+// S04: the pending-member READ moved to the hook (`useApprovals` reads the
+// synced `user_info` table locally via useTierAQuery). The store now owns only
+// the approve/reject Edge Function writes (RULE D). `PendingMember` stays here
+// as the shared row shape consumed by the hook.
 
 export async function approveSubUser(userInfoId: string): Promise<void> {
   const { error } = await supabase.functions.invoke('approve-sub-user', {

@@ -39,7 +39,11 @@ describe('local common PGlite schema', () => {
   });
 
   it('does not overwrite the stored schema version before migration checks run', () => {
-    expect(schemaSql).toContain("VALUES (1, '20260526000001')");
+    // The version literal tracks the latest migration timestamp (bumped by
+    // gen:pglite-schema). The invariant under test is the DO NOTHING clause:
+    // the boot-time migration check reads the stored version AFTER re-applying
+    // this schema, so the INSERT must NOT overwrite it (see pglite-client.ts).
+    expect(schemaSql).toMatch(/INSERT INTO _pglite_schema_version[\s\S]*?VALUES \(1, '\d{14}'\)/);
     expect(schemaSql).toContain('ON CONFLICT (id) DO NOTHING');
   });
 });
