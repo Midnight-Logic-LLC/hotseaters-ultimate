@@ -21,7 +21,7 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -74,117 +74,205 @@ function mapType(serverType) {
   return 'TEXT';
 }
 
-// ── split a TS array body into top-level `{ ... }` object literals ──────────
+// ── parse sync-config.ts (text mode) ───────────────────────────────────────
 /**
- * Brace-depth scanner that ignores line and block comments and string
- * contents, so it cannot be fooled by braces/commas inside `notes:` strings or
- * by comments placed BETWEEN array entries. Returns the inner text of each
- * top-level object literal. Replaces the old naive regex that silently merged
- * adjacent entries when a comment sat between them (change-S02 dropped `lead`).
+ * Strip `//` line comments and block comments from TS/JS source while
+ * preserving string and template literals (so a `//` inside a `notes: '...'`
+ * value is never mistaken for a comment, and a comment is never mistaken for
+ * code). Returns source of identical length with comment bytes replaced by
+ * spaces — keeping offsets stable so any downstream slicing still lines up.
+ *
+ * This exists because the old regex object-splitter broke whenever a comment
+ * sat *between* two SYNC_CONFIG entries (`},\n  // x\n  {`): the `(?=\{|$)`
+ * lookahead would merge the two literals into one capture and silently drop
+ * the second entity (the `lead` table, in change-S02). Removing comments
+ * up front makes the brace-depth scanner immune to comment placement.
+ */
+function stripComments(src) {
+  let out = '';
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    const ch = src[i];
+    const next = src[i + 1];
+    // String / template literals — copy verbatim, honoring escapes.
+    if (ch === '"' || ch === "'" || ch === '`') {
+      const quote = ch;
+      out += ch;
+      i += 1;
+      while (i < n) {
+        const c = src[i];
+        out += c;
+        if (c === '\\') {
+          // copy the escaped char too
+          if (i + 1 < n) {
+            out += src[i + 1];
+            i += 2;
+            continue;
+          }
+        }
+        i += 1;
+        if (c === quote) break;
+      }
+      continue;
+    }
+    // Line comment — replace with spaces up to (not including) the newline.
+    if (ch === '/' && next === '/') {
+      while (i < n && src[i] !== '\n') {
+        out += ' ';
+        i += 1;
+      }
+      continue;
+    }
+    // Block comment — replace with spaces, preserving newlines for line counts.
+    if (ch === '/' && next === '*') {
+      out += '  ';
+      i += 2;
+      while (i < n && !(src[i] === '*' && src[i + 1] === '/')) {
+        out += src[i] === '\n' ? '\n' : ' ';
+        i += 1;
+      }
+      if (i < n) {
+        out += '  ';
+        i += 2;
+      }
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+/**
+ * Split an array body into its top-level `{ ... }` object-literal slices using
+ * a brace-depth scanner that ignores braces inside string/template literals.
+ * The input MUST already be comment-stripped (see `stripComments`). Returns the
+ * raw text of each top-level object (without the surrounding braces).
  */
 function splitTopLevelObjects(body) {
-  const blocks = [];
+  const objects = [];
   let depth = 0;
   let start = -1;
-  let inString = null; // quote char when inside a string
-  let inLineComment = false;
-  let inBlockComment = false;
-  for (let i = 0; i < body.length; i++) {
+  let i = 0;
+  const n = body.length;
+  while (i < n) {
     const ch = body[i];
-    const next = body[i + 1];
-    if (inLineComment) {
-      if (ch === '\n') inLineComment = false;
-      continue;
-    }
-    if (inBlockComment) {
-      if (ch === '*' && next === '/') {
-        inBlockComment = false;
-        i++;
+    // Skip over string/template literals so braces inside them don't count.
+    if (ch === '"' || ch === "'" || ch === '`') {
+      const quote = ch;
+      i += 1;
+      while (i < n) {
+        const c = body[i];
+        if (c === '\\') {
+          i += 2;
+          continue;
+        }
+        i += 1;
+        if (c === quote) break;
       }
-      continue;
-    }
-    if (inString) {
-      if (ch === '\\') {
-        i++; // skip escaped char
-      } else if (ch === inString) {
-        inString = null;
-      }
-      continue;
-    }
-    if (ch === '/' && next === '/') {
-      inLineComment = true;
-      i++;
-      continue;
-    }
-    if (ch === '/' && next === '*') {
-      inBlockComment = true;
-      i++;
-      continue;
-    }
-    if (ch === "'" || ch === '"' || ch === '`') {
-      inString = ch;
       continue;
     }
     if (ch === '{') {
       if (depth === 0) start = i + 1;
-      depth++;
+      depth += 1;
     } else if (ch === '}') {
-      depth--;
+      depth -= 1;
       if (depth === 0 && start !== -1) {
-        blocks.push(body.slice(start, i));
+        objects.push(body.slice(start, i));
         start = -1;
       }
     }
+    i += 1;
   }
-  return blocks;
+  return objects;
 }
 
-// ── parse sync-config.ts (text mode) ───────────────────────────────────────
 /**
- * Extracts entity names + tier + tenantColumn from the TS source. We avoid
- * spinning up ts-node by relying on the file's known shape (object literal
- * with `name:`, `tier:`, `tenantColumn:` keys).
+ * Count top-level object literals in an (already comment-stripped) array body
+ * by scanning for braces that open at depth 0, ignoring string contents. Used
+ * as a parse-integrity assertion: the number of parsed entries MUST equal this.
  */
-async function parseSyncConfig() {
-  const src = await readFile(CONFIG_PATH, 'utf8');
-  const entries = [];
+function countTopLevelObjects(body) {
+  return splitTopLevelObjects(body).length;
+}
 
-  // Find the SYNC_CONFIG array body
-  const arrMatch = src.match(/SYNC_CONFIG[^=]*=\s*\[([\s\S]*?)\n\];/);
+/**
+ * Parse the literal text of one SYNC_CONFIG object into our minimal shape.
+ * Returns null when the slice has neither a `name` nor a `tier` (e.g. an empty
+ * tail slice) so callers can distinguish "not an entry" from "malformed entry".
+ */
+function parseEntry(obj) {
+  const name = (obj.match(/name:\s*['"]([^'"]+)['"]/) || [])[1];
+  const tier = (obj.match(/tier:\s*['"]([AB])['"]/) || [])[1];
+  const tenantMatch = obj.match(/tenantColumn:\s*(null|['"][^'"]+['"])/);
+  const tenantColumn = tenantMatch
+    ? tenantMatch[1] === 'null'
+      ? null
+      : tenantMatch[1].slice(1, -1)
+    : null;
+  // S06: which runtime file the DDL routes into, and whether a pgvector
+  // `embedding` column rides this entity's synced/local tables.
+  const domain =
+    (obj.match(/domain:\s*['"](common|user)['"]/) || [])[1] || 'user';
+  const embMatch = obj.match(/embedding:\s*\{\s*dim:\s*(\d+)\s*\}/);
+  const embedding = embMatch ? { dim: Number(embMatch[1]) } : null;
+  if (!name && !tier) return null;
+  return { name, tier, tenantColumn, domain, embedding };
+}
+
+/**
+ * Extract entity name + tier + tenantColumn from SYNC_CONFIG source text.
+ *
+ * Robustness contract (the whole point of this function existing):
+ *   1. Comments anywhere — including BETWEEN two object literals — must never
+ *      merge or drop an entry. Achieved by stripping comments first.
+ *   2. The parse is verified: the number of `{name, tier}` entries MUST equal
+ *      the number of top-level `{ ... }` object literals in the array body. A
+ *      mismatch means an entry was silently dropped or malformed, and we throw
+ *      loudly rather than emit an incomplete schema.
+ *
+ * @param {string} src  full sync-config.ts source text
+ * @returns {{ name: string, tier: string, tenantColumn: string | null }[]}
+ */
+function parseSyncConfigSource(src) {
+  // Strip comments first so neither object-splitting nor key-matching can be
+  // fooled by a `//` between entries or a `//` inside a `notes:` string.
+  const clean = stripComments(src);
+
+  // Find the SYNC_CONFIG array body in the comment-stripped source.
+  const arrMatch = clean.match(/SYNC_CONFIG[^=]*=\s*\[([\s\S]*?)\n\];/);
   if (!arrMatch) throw new Error('Could not locate SYNC_CONFIG array');
   const body = arrMatch[1];
 
-  // Split into top-level object literals by brace depth, ignoring line
-  // comments and string contents. Robust to inter-object comments and `{}` in
-  // notes (the old naive regex silently merged adjacent entries — see
-  // change-S02). We then count the object literals so a parse-level drop fails
-  // loudly instead of silently shipping a short schema.
-  const objectBlocks = splitTopLevelObjects(body);
-  for (const obj of objectBlocks) {
-    const name = (obj.match(/name:\s*['"]([^'"]+)['"]/) || [])[1];
-    const tier = (obj.match(/tier:\s*['"]([AB])['"]/) || [])[1];
-    const tenantMatch = obj.match(/tenantColumn:\s*(null|['"][^'"]+['"])/);
-    const tenantColumn = tenantMatch
-      ? tenantMatch[1] === 'null'
-        ? null
-        : tenantMatch[1].slice(1, -1)
-      : null;
-    const domain =
-      (obj.match(/domain:\s*['"](common|user)['"]/) || [])[1] || 'user';
-    const embMatch = obj.match(/embedding:\s*\{\s*dim:\s*(\d+)\s*\}/);
-    const embedding = embMatch ? { dim: Number(embMatch[1]) } : null;
-    if (name && tier) entries.push({ name, tier, tenantColumn, domain, embedding });
+  const objectSlices = splitTopLevelObjects(body);
+  const entries = [];
+  for (const slice of objectSlices) {
+    const entry = parseEntry(slice);
+    if (entry && entry.name && entry.tier) entries.push(entry);
   }
+
   if (!entries.length) throw new Error('SYNC_CONFIG parsed empty');
-  if (entries.length !== objectBlocks.length) {
+
+  // Parse-integrity assertion: every top-level object literal must have
+  // yielded a {name, tier} entry. If counts diverge, an entry was dropped or
+  // malformed — fail loudly instead of silently emitting an incomplete schema.
+  const objectCount = objectSlices.length;
+  if (entries.length !== objectCount) {
     throw new Error(
-      `[gen-pglite-schema] parsed ${entries.length} entities but found ` +
-        `${objectBlocks.length} object literals in SYNC_CONFIG — an entry is ` +
-        `missing name/tier or the splitter mis-grouped. Refusing to emit a ` +
-        `short schema.`,
+      `SYNC_CONFIG parse mismatch: found ${objectCount} object literal(s) in ` +
+        `the array but parsed ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} ` +
+        `with both name + tier. An entry was dropped or is malformed (missing ` +
+        `name/tier, or tier not 'A'/'B'). Refusing to emit an incomplete schema.`,
     );
   }
+
   return entries;
+}
+
+async function parseSyncConfig() {
+  const src = await readFile(CONFIG_PATH, 'utf8');
+  return parseSyncConfigSource(src);
 }
 
 // ── read all migration files, in order ─────────────────────────────────────
@@ -612,7 +700,25 @@ async function main() {
   if (wrote === 0) console.log('[gen-pglite-schema] all files unchanged');
 }
 
-main().catch((err) => {
-  console.error('[gen-pglite-schema] failed:', err);
-  process.exit(1);
-});
+// Exported for unit testing (src/shared/db/__tests__/gen-pglite-schema.spec.ts).
+// These are pure functions with no I/O.
+export {
+  stripComments,
+  splitTopLevelObjects,
+  countTopLevelObjects,
+  parseEntry,
+  parseSyncConfigSource,
+};
+
+// Only run the generator when invoked directly (`node scripts/gen-pglite-schema.mjs`),
+// not when imported by a test. Comparing the resolved module URL to argv[1]
+// avoids triggering `main()` + `process.exit` on import.
+const invokedDirectly =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error('[gen-pglite-schema] failed:', err);
+    process.exit(1);
+  });
+}
