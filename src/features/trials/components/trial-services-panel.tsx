@@ -67,7 +67,7 @@ export function TrialServicesPanel({
       ) : (
         <ul className="space-y-2">
           {services.map((s) => (
-            <Card key={s.id} className="flex items-start justify-between p-3">
+            <Card key={s.id} data-testid="trial-service-row" className="flex items-start justify-between p-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{s.service_name ?? '—'}</span>

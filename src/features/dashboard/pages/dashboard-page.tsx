@@ -42,7 +42,11 @@ function partition(
 function renderSlot(specs: ReadonlyArray<WidgetSpec>) {
   return specs.map((s) => {
     const C = s.Component;
-    return <C key={s.id} />;
+    return (
+      <div key={s.id} data-testid="dashboard-card" className="contents">
+        <C />
+      </div>
+    );
   });
 }
 
@@ -64,6 +68,7 @@ export function DashboardPage() {
       <div
         className="mx-auto"
         style={{ maxWidth: 'var(--theme-max-content-width)' }}
+        data-testid="dashboard-card-stack"
       >
         {renderSlot(grouped.header)}
 
