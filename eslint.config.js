@@ -30,6 +30,8 @@ export default tseslint.config(
       'packages/**',
       'vendor/**',
       'latest-data/**',
+      'playwright-report/**',
+      'test-results/**',
     ],
   },
   js.configs.recommended,

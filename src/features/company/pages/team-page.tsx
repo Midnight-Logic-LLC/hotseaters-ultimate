@@ -63,6 +63,16 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useTier1 } from '@/app/tier1-provider';
 import { useIsMobile } from '@/shared/hooks/use-mobile';
 import { useTeam } from '@/features/company/hooks/use-team';
+import {
+  fetchPendingInvitations,
+  sendTeamInvite,
+  sendReferralInvite,
+  cancelInvitation,
+  deactivateTeamMember,
+  type InvitationRow,
+} from '@/features/company/stores/company-store';
+import { InviteTeamMemberWizard, type InviteWizardData } from '@/features/company/components/invite-team-member-wizard';
+import { ReferralInviteForm, type ReferralFormData } from '@/features/company/components/referral-invite-form';
 
 import { ConsultantAvatar } from './team-member-card';
 import { TierSection, PendingInviteRow } from './team-sections';
@@ -92,9 +102,15 @@ export function TeamPage() {
   const [selectedConsultant, setSelectedConsultant] = useState<Consultant | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Consultant | null>(null);
   const [cancellingInviteId, setCancellingInviteId] = useState<string | null>(null);
+  const [showInviteWizard, setShowInviteWizard] = useState(false);
+  const [showReferralForm, setShowReferralForm] = useState(false);
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [isSendingReferral, setIsSendingReferral] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
+  const [pendingInvitations, setPendingInvitations] = useState<InvitationRow[]>([]);
+  const [inviteTick, setInviteTick] = useState(0);
 
-  // Tier-2 stubs — pending entity wiring
-  const pendingInvitations: PendingInvite[] = [];
+  // Tier-2 stubs
   const favoriteUserInfos: Consultant[] = [];
   const userServices: UserServiceRecord[] = [];
   const services: ServiceRecord[] = [];
@@ -137,6 +153,17 @@ export function TeamPage() {
     return () => window.removeEventListener('popstate', checkUrl);
   }, [members]);
 
+  // ── Pending invitations ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!companyId) return;
+    fetchPendingInvitations(companyId)
+      .then((rows) => setPendingInvitations(rows))
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Failed to load invitations';
+        toast.error(msg);
+      });
+  }, [companyId, inviteTick]);
+
   // ── Filtered + sorted consultants ─────────────────────────────────────────
   const filteredConsultants = useMemo<Consultant[]>(() => {
     return (members as Consultant[])
@@ -160,22 +187,82 @@ export function TeamPage() {
   const toggleGroup = (key: string) =>
     setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  // ── Invite stubs ──────────────────────────────────────────────────────────
-  const handleInvite = () => toast.info('Invite functionality coming soon');
-  const handleReferral = () => toast.info('Referral invitation coming soon');
-  const handleCancelInvite = (id: string) => {
-    setCancellingInviteId(id);
-    toast.info('Invitation management coming soon');
-    setTimeout(() => setCancellingInviteId(null), 800);
+  // ── Invite / deactivate handlers ─────────────────────────────────────────
+  const handleInvite = () => setShowInviteWizard(true);
+  const handleReferral = () => setShowReferralForm(true);
+
+  const handleSendInvite = async (data: InviteWizardData) => {
+    if (!companyId) return;
+    setIsSendingInvite(true);
+    try {
+      await sendTeamInvite({
+        invitation_type: 'team',
+        email: data.email,
+        first_name: data.first_name,
+        last_name: data.last_name,
+        role: data.role,
+        consultant_tier_id: data.consultant_tier_id,
+        service_ids: data.service_ids,
+        name: `${data.first_name} ${data.last_name}`.trim(),
+      });
+      toast.success('Invitation sent successfully');
+      setShowInviteWizard(false);
+      setInviteTick((t) => t + 1);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send invitation');
+    } finally {
+      setIsSendingInvite(false);
+    }
   };
-  const handleDeactivateConfirm = () => {
-    toast.info('Deactivation coming soon');
-    setDeactivateTarget(null);
+
+  const handleSendReferral = async (data: ReferralFormData) => {
+    setIsSendingReferral(true);
+    try {
+      await sendReferralInvite({ invitation_type: 'hsh_referral', ...data });
+      toast.success('Referral invitation sent!');
+      setShowReferralForm(false);
+      setInviteTick((t) => t + 1);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send referral');
+    } finally {
+      setIsSendingReferral(false);
+    }
+  };
+
+  const handleCancelInvite = async (id: string) => {
+    setCancellingInviteId(id);
+    try {
+      await cancelInvitation(id);
+      toast.success('Invitation removed');
+      setInviteTick((t) => t + 1);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel invitation');
+    } finally {
+      setCancellingInviteId(null);
+    }
+  };
+
+  const handleDeactivateConfirm = async () => {
+    if (!deactivateTarget) return;
+    setIsDeactivating(true);
+    try {
+      await deactivateTeamMember(deactivateTarget.id);
+      toast.success('Team member deactivated successfully');
+      setDeactivateTarget(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to deactivate team member');
+    } finally {
+      setIsDeactivating(false);
+    }
   };
 
   // ── Partition invitations ─────────────────────────────────────────────────
-  const teamInvites = pendingInvitations.filter((i) => i.invitation_type !== 'referral');
-  const referralInvites = pendingInvitations.filter((i) => i.invitation_type === 'referral');
+  const teamInvites: PendingInvite[] = pendingInvitations
+    .filter((i) => i.invitation_type !== 'referral')
+    .map((i) => ({ ...i, email: i.email ?? '' }));
+  const referralInvites: PendingInvite[] = pendingInvitations
+    .filter((i) => i.invitation_type === 'referral')
+    .map((i) => ({ ...i, email: i.email ?? '' }));
 
   // ── Guards ────────────────────────────────────────────────────────────────
   if (!authLoading && !isAuthenticated) return <Navigate to="/login" replace />;
@@ -723,18 +810,40 @@ export function TeamPage() {
               (timesheets, expenses, etc.) will be preserved. You can reactivate them later if needed.
             </AlertDialogDescription>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={isDeactivating}>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={handleDeactivateConfirm}
+                onClick={(e) => { e.preventDefault(); void handleDeactivateConfirm(); }}
+                disabled={isDeactivating}
                 className="bg-orange-600 hover:bg-orange-700"
               >
-                Deactivate
+                {isDeactivating ? 'Deactivating...' : 'Deactivate'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
 
       </div>
+
+      {/* Invite wizard */}
+      {isOwnerOrAdmin && (
+        <InviteTeamMemberWizard
+          open={showInviteWizard}
+          onOpenChange={setShowInviteWizard}
+          onSend={(data) => { void handleSendInvite(data); }}
+          isSending={isSendingInvite}
+          existingEmails={members.map((m) => (m as { email?: string }).email ?? '').filter(Boolean)}
+        />
+      )}
+
+      {/* Referral form */}
+      {isOwnerOrAdmin && (
+        <ReferralInviteForm
+          open={showReferralForm}
+          onOpenChange={setShowReferralForm}
+          onSend={(data) => { void handleSendReferral(data); }}
+          isSending={isSendingReferral}
+        />
+      )}
     </div>
   );
 }

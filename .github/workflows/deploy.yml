@@ -9,7 +9,6 @@
 # so ArgoCD picks up the new tag and rolls out the cluster.
 #
 # Required repository secrets:
-#   GCP_SA_KEY                  JSON key, roles: artifactregistry.writer
 #                               (no container.developer needed — we only
 #                               push images; the cross-repo PR handles
 #                               kustomization updates without kubectl)
@@ -38,9 +37,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GCP_PROJECT: prometheus-461323
-  GAR_LOCATION: us-central1-docker.pkg.dev
-  GAR_REPO: prometheus
+  ACR: prometheusagsacr.azurecr.io
+  ACR_NAME: prometheusagsacr
+  AKS_RG: prometheus-rg
   IMAGE_NAME: hotseaters-ultimate
   LATEST_DATA_REPO: Midnight-Logic-LLC/hotseaters-data-migration-system
   OVERLAY_FILE: k8s/overlays/prometheus/app/kustomization.yaml
@@ -96,16 +95,16 @@ jobs:
         run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       # --- GCP auth + docker login ---------------------------------------
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ env.GAR_LOCATION }} --quiet
+      - name: ACR login
+        run: az acr login --name prometheusagsacr
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -131,8 +130,8 @@ jobs:
             VITE_APP_NAME=HotSeaters
             VITE_APP_VERSION=${{ steps.tag.outputs.sha }}
           tags: |
-            ${{ env.GAR_LOCATION }}/${{ env.GCP_PROJECT }}/${{ env.GAR_REPO }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sha }}
-            ${{ env.GAR_LOCATION }}/${{ env.GCP_PROJECT }}/${{ env.GAR_REPO }}/${{ env.IMAGE_NAME }}:latest
+            prometheusagsacr.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.sha }}
+            prometheusagsacr.azurecr.io/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -172,7 +171,7 @@ jobs:
           NEW_SHA: ${{ steps.tag.outputs.sha }}
         run: |
           set -euo pipefail
-          REG="${GAR_LOCATION}/${GCP_PROJECT}/${GAR_REPO}"
+          REG="prometheusagsacr.azurecr.io"
           cd "$(dirname "${OVERLAY_FILE}")"
           kustomize edit set image \
             "hotseaters/hotseaters-ultimate=${REG}/${IMAGE_NAME}:${NEW_SHA}"
@@ -212,7 +211,7 @@ jobs:
           {
             echo "## hotseaters-ultimate deploy"
             echo ""
-            echo "**Image:** \`${GAR_LOCATION}/${GCP_PROJECT}/${GAR_REPO}/${IMAGE_NAME}:${NEW_SHA}\`"
+            echo "**Image:** \`prometheusagsacr.azurecr.io/${IMAGE_NAME}:${NEW_SHA}\`"
             echo ""
             echo "Bumped tag on \`${LATEST_DATA_REPO}\`:"
             echo "  \`${OVERLAY_FILE}\`"

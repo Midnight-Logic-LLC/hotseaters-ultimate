@@ -3,14 +3,18 @@
   "project": "hotseaters-ultimate",
   "status": "executing",
   "assessment_complete": true,
+  "analyze_complete": true,
   "plan_complete": true,
   "execution_complete": false,
   "reflection_complete": false,
   "change_backend": "openspec",
+  "changes_completed": 11,
+  "changes_total": 14,
   "assessment_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/assessment.md",
+  "analysis_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/analysis.md",
   "plan_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/plan.md",
   "progress_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/progress.json",
-  "active_wave": "V03 — public/marketing surface audit + VR",
+  "active_wave": "V11 — Drift remediation (AcceptInvite, MobileMore, Clients, Timeline, T&E, Team, Billing store, HSH store, +more)",
   "phase_summary": "Prove RULE-0 parity across all ported pages (audit + bible-vs-port VR). Does NOT re-port wholesale, but V03 surfaced real drift that is being remediated as found. 13 changes V01-V13.",
   "next_step": "Finish V03: /ReferralLanding desktop (24.1%) audit/re-port + /PrivacyPolicy /TermsOfService MDX content audit (RULE 7). Optional: Landing residual spacing pass (24.5% desktop, now a small vertical-offset after the rem-base fix). Then close V03 -> V04.",
   "execution_order": [
@@ -43,5 +47,6 @@
     "sales-deals-rearchitecture (COMPLETE 2026-05-29, 9/9 reflected, deployed)"
   ],
   "bible_baseline": "29ae47e3 (refreshed 2026-05-29; old state tagged pre-parity-reset-2026-05-29)",
-  "last_updated": "2026-05-30"
+  "last_updated": "2026-06-29",
+  "next_step": "Execute change-V03 (IN_PROGRESS): finish ReferralLanding desktop audit/re-port (24.1% drift), PrivacyPolicy/TermsOfService MDX content audit. Can run change-V11a (schema gap migrations: deal_note, lead_activity, favorites_list) in parallel — it is independent. After V03 done, start V04 in parallel with V11a if not yet complete."
 }

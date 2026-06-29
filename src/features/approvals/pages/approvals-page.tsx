@@ -8,113 +8,61 @@
  *   2. Approve Time
  *   3. Approve Expenses
  *
- * Parity notes
- * ─────────────
- * - Visible header: "Approvals" + sub-copy "Review and approve pending time
- *   entries and expenses" (desktop only, hidden on mobile — matches bible).
- * - isPerTrial guard around ApprovalsCompactSummary.
- * - Grid: 2-col (lg) normally, 3-col when HSH invoices present.
- * - All var(--theme-*) tokens preserved verbatim.
- * - Sub-components (ApproveTimeColumn, ApproveExpensesColumn,
- *   ApproveHSHInvoicesColumn, ApprovalsCompactSummary) are Tier-2 stubs
- *   that render a loading-safe placeholder — they will be ported separately.
- * - Tier-2 data stubs (empty arrays) until the billing store lands.
- *
  * RULE B: no store imports here — only hooks.
  * RULE F: src/features/approvals/pages/
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
 import { useTier1 } from '@/app/tier1-provider';
 import { useIsMobile } from '@/shared/hooks/use-mobile';
-import { Loader2 } from 'lucide-react';
-
-// ── Tier-2 data stubs (replace with real hooks when billing store lands) ──────
-const EMPTY_ARR: never[] = [];
-
-// ── Inline stub sub-columns ───────────────────────────────────────────────────
-// These render a placeholder matching the bible's column chrome until the real
-// components are ported (ApproveTimeColumn, ApproveExpensesColumn, etc.).
-
-interface StubColumnProps {
-  title: string;
-  isLoading: boolean;
-}
-
-function StubColumn({ title, isLoading }: StubColumnProps) {
-  return (
-    <div
-      style={{
-        backgroundColor: 'var(--theme-card-bg)',
-        borderRadius: 'var(--theme-card-radius)',
-        border: '1px solid var(--theme-stone-200)',
-        padding: 'var(--theme-card-padding)',
-        boxShadow: 'var(--theme-card-shadow)',
-        minHeight: 200,
-      }}
-    >
-      <p
-        className="font-semibold text-sm mb-3"
-        style={{ color: 'var(--theme-stone-900)' }}
-      >
-        {title}
-      </p>
-      {isLoading ? (
-        <div className="flex items-center gap-2" style={{ color: 'var(--theme-stone-500)' }}>
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-xs">Loading…</span>
-        </div>
-      ) : (
-        <p className="text-xs text-center py-8" style={{ color: 'var(--theme-stone-500)' }}>
-          No items pending
-        </p>
-      )}
-    </div>
-  );
-}
-
-// ── Page ─────────────────────────────────────────────────────────────────────
+import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useTeam } from '@/features/company/hooks/use-team';
+import { useBillingApprovals } from '@/features/approvals/hooks/use-billing-approvals';
+import { ApprovalsCompactSummary } from '@/features/approvals/components/approvals-compact-summary';
+import { ApproveTimeColumn } from '@/features/approvals/components/approve-time-column';
+import { ApproveExpensesColumn } from '@/features/approvals/components/approve-expenses-column';
+import { ApproveHSHInvoicesColumn } from '@/features/approvals/components/approve-hsh-invoices-column';
 
 export function ApprovalsPage() {
+  const { companyId } = useAuth();
+  const { userInfo, company, isLoading: tier1Loading } = useTier1();
+  const { members } = useTeam(companyId);
+  const isMobile = useIsMobile();
+
   const [selectedTimeEntries, setSelectedTimeEntries] = useState<string[]>([]);
   const [selectedExpenses, setSelectedExpenses] = useState<string[]>([]);
   const [includeInProgress, setIncludeInProgress] = useState(false);
 
-  void setSelectedTimeEntries;
-  void setSelectedExpenses;
-
-  const { userInfo, company, isLoading: tier1Loading } = useTier1();
-  const isMobile = useIsMobile();
-
-  // ── Tier-2 stubs (real stores pending) ─────────────────────────────────────
-  const timeEntries = EMPTY_ARR;
-  const expenses = EMPTY_ARR;
-  const consultants = EMPTY_ARR;
-  const trials = EMPTY_ARR;
-  const subcontractAssignments = EMPTY_ARR;
-  const hshCompanies = EMPTY_ARR;
-  const hshInvoices = EMPTY_ARR;
-  const enrichedHSHInvoices = EMPTY_ARR;
-  const hshSubcontractorCompanies = EMPTY_ARR;
-  const isApprovalDataLoading = false;
-
-  // ── Business rules ──────────────────────────────────────────────────────────
   const isOwnerOrAdmin =
     userInfo?.company_role === 'owner' || userInfo?.company_role === 'admin';
-
   const isPerTrial = company?.invoice_period === 'per_trial';
   const effectiveIncludeInProgress = isPerTrial ? true : includeInProgress;
 
-  void selectedTimeEntries;
-  void selectedExpenses;
-  void effectiveIncludeInProgress;
-  void timeEntries;
-  void expenses;
-  void consultants;
-  void trials;
-  void subcontractAssignments;
-  void hshCompanies;
-  void hshInvoices;
-  void hshSubcontractorCompanies;
+  const {
+    data,
+    isLoading: billingLoading,
+    isApprovingTime,
+    isApprovingExpenses,
+    isApprovingHsh,
+    approveTime,
+    approveExp,
+    approveHsh,
+  } = useBillingApprovals(isOwnerOrAdmin ? companyId : null);
+
+  const consultants = members;
+
+  // Enrich HSH invoices with trial names from local trial list
+  const enrichedHSHInvoices = useMemo(() => {
+    if (!data) return [];
+    return data.hshInvoices.map((inv) => {
+      const trial = data.trials.find((t) => t.id === inv.trial_id);
+      return { ...inv, trial_name: inv.trial_name ?? trial?.case_name ?? '' };
+    });
+  }, [data]);
+
+  const isApprovalDataLoading = billingLoading;
+
+  // ── Guards ─────────────────────────────────────────────────────────────────
 
   if (tier1Loading) {
     return (
@@ -143,7 +91,7 @@ export function ApprovalsPage() {
       className="lg:px-8"
     >
       <div style={{ maxWidth: 'var(--theme-max-content-width)' }} className="mx-auto">
-        {/* Page Header — desktop only (bible: hidden on mobile) */}
+        {/* Page Header — desktop only */}
         <div className="hidden lg:block mb-8">
           <h1
             className="font-bold mb-2"
@@ -155,47 +103,23 @@ export function ApprovalsPage() {
           >
             Approvals
           </h1>
-          <p
-            style={{
-              fontSize: 'var(--theme-text-body)',
-              color: 'var(--theme-stone-600)',
-            }}
-          >
+          <p style={{ fontSize: 'var(--theme-text-body)', color: 'var(--theme-stone-600)' }}>
             Review and approve pending time entries and expenses
           </p>
         </div>
 
-        {/* Summary Bar — hidden when per_trial billing (bible line 221–232) */}
+        {/* Summary Bar */}
         {!isPerTrial && (
-          <div
-            className="mb-6 p-4 rounded-lg"
-            style={{
-              backgroundColor: 'var(--theme-card-bg)',
-              border: '1px solid var(--theme-stone-200)',
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium" style={{ color: 'var(--theme-stone-600)' }}>
-                Include in-progress
-              </span>
-              <button
-                onClick={() => setIncludeInProgress((v) => !v)}
-                className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
-                style={{
-                  backgroundColor: includeInProgress
-                    ? 'var(--theme-brand-primary)'
-                    : 'var(--theme-stone-300)',
-                }}
-                aria-checked={includeInProgress}
-                role="switch"
-              >
-                <span
-                  className="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"
-                  style={{ transform: `translateX(${includeInProgress ? '18px' : '2px'})` }}
-                />
-              </button>
-            </div>
-          </div>
+          <ApprovalsCompactSummary
+            company={company ?? null}
+            timeEntries={data?.timeEntries ?? []}
+            expenses={data?.expenses ?? []}
+            consultants={consultants}
+            trials={data?.trials ?? []}
+            subcontractAssignments={data?.subcontractAssignments ?? []}
+            includeInProgress={includeInProgress}
+            onIncludeInProgressChange={setIncludeInProgress}
+          />
         )}
 
         {/* Approval Columns */}
@@ -207,18 +131,52 @@ export function ApprovalsPage() {
           }
         >
           {enrichedHSHInvoices.length > 0 && (
-            <StubColumn
-              title="HSH Invoices"
+            <ApproveHSHInvoicesColumn
+              hshInvoices={enrichedHSHInvoices}
+              subcontractorCompanies={data?.hshSubcontractorCompanies ?? []}
+              companyId={companyId}
               isLoading={isApprovalDataLoading}
+              trials={data?.trials ?? []}
+              subcontractAssignments={data?.subcontractAssignments ?? []}
+              onApprove={(ids) => void approveHsh(ids)}
+              isApproving={isApprovingHsh}
             />
           )}
-          <StubColumn
-            title="Approve Time"
+
+          <ApproveTimeColumn
+            timeEntries={data?.timeEntries ?? []}
+            selectedTimeEntries={selectedTimeEntries}
+            setSelectedTimeEntries={setSelectedTimeEntries}
+            consultants={consultants}
+            companyId={companyId}
+            company={company ?? null}
+            subcontractAssignments={data?.subcontractAssignments ?? []}
+            hshCompanies={data?.hshCompanies ?? []}
+            trials={data?.trials ?? []}
             isLoading={isApprovalDataLoading}
+            includeInProgress={effectiveIncludeInProgress}
+            onApprove={(ids) => {
+              void approveTime(ids).then(() => setSelectedTimeEntries([]));
+            }}
+            isApproving={isApprovingTime}
           />
-          <StubColumn
-            title="Approve Expenses"
+
+          <ApproveExpensesColumn
+            expenses={data?.expenses ?? []}
+            selectedExpenses={selectedExpenses}
+            setSelectedExpenses={setSelectedExpenses}
+            consultants={consultants}
+            companyId={companyId}
+            company={company ?? null}
+            subcontractAssignments={data?.subcontractAssignments ?? []}
+            hshCompanies={data?.hshCompanies ?? []}
+            trials={data?.trials ?? []}
             isLoading={isApprovalDataLoading}
+            includeInProgress={effectiveIncludeInProgress}
+            onApprove={(ids) => {
+              void approveExp(ids).then(() => setSelectedExpenses([]));
+            }}
+            isApproving={isApprovingExpenses}
           />
         </div>
       </div>

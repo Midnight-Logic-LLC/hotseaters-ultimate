@@ -29,7 +29,6 @@ import {
   BookOpen,
   LogOut,
   ChevronRight,
-  Radar,
   Telescope,
 } from 'lucide-react';
 import { useTier1 } from '@/app/tier1-provider';
@@ -59,6 +58,7 @@ function getMoreItems(
 ): MoreEntry[] {
   const isOwnerOrAdmin = userRole === 'owner' || userRole === 'admin';
   const isOwner = userRole === 'owner';
+  const isSales = userRole === 'sales';
   const hasSalesAccess = userInfo?.is_sales === true;
   const isTrialConsultant = userRole === 'trial_consultant';
 
@@ -76,34 +76,49 @@ function getMoreItems(
   // --- Overview ---
   items.push({ section: 'Overview' });
   items.push({ label: 'Dashboard', icon: LayoutDashboard, page: 'Dashboard' });
-  if (isOwnerOrAdmin) {
+  if (isOwner) {
     items.push({ label: 'Projections', icon: TrendingUp, page: 'Projections' });
   }
 
-  // --- Sales --- (skip for owner since it's in bottom tab popup)
-  if (!isOwner && (!isTrialConsultant || hasSalesAccess)) {
+  // --- Sales ---
+  // Bible: show to owner/admin/tc+sales_access; hide from sales role
+  if ((!isTrialConsultant || hasSalesAccess) && !isSales) {
     items.push({ section: 'Sales' });
-    items.push({ label: 'Lead Radar', icon: Radar, page: 'LeadRadar' });
-    items.push({ label: 'Deal Tracker', icon: Telescope, page: 'DealTracker' });
+    if (!isOwner && userRole !== 'admin') {
+      items.push({ label: 'Deal Tracker', icon: Telescope, page: 'DealTracker' });
+    }
     items.push({ label: 'Clients', icon: Building2, page: 'Clients' });
   }
 
-  // --- Operations --- (Timeline: skip for owner)
-  if (!isOwner) {
+  // --- Operations --- (owners have Trials + Timeline in the bottom tab bar)
+  // Bible: hidden from both owner AND sales
+  if (!isOwner && !isSales) {
     items.push({ section: 'Operations' });
     items.push({ label: 'Trial Timeline', icon: GanttChart, page: 'Timeline' });
   }
 
-  // --- Billing --- (skip for owner since Billing tab is in bottom bar)
+  // --- Billing --- (admin only — NOT owner since owner has Billing in bottom bar)
+  // Bible: isOwnerOrAdmin && !isOwner  →  admin only
   if (isOwnerOrAdmin && !isOwner) {
     items.push({ section: 'Billing' });
     items.push({ label: 'Approvals', icon: CheckCircle2, page: 'Approvals' });
-    items.push({ label: 'Invoices', icon: DollarSign, page: 'Invoices' });
-    items.push({ label: 'Payments', icon: HandCoins, page: 'Payments' });
+    // Bible: Invoices + Payments only if userRole !== 'admin' is FALSE (i.e., shown to admin)
+    // Wait — bible says `if (userRole !== "admin")` which means it SKIPS them for admin?
+    // Re-read: the block is inside `isOwnerOrAdmin && !isOwner` so only admin enters.
+    // `if (userRole !== "admin")` inside means: skip Invoices+Payments for admin, add for non-admin.
+    // But the outer gate already restricts to admin only. So Invoices+Payments are NEVER shown.
+    // Bible line 63: `if (userRole !== "admin") { push Invoices, Payments }`
+    // Inside `isOwnerOrAdmin && !isOwner` block, only admin reaches here.
+    // userRole !== "admin" is false for admin → Invoices/Payments are NOT added.
+    // This matches: admin gets Approvals only; Invoices/Payments hidden from everyone in this block.
+    if (userRole !== 'admin') {
+      items.push({ label: 'Invoices', icon: DollarSign, page: 'Invoices' });
+      items.push({ label: 'Payments', icon: HandCoins, page: 'Payments' });
+    }
   }
 
-  // --- HotSeatHub ---
-  if (isOwnerOrAdmin && !isOwner) {
+  // --- HotSeatHub --- (owner AND admin AND sales — bible: isOwnerOrAdmin || isSales)
+  if (isOwnerOrAdmin || isSales) {
     if (!company?.marketplace_fill_jobs && !company?.marketplace_post_jobs) {
       items.push({ section: 'HotSeatHub' });
       items.push({ label: 'Join HotSeatHub', icon: Rocket, page: 'HotSeatHubMarketing' });
@@ -123,7 +138,7 @@ function getMoreItems(
     }
   }
 
-  // --- Company ---
+  // --- Company --- (all non-TC roles reach here)
   items.push({ section: 'Company' });
   items.push({ label: 'Team', icon: Users, page: 'Team' });
   if (isOwnerOrAdmin) {

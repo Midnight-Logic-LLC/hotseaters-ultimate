@@ -209,7 +209,7 @@ export function CollectionsPage() {
   // Tier-1: read user/company from the boot-cached provider
   const { company } = useTier1();
   void company; // companyId used when Tier-2 store lands
-  const ownClients: Client[] = []; // Tier-2 store pending — stub empty array
+  const ownClients = useMemo<Client[]>(() => [], []); // Tier-2 store pending — stub empty array
 
   // View type: card on mobile, list on desktop
   const [viewType, setViewType] = useState<'card' | 'list' | null>(null);
@@ -269,11 +269,11 @@ export function CollectionsPage() {
 
   // Stub data — Tier-2 store pending
   const isLoading = false;
-  const invoices: Invoice[] = [];
+  const invoices = useMemo<Invoice[]>(() => [], []);
   const clients: Client[] = ownClients;
-  const trials: Trial[] = [];
-  const payments: Collection[] = [];
-  const hiringCompanies: Client[] = [];
+  const trials = useMemo<Trial[]>(() => [], []);
+  const payments = useMemo<Collection[]>(() => [], []);
+  const hiringCompanies = useMemo<Client[]>(() => [], []);
 
   // Build a map of total collections per invoice (bible lines 188–196)
   const paymentsByInvoice = useMemo<PaymentsByInvoice>(() => {

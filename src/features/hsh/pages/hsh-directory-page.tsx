@@ -279,8 +279,8 @@ export function HshDirectoryPage() {
 
   // ── Tier-2 data: stubbed pending marketplace store port ───────────────────
   // When the store lands, replace these stubs with real data from the hook.
-  const allCompanies: Company[] = [];
-  const favorites: FavoriteSubcontractor[] = [];
+  const allCompanies = useMemo<Company[]>(() => [], []);
+  const favorites = useMemo<FavoriteSubcontractor[]>(() => [], []);
   const isMainDataLoading = false;
   // ─────────────────────────────────────────────────────────────────────────
 

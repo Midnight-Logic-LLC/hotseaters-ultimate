@@ -22,7 +22,7 @@
  *
  * HotSeatersMVP is the bible. Self-hosted Supabase only.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -57,7 +57,7 @@ import { Button } from '@/components/ui/button';
 import { PolicyViewerModal } from '@/features/marketing/components/policy-viewer-modal';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user';
-import { buildGoogleFontsUrl, generateThemeCSS, MARKETING_THEME } from '@/shared/lib/theme';
+import { applyThemeVars, buildGoogleFontsUrl, DEFAULT_THEME, MARKETING_THEME } from '@/shared/lib/theme';
 
 // ── Bible arrays — verbatim from Landing.jsx lines 60-109 ─────────────────
 
@@ -250,6 +250,11 @@ export function LandingPage() {
     title: string;
   }>({ type: 'privacy', title: 'Privacy Policy' });
 
+  useEffect(() => {
+    applyThemeVars(MARKETING_THEME);
+    return () => applyThemeVars(DEFAULT_THEME);
+  }, []);
+
   const destination = pickAuthedDestination({
     isLoading,
     isAuthenticated,
@@ -284,7 +289,6 @@ export function LandingPage() {
 
   return (
     <>
-      <style>{generateThemeCSS(MARKETING_THEME)}</style>
       <style>{RIPPLE_CSS}</style>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
