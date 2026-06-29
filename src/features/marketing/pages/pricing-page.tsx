@@ -29,6 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useTier1 } from '@/app/tier1-provider';
 import { PolicyViewerModal } from '@/features/marketing/components/policy-viewer-modal';
+import { applyThemeVars, DEFAULT_THEME, MARKETING_THEME } from '@/shared/lib/theme';
 
 const MONTHLY_PRICE = 45;
 const YEARLY_DISCOUNT = 0.2;
@@ -58,6 +59,11 @@ interface PolicyModalState {
 export function PricingPage() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
+  useEffect(() => {
+    applyThemeVars(MARKETING_THEME);
+    return () => applyThemeVars(DEFAULT_THEME);
+  }, []);
+
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
   const [policyModalData, setPolicyModalData] = useState<PolicyModalState>({
     type: 'privacy',

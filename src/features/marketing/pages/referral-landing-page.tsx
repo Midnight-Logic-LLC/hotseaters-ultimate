@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,10 +20,16 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { applyThemeVars, DEFAULT_THEME, MARKETING_THEME } from '@/shared/lib/theme';
 
 export function ReferralLandingPage() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    applyThemeVars(MARKETING_THEME);
+    return () => applyThemeVars(DEFAULT_THEME);
+  }, []);
 
   const urlParams = new URLSearchParams(window.location.search);
   const refCompany = urlParams.get('ref_company') ?? '';

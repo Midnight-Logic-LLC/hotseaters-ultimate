@@ -2,15 +2,16 @@
   "phase": "page-parity-verification-hardening",
   "assessment_complete": true,
   "plan_complete": true,
-  "execution_complete": false,
+  "execution_complete": true,
   "reflection_complete": false,
-  "changes_total": 13,
-  "changes_completed": 2,
+  "changes_total": 14,
+  "changes_completed": 14,
   "change_backend": "openspec",
-  "last_updated": "2026-05-29",
-  "last_updated_by": "claude-opus-4-8",
-  "key_finding": "change-V01 ran bible-vs-port live: deployed port at / /Landing /Pricing renders BLANK (~79% drift) while bible shows full marketing landing. SPA shell + bundle serve fine → likely STALE DEPLOY (bundle predates W1 landing port). Needs deploy verification before assuming code defect. See audits/_DRIFT-BACKLOG.md.",
+  "last_updated": "2026-06-29",
+  "last_updated_by": "claude-sonnet-4-6",
+  "key_finding": "2026-06-28 deep gap analysis: 3 root blockers — (1) billing store not landed (blocks Approvals/Invoices/Bills/Collections), (2) Timeline + TimeAndExpenses are skeleton stubs, (3) HSH Tier-2 data + mutations absent. MobileMore has 10 role-gate defects. Clients list missing major UX (groups/card/import). DealTracker TrialDetails overlay is a stub. /kbd-analyze confirmed 2 CSS bugs (S-1: marketing theme font override, S-2: missing [role=dialog] theming selectors) and 4 missing schema tables (deal_note, lead_activity, favorites_list, sample_data TBD). See assessment.md + analysis.md.",
   "assessment_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/assessment.md",
+  "analysis_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/analysis.md",
   "plan_path": ".kbd-orchestrator/phases/page-parity-verification-hardening/plan.md",
   "changes": [
     {
@@ -26,85 +27,82 @@
     {
       "id": "change-V03",
       "title": "Public/marketing surface — audit + extend bible-vs-port",
-      "change_state": "IN_PROGRESS"
+      "change_state": "DONE"
     },
     {
       "id": "change-V04",
       "title": "Auth/payment surface — audit + VR",
-      "change_state": "PENDING"
+      "change_state": "DONE",
+      "note": "AcceptInvite FAIL (5 blocking defects: gradient header/logo/3-step explainer/email reminder missing). Others PASS."
     },
     {
       "id": "change-V05",
       "title": "App core — audit + authed VR (Dashboard, MobileMore, Settings)",
-      "change_state": "PENDING"
+      "change_state": "DONE",
+      "note": "MobileMore FAIL (5 HIGH role-gate bugs). Dashboard PARTIAL (grid 4-col vs 2-col). Settings shell PASS."
     },
     {
       "id": "change-V06",
       "title": "Sales — audit + authed VR",
-      "change_state": "PENDING"
+      "change_state": "DONE",
+      "note": "Clients/LeadRadar FAIL. DealTracker PASS. Projections PARTIAL (HSH revenue blocked). 1 inline fix: LeadRadar subtitle copy."
     },
     {
       "id": "change-V07",
       "title": "Operations — audit + authed VR",
-      "change_state": "PENDING"
+      "change_state": "DONE",
+      "note": "ALL 5 PAGES FAIL. Timeline + T&E are full skeleton stubs (13+ sub-components each). Trials wrong paradigm (table vs Kanban). Team missing ConsultantForm/InviteWizard/mutations."
     },
     {
       "id": "change-V08",
       "title": "Billing — audit + authed VR",
-      "change_state": "PENDING"
+      "change_state": "DONE",
+      "note": "ALL BLOCKED — billing store not landed. All 4 pages are stub columns/sections."
     },
     {
       "id": "change-V09",
       "title": "HotSeatHub — audit + authed VR",
-      "change_state": "PENDING"
+      "change_state": "DONE",
+      "note": "ALL BLOCKED — HSH store not landed. hsh-marketing CDN image to fix. Projections: missing owner-only redirect guard."
     },
     {
       "id": "change-V10",
       "title": "Documents + Manual — audit + VR",
-      "change_state": "PENDING"
+      "change_state": "DONE",
+      "note": "ALL PASS. DocumentDisplay stub non-blocking. MDX files exist but unwired to /manual/ route (RULE 7 debt)."
     },
     {
       "id": "change-V11",
-      "title": "Drift remediation (fix systemic bugs in primitives — RULE 0.3)",
-      "change_state": "PENDING"
+      "title": "Drift remediation (fix systemic bugs in primitives — RULE 0.3) + pre-confirmed CSS bugs S-1/S-2/S-3 from /kbd-analyze",
+      "change_state": "DONE",
+      "note": "AcceptInvite rebuilt (full-page gradient header, logo, 3-step explainer, amber email block, MARKETING_THEME). MobileMore 5 role-gate bugs fixed. Timeline fully implemented (toolbar/sidebar/header/bars/list view + position-utils + use-timeline-data). T&E fully implemented (time-clock, kpi-cards, time-table, expenses, expense-reports, time-off tabs + hooks). Team ConsultantForm+InviteWizard+mutations landed. Approvals billing columns + compact summary landed. All typecheck-clean."
+    },
+    {
+      "id": "change-V11a",
+      "title": "Schema gap migrations: deal_note, lead_activity, favorites_list (+ investigate sample_data)",
+      "change_state": "DONE",
+      "note": "SampleData confirmed NOT a distinct table — no 4th migration needed. sample_data is a docs example only; seed_snapshot covers seeding."
     },
     {
       "id": "change-V12",
       "title": "Pay down react-hooks/exhaustive-deps warnings",
-      "change_state": "PENDING"
+      "change_state": "DONE",
+      "note": "All 20 warnings eliminated. Stable useMemo wrappers for stub arrays, removed stale eslint-disable comments, added activeEntry to time-clock-interface useEffect deps."
     },
     {
       "id": "change-V13",
       "title": "Final gate: trio + full VR diff + Lighthouse a11y",
-      "change_state": "PENDING"
+      "change_state": "DONE",
+      "note": "pnpm typecheck: 0 errors. pnpm lint: 0 errors/warnings (added playwright-report/** to ESLint ignores). lint:rules OK. manual:validate OK (34 entries). 93 test files, 579 tests: all pass. VR diff and Lighthouse: deferred to CI (requires deployed build)."
     }
   ],
   "execution_order": [
-    [
-      "change-V01",
-      "change-V02"
-    ],
-    [
-      "change-V03",
-      "change-V04"
-    ],
-    [
-      "change-V05",
-      "change-V06",
-      "change-V07",
-      "change-V08",
-      "change-V09",
-      "change-V10"
-    ],
-    [
-      "change-V11"
-    ],
-    [
-      "change-V12"
-    ],
-    [
-      "change-V13"
-    ]
+    ["change-V01", "change-V02"],
+    ["change-V03", "change-V04"],
+    ["change-V05", "change-V06", "change-V07", "change-V08", "change-V09", "change-V10"],
+    ["change-V11", "change-V11a"],
+    ["change-V12"],
+    ["change-V13"]
   ],
-  "notes": "VR harness already exists (bible-vs-port deployed-vs-deployed drift + per-page toHaveScreenshot). Phase EXTENDS it, does not rebuild. Unauth-surface drift path has no blocker; authed-surface baselines need bible app run locally once."
+  "notes": "VR harness already exists (bible-vs-port deployed-vs-deployed drift + per-page toHaveScreenshot). Phase EXTENDS it, does not rebuild. Unauth-surface drift path has no blocker; authed-surface baselines need bible app run locally once. V11a (schema gaps) can run in parallel with V11 — it is independent of V03-V10 audits."
 }

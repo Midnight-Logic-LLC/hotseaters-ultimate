@@ -1,0 +1,110 @@
+{
+  "phase": "page-parity-verification-hardening",
+  "generated": "2026-06-28",
+  "analyst": "claude-sonnet-4-6",
+  "research_axes": ["style-parity", "schema-parity"],
+  "candidates": [],
+  "adopt_verdicts": [],
+  "build_verdicts": [
+    {
+      "id": "FIX-S1",
+      "gap": "Marketing page fonts not applying — applyThemeVars inline style override",
+      "verdict": "build",
+      "rationale": "No library needed. Fix is: replace <style>{generateThemeCSS(MARKETING_THEME)}</style> with useEffect(() => { applyThemeVars(MARKETING_THEME); return () => applyThemeVars(DEFAULT_THEME); }, []) on each marketing page component.",
+      "files_to_change": [
+        "src/features/landing/pages/landing-page.tsx",
+        "src/features/marketing/pages/referral-landing-page.tsx",
+        "src/features/marketing/pages/pricing-page.tsx",
+        "src/features/marketing/pages/privacy-policy-page.tsx",
+        "src/features/marketing/pages/terms-of-service-page.tsx"
+      ],
+      "confidence": "HIGH",
+      "priority": "P0"
+    },
+    {
+      "id": "FIX-S2",
+      "gap": "Dialog theming rules from bible's globals.css not in port index.css",
+      "verdict": "build",
+      "rationale": "Port the [role='dialog'] CSS selectors from HotSeatersMVP/src/globals.css into src/index.css. Applies font-family, border-radius, shadow, background-color to all dialog overlays globally.",
+      "files_to_change": [
+        "src/index.css"
+      ],
+      "confidence": "HIGH",
+      "priority": "P0"
+    },
+    {
+      "id": "FIX-S3",
+      "gap": "Verify iOS standalone viewport lock + Quill alignment classes in port index.css",
+      "verdict": "build",
+      "rationale": "Read bible's index.css lines 80-120 (iOS standalone @media block) and grep for .ql-align-* in port index.css. Add missing rules if absent.",
+      "files_to_change": [
+        "src/index.css"
+      ],
+      "confidence": "MEDIUM",
+      "priority": "P0"
+    },
+    {
+      "id": "FIX-DB1",
+      "gap": "deal_note table missing from Supabase migrations",
+      "verdict": "build",
+      "rationale": "Create SQL migration for deal_note table. Bible uses it for notes on deals/clients in DealTracker. Columns: id, company_id, deal_id (FK to lead or trial), content (text), author_id (FK to user_info), created_date (timestamp), updated_date (timestamp).",
+      "files_to_change": [
+        "/Users/gqadonis/Projects/midnight/latest-data/supabase/migrations/20260628000001_deal_note.sql"
+      ],
+      "confidence": "HIGH",
+      "priority": "P1"
+    },
+    {
+      "id": "FIX-DB2",
+      "gap": "lead_activity table missing from Supabase migrations",
+      "verdict": "build",
+      "rationale": "Create SQL migration for lead_activity table. Bible uses it for activity log entries on leads in LeadRadar. Columns: id, company_id, lead_id (FK to lead), activity_type (text), description (text), performed_by (FK to user_info), activity_date (timestamp).",
+      "files_to_change": [
+        "/Users/gqadonis/Projects/midnight/latest-data/supabase/migrations/20260628000002_lead_activity.sql"
+      ],
+      "confidence": "HIGH",
+      "priority": "P1"
+    },
+    {
+      "id": "FIX-DB3",
+      "gap": "favorites_list table missing from Supabase migrations",
+      "verdict": "build",
+      "rationale": "Create SQL migration for favorites_list table. Bible uses it in Settings (DatabaseExport) and HSH subcontractor favoriting. Columns: id, company_id, name (text), user_id (FK to user_info), created_date (timestamp).",
+      "files_to_change": [
+        "/Users/gqadonis/Projects/midnight/latest-data/supabase/migrations/20260628000003_favorites_list.sql"
+      ],
+      "confidence": "HIGH",
+      "priority": "P1"
+    },
+    {
+      "id": "FIX-DB4",
+      "gap": "sample_data table — investigate if needed vs seed_snapshot",
+      "verdict": "investigate",
+      "rationale": "The port has seed_snapshot which covers seeding. Need to read bible's SampleData usage (which pages, what columns) to determine if it is distinct from seed_snapshot or redundant. If distinct, create migration.",
+      "files_to_change": [],
+      "confidence": "MEDIUM",
+      "priority": "P1"
+    }
+  ],
+  "open_questions": [
+    {
+      "id": "OQ-1",
+      "question": "What is the 'X' entity in the bible? grep of base44.entities.* returned 'X' as an entity name. Identify the consuming file and determine if a migration is needed.",
+      "blocking": false
+    },
+    {
+      "id": "OQ-2",
+      "question": "Does sample_data serve a distinct purpose from seed_snapshot, or was it superseded?",
+      "blocking": false
+    },
+    {
+      "id": "OQ-3",
+      "question": "Are the bible's iOS standalone @media rules and .ql-align-* Quill classes present in the port's index.css (diff was truncated at line 80)?",
+      "blocking": true
+    }
+  ],
+  "stack": {
+    "verdict": "no-change",
+    "note": "Existing stack (Tailwind v4, Base UI, Zustand, PGlite, Electric, self-hosted Supabase) is fully adequate. No new libraries needed to close style or schema gaps."
+  }
+}

@@ -74,6 +74,7 @@
   --theme-stone-200: #E7E5E4;
   --theme-stone-500: #78716C;
   --theme-stone-600: #57534E;
+  --theme-stone-700: #44403C;
   --theme-stone-900: #1C1917;
 
   /* Page Background */
@@ -199,6 +200,7 @@
   --theme-stone-100: #292524;
   --theme-stone-200: #44403c;
   --theme-stone-500: #a8a29e;
+  --theme-stone-700: #78716c;
   --theme-stone-600: #d6d3d1;
   --theme-stone-900: #fafaf9;
   --theme-section-text: #fafaf9;
@@ -343,6 +345,69 @@ body.hide-bottom-tab-bar .bottom-tab-bar-nav {
 /* Apply app body font to all vaul drawers */
 [vaul-drawer] {
   font-family: var(--theme-font-body) !important;
+}
+
+/* ─── Dialog theming (ported from HotSeatersMVP/src/globals.css) ─────────
+   Applies theme CSS variables to all dialog elements so every dialog
+   automatically picks up the active theme's radius, shadow, font, etc.
+   Inline styles from applyThemeVars() win over :root rules, so these
+   selectors must use the same var() references — they resolve correctly
+   regardless of which theme is currently applied. */
+[role="dialog"] {
+  border-radius: var(--theme-dialog-radius) !important;
+  box-shadow: var(--theme-dialog-shadow) !important;
+  background-color: var(--theme-dialog-bg) !important;
+  border: var(--theme-dialog-border) solid var(--theme-stone-200) !important;
+  font-family: var(--theme-font-body) !important;
+}
+
+[role="dialog"] h2,
+[role="dialog"] [class*="DialogTitle"] {
+  font-size: var(--theme-text-card-title) !important;
+  color: var(--theme-stone-900) !important;
+  font-family: var(--theme-font-body) !important;
+}
+
+[role="dialog"] [class*="DialogDescription"] {
+  font-size: var(--theme-text-body) !important;
+  color: var(--theme-stone-600) !important;
+  font-family: var(--theme-font-body) !important;
+}
+
+[role="dialog"] input,
+[role="dialog"] textarea,
+[role="dialog"] select {
+  border-radius: var(--theme-input-radius) !important;
+  border-width: var(--theme-input-border) !important;
+  background-color: var(--theme-input-bg) !important;
+  font-size: var(--theme-text-body) !important;
+  font-family: var(--theme-font-body) !important;
+}
+
+[role="dialog"] label {
+  font-size: var(--theme-text-label) !important;
+  color: var(--theme-stone-700) !important;
+  font-family: var(--theme-font-body) !important;
+}
+
+[role="dialog"] button {
+  border-radius: var(--theme-button-radius) !important;
+  box-shadow: var(--theme-button-shadow) !important;
+  font-family: var(--theme-font-body) !important;
+  font-size: var(--theme-button-text-size) !important;
+}
+
+/* ─── Quill alignment classes (ported from HotSeatersMVP/src/index.css) ──
+   Rich-text previews outside the Quill editor. !important so the inner
+   <p>'s chosen alignment wins over any inline text-align on a wrapper. */
+.ql-align-center {
+  text-align: center !important;
+}
+.ql-align-right {
+  text-align: right !important;
+}
+.ql-align-justify {
+  text-align: justify !important;
 }
 
 /* iOS Standalone Web App: prevent viewport bounce-scroll on small screens */

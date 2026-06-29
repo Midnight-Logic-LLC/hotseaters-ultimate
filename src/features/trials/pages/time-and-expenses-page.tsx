@@ -1,24 +1,7 @@
 /**
  * time-and-expenses-page.tsx — port of HotSeatersMVP/src/pages/TimeAndExpenses.jsx
  *
- * Visual + functional parity with the bible (216 lines). Sub-components that
- * have not yet been ported (TimeTabBar, TimeKPICards, TimeTableTab,
- * TimeClockInterface, TimeOffTab, ExpensesTab, ExpenseReportsTab) are rendered
- * as "Coming soon" stubs so the page mounts, routes, and typechecks cleanly.
- * Replace each stub with the real port as those components land.
- *
- * Adapter rules applied:
- *   - useTimeTrackingData()   → useTier1() from @/app/tier1-provider (Tier-2
- *                               stores pending; entity arrays stubbed empty)
- *   - useTimeTrackingPreferences() → local useState (tab preference)
- *   - useTimeTrackingMutations()   → stubbed no-ops (Tier-2 stores pending)
- *   - useDeviceType()         → useIsMobile() from @/shared/hooks/use-mobile
- *   - LayoutGroup (framer)    → no-op wrapper (framer dep present but not used
- *                               in the port primitives)
- *   - createPageUrl("X")      → "/X"
- *   - PageLoader              → inline spinner (shared PageLoader not yet ported)
- *
- * RULE B: this page imports only hooks — no stores, no PGlite, no Supabase.
+ * RULE B: imports only hooks — no stores, no PGlite, no Supabase.
  * RULE F: lives in src/features/trials/pages/.
  * RULE A: kebab-case filename.
  */
@@ -26,49 +9,28 @@
 import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { useTier1 } from '@/app/tier1-provider';
-import { useIsMobile } from '@/shared/hooks/use-mobile';
+import { useTimeTrackingData } from '@/features/trials/hooks/use-time-tracking-data';
+import { useTimeTrackingMutations } from '@/features/trials/hooks/use-time-tracking-mutations';
+import { TimeClockInterface } from '@/features/trials/components/time-clock-interface';
+import { TimeKpiCards } from '@/features/trials/components/time-kpi-cards';
+import { TimeTableTab } from '@/features/trials/components/time-table-tab';
+import { ExpensesTab } from '@/features/trials/components/expenses-tab';
+import { ExpenseReportsTab } from '@/features/trials/components/expense-reports-tab';
+import { TimeOffTab } from '@/features/trials/components/time-off-tab';
 
-// ─── Tab ids — mirrors bible's TimeTabBar values ─────────────────────────────
+// ─── Tab ids ──────────────────────────────────────────────────────────────────
 
 type TimeTab = 'clock' | 'combined' | 'expenses' | 'reports' | 'timeoff';
 
-// ─── Inline page loader (no shared PageLoader yet) ───────────────────────────
+// ─── Inline page loader ───────────────────────────────────────────────────────
 
-interface PageLoaderProps {
-  message: string;
-  className?: string;
-}
-
-function PageLoader({ message, className }: PageLoaderProps) {
+function PageLoader({ message }: { message: string }) {
   return (
     <div
       style={{ padding: 'var(--theme-page-padding)', fontFamily: 'var(--theme-font-body)' }}
-      className={className}
+      className="lg:px-8"
     >
       <p style={{ color: 'var(--theme-stone-500)' }}>{message}</p>
-    </div>
-  );
-}
-
-// ─── Stub components for unported sub-components ──────────────────────────────
-
-function ComingSoonStub({ label }: { label: string }) {
-  return (
-    <div
-      style={{
-        padding: 'var(--theme-card-padding)',
-        background: 'var(--theme-card-bg)',
-        borderRadius: 'var(--theme-card-radius)',
-        border: '1px solid var(--theme-stone-200)',
-        color: 'var(--theme-stone-500)',
-        fontFamily: 'var(--theme-font-body)',
-        fontSize: 'var(--theme-text-body)',
-        textAlign: 'center',
-        marginTop: '1rem',
-      }}
-    >
-      {label} — Coming soon
     </div>
   );
 }
@@ -76,43 +38,63 @@ function ComingSoonStub({ label }: { label: string }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function TimeAndExpensesPage() {
-  const tier1 = useTier1();
-  const isMobile = useIsMobile();
+  const data = useTimeTrackingData();
+  const {
+    userInfo,
+    company,
+    isOwnerOrAdmin,
+    pipelineStages,
+    trials,
+    clients,
+    services,
+    trialServices,
+    trialSegments,
+    consultants,
+    timeEntries,
+    allTimeEntries,
+    activeEntry,
+    userExpenses,
+    allCompanyExpenses,
+    expenseReports,
+    timeOffRequests,
+    isLoading,
+    refetch,
+  } = data;
 
-  // isMobileTouch approximation — touch detection via pointer media query would
-  // require a media-query hook; for now treat isMobile as isMobileTouch.
-  const isMobileTouch = isMobile;
+  const mutations = useTimeTrackingMutations(refetch);
 
-  const { company, isLoading, userInfo } = tier1;
-
-  // ── Tab preference (mirrors bible's useTimeTrackingPreferences) ─────────────
   const [activeTab, setActiveTab] = useState<TimeTab>('combined');
-
-  // ── showMyTime preference (bible: useTimeTrackingPreferences) ───────────────
   const [showMyTime, setShowMyTime] = useState(true);
+  const [showMyExpenses, setShowMyExpenses] = useState(true);
+  const [timeStatusFilter, setTimeStatusFilter] = useState('All');
+  const [personFilter, setPersonFilter] = useState('');
 
-  // ── isOwnerOrAdmin derived from tier1 role ───────────────────────────────────
-  const role = tier1.role;
-  const isOwnerOrAdmin = role === 'owner' || role === 'admin';
+  const companyId = (userInfo?.['company_id'] as string) ?? '';
+  const consultantId = (userInfo?.['id'] as string) ?? '';
 
-  // ── Loading guard — mirrors bible line 60-62 ─────────────────────────────────
   if (isLoading) {
-    return <PageLoader message="Loading time & expenses..." className="lg:px-8" />;
+    return <PageLoader message="Loading time & expenses..." />;
   }
 
-  // ── Stubbed Tier-2 data (will be wired to stores when those land) ────────────
-  // Bible line 27-38: useTimeTrackingData() returns these. Stubbed empty so the
-  // page renders without Tier-2 subscriptions.
-  const timeEntries: unknown[] = [];
-  const allTimeEntries: unknown[] = [];
+  // Cast to typed arrays for sub-components
+  type TERow = Record<string, unknown> & {
+    id: string; start_time: string; end_time?: string; duration_hours?: number;
+    status?: string; description?: string; trial_id?: string; service_id?: string;
+    trial_service_id?: string; entry_type?: string; consultant_id?: string;
+  };
+  const timeEntriesTyped = timeEntries as TERow[];
+  const allTimeEntriesTyped = allTimeEntries as TERow[];
 
-  void isMobileTouch; // used in sub-component props once they land
-  void showMyTime;
-  void setShowMyTime;
-  void isOwnerOrAdmin;
-  void timeEntries;
-  void allTimeEntries;
-  void userInfo;
+  type TrialRow = Record<string, unknown> & { id: string; name: string; client_id: string; pipeline_stage_id?: string; status?: string };
+  type ClientRow = Record<string, unknown> & { id: string; name: string };
+  type ServiceRow = Record<string, unknown> & { id: string; name: string };
+  type TSRow = Record<string, unknown> & { id: string; trial_id: string; service_id: string; is_active?: boolean; travel_eligible?: boolean; rate?: number };
+  type PSRow = Record<string, unknown> & { id: string; name: string; order_num?: number };
+  type ConsultantRow = Record<string, unknown> & { id: string; first_name?: string; last_name?: string };
+  type ExpRow = Record<string, unknown> & { id: string; trial_id?: string; amount: number; description?: string; category?: string; expense_date?: string; status?: string; consultant_id?: string; is_billable?: boolean; is_reimbursable?: boolean };
+  type ExpReportRow = Record<string, unknown> & { id: string; report_number?: string; period_start?: string; period_end?: string; status?: string; pdf_url?: string; total_amount?: number };
+  type TimeOffRow = Record<string, unknown> & { id: string; consultant_id?: string; type?: string; start_date?: string; end_date?: string; notes?: string; status?: string };
+  type SegRow = Record<string, unknown> & { id: string; trial_id: string };
 
   return (
     <div
@@ -120,11 +102,8 @@ export function TimeAndExpensesPage() {
       className="lg:px-8"
     >
       <div style={{ maxWidth: 'var(--theme-max-content-width)' }} className="mx-auto">
-        {/* Desktop page header — bible lines 127-132 */}
-        <div
-          className="hidden lg:flex flex-col md:flex-row justify-between items-start md:items-center mb-8"
-          style={{ gap: 'var(--theme-card-gap)' }}
-        >
+        {/* Desktop page header */}
+        <div className="hidden lg:flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>
             <h1
               className="font-bold mb-2"
@@ -136,24 +115,14 @@ export function TimeAndExpensesPage() {
             >
               Time &amp; Expenses
             </h1>
-            <p
-              style={{
-                fontSize: 'var(--theme-text-body)',
-                color: 'var(--theme-stone-600)',
-              }}
-            >
+            <p style={{ fontSize: 'var(--theme-text-body)', color: 'var(--theme-stone-600)' }}>
               Track your time and expenses
             </p>
           </div>
         </div>
 
-        {/* Tabs — bible lines 135-212 */}
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v as TimeTab)}
-          className="mb-8"
-        >
-          {/* TimeTabBar stub — will be replaced with the real port */}
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TimeTab)} className="mb-8">
           <TabsList>
             <TabsTrigger value="clock">Clock</TabsTrigger>
             <TabsTrigger value="combined">Time</TabsTrigger>
@@ -162,56 +131,112 @@ export function TimeAndExpensesPage() {
             <TabsTrigger value="timeoff">Time Off</TabsTrigger>
           </TabsList>
 
-          {/* KPI cards — bible line 144: only on 'combined' tab */}
+          {/* KPI cards on combined tab */}
           {activeTab === 'combined' && (
-            <ComingSoonStub label="TimeKPICards" />
+            <TimeKpiCards timeEntries={timeEntriesTyped} company={company} />
           )}
 
-          {/* Clock tab — bible lines 146-183 */}
+          {/* Clock tab */}
           <TabsContent value="clock" className="m-0">
-            <ComingSoonStub label="TimeClockInterface" />
+            <TimeClockInterface
+              trials={trials as TrialRow[]}
+              clients={clients as ClientRow[]}
+              services={services as ServiceRow[]}
+              trialServices={trialServices as TSRow[]}
+              pipelineStages={pipelineStages as PSRow[]}
+              onCreateEntry={mutations.handleCreateEntry}
+              onStartTracking={mutations.handleStartTracking}
+              onCancelTracking={mutations.handleCancelTracking}
+              onUpdateDescription={mutations.handleUpdateDescription}
+              activeEntry={activeEntry as (Record<string, unknown> & { id: string; start_time: string; status?: string; description?: string; end_time?: string }) | null}
+              isLoading={false}
+              companyId={companyId}
+              consultantId={consultantId}
+              timeEntries={timeEntriesTyped}
+              expenses={userExpenses as (Record<string, unknown> & { id: string; trial_id?: string; amount: number })[]}
+              trialSegments={trialSegments as SegRow[]}
+            />
 
-            {/* Debug card — bible lines 173-182: only when company.show_debug_info.
-                show_debug_info is not yet on Tier1Company; access via index. */}
+            {/* Debug card */}
             {Boolean((company as Record<string, unknown> | null)?.['show_debug_info']) && (
               <Card
                 className="mt-6"
-                style={{
-                  backgroundColor: '#fef9c3',
-                  borderColor: '#fde047',
-                  borderWidth: '2px',
-                }}
+                style={{ backgroundColor: '#fef9c3', borderColor: '#fde047', borderWidth: '2px' }}
               >
                 <CardHeader>
                   <CardTitle className="text-sm">Debug: Time Entry State</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <pre className="text-xs overflow-auto bg-white p-3 rounded max-h-96">
-                    {JSON.stringify({ activeEntry: null, mutation_isPending: false }, null, 2)}
+                    {JSON.stringify({ activeEntry, isMutating: mutations.isMutating }, null, 2)}
                   </pre>
                 </CardContent>
               </Card>
             )}
           </TabsContent>
 
-          {/* Combined (Time) tab — bible lines 185-198 */}
+          {/* Time (combined) tab */}
           <TabsContent value="combined" className="m-0">
-            <ComingSoonStub label="TimeTableTab" />
+            <TimeTableTab
+              timeEntries={timeEntriesTyped}
+              allTimeEntries={allTimeEntriesTyped}
+              isOwnerOrAdmin={isOwnerOrAdmin}
+              showMyTime={showMyTime}
+              onToggleMyTime={() => setShowMyTime((v) => !v)}
+              timeStatusFilter={timeStatusFilter}
+              onStatusFilterChange={setTimeStatusFilter}
+              personFilter={personFilter}
+              onPersonFilterChange={(id) => setPersonFilter(id ?? '')}
+              consultants={consultants as ConsultantRow[]}
+              trials={trials as TrialRow[]}
+              clients={clients as ClientRow[]}
+              services={services as ServiceRow[]}
+              onApprove={mutations.handleApproveEntry}
+              onReject={mutations.handleRejectEntry}
+              onDelete={mutations.handleDeleteEntry}
+              isMutating={mutations.isMutating}
+            />
           </TabsContent>
 
-          {/* Expenses tab — bible lines 200-202 */}
+          {/* Expenses tab */}
           <TabsContent value="expenses" className="m-0">
-            <ComingSoonStub label="ExpensesTab" />
+            <ExpensesTab
+              userExpenses={userExpenses as ExpRow[]}
+              allCompanyExpenses={allCompanyExpenses as ExpRow[]}
+              isOwnerOrAdmin={isOwnerOrAdmin}
+              showMyExpenses={showMyExpenses}
+              onToggleMyExpenses={() => setShowMyExpenses((v) => !v)}
+              trials={trials as TrialRow[]}
+              consultants={consultants as ConsultantRow[]}
+              onCreateExpense={mutations.handleCreateExpense}
+              onApproveExpense={mutations.handleApproveExpense}
+              onDeleteExpense={mutations.handleDeleteExpense}
+              isMutating={mutations.isMutating}
+              companyId={companyId}
+              consultantId={consultantId}
+            />
           </TabsContent>
 
-          {/* Reports tab — bible lines 204-206 */}
+          {/* Reports tab */}
           <TabsContent value="reports" className="m-0">
-            <ComingSoonStub label="ExpenseReportsTab" />
+            <ExpenseReportsTab
+              expenseReports={expenseReports as ExpReportRow[]}
+              isLoading={isLoading}
+            />
           </TabsContent>
 
-          {/* Time Off tab — bible lines 208-210 */}
+          {/* Time Off tab */}
           <TabsContent value="timeoff" className="m-0">
-            <ComingSoonStub label="TimeOffTab" />
+            <TimeOffTab
+              timeOffRequests={timeOffRequests as TimeOffRow[]}
+              isOwnerOrAdmin={isOwnerOrAdmin}
+              consultants={consultants as ConsultantRow[]}
+              userInfoId={consultantId}
+              onCreateTimeOff={mutations.handleCreateTimeOff}
+              onApproveTimeOff={mutations.handleApproveTimeOff}
+              onDenyTimeOff={mutations.handleDenyTimeOff}
+              isMutating={mutations.isMutating}
+            />
           </TabsContent>
         </Tabs>
       </div>

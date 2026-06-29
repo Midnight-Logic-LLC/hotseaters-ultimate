@@ -200,6 +200,97 @@ export async function sendInvitation(payload: SendInvitationPayload): Promise<vo
   if (error) throw error;
 }
 
+// ─── Invitation management (Team page Tier-2) ─────────────────────────────
+
+export interface InvitationRow {
+  id: string;
+  company_id: string | null;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  role: string | null;
+  status: string | null;
+  invitation_type: string | null;
+  created_at: string | null;
+}
+
+/** Fetch pending + accepted-referral invitations for the team page. */
+export async function fetchPendingInvitations(companyId: string): Promise<InvitationRow[]> {
+  const [pendingRes, acceptedReferralsRes] = await Promise.all([
+    supabase
+      .from('invitation')
+      .select('id, company_id, email, first_name, last_name, role, status, invitation_type, created_at')
+      .eq('company_id', companyId)
+      .eq('status', 'pending'),
+    supabase
+      .from('invitation')
+      .select('id, company_id, email, first_name, last_name, role, status, invitation_type, created_at')
+      .eq('company_id', companyId)
+      .eq('status', 'accepted')
+      .eq('invitation_type', 'referral'),
+  ]);
+  if (pendingRes.error) throw pendingRes.error;
+  if (acceptedReferralsRes.error) throw acceptedReferralsRes.error;
+  return [...(pendingRes.data ?? []), ...(acceptedReferralsRes.data ?? [])] as InvitationRow[];
+}
+
+/** Send a team invite via the sendInvitationEmail Edge Function. */
+export interface TeamInvitePayload {
+  invitation_type: 'team';
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  consultant_tier_id: string;
+  service_ids: string[];
+  name: string;
+}
+
+export async function sendTeamInvite(payload: TeamInvitePayload): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('sendInvitationEmail', {
+    body: payload,
+  });
+  if (error) throw error;
+  const d = data as { error?: string } | null;
+  if (d?.error) throw new Error(d.error);
+}
+
+/** Send an HSH referral invite via the sendInvitationEmail Edge Function. */
+export interface ReferralInvitePayload {
+  invitation_type: 'hsh_referral';
+  email: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+export async function sendReferralInvite(payload: ReferralInvitePayload): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('sendInvitationEmail', {
+    body: payload,
+  });
+  if (error) throw error;
+  const d = data as { error?: string } | null;
+  if (d?.error) throw new Error(d.error);
+}
+
+/** Cancel a pending invitation via the cancelInvitation Edge Function. */
+export async function cancelInvitation(inviteId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('cancelInvitation', {
+    body: { invitation_id: inviteId },
+  });
+  if (error) throw error;
+  const d = data as { error?: string } | null;
+  if (d?.error) throw new Error(d.error);
+}
+
+/** Deactivate a team member (sets account_status to 'inactive'). */
+export async function deactivateTeamMember(userInfoId: string): Promise<void> {
+  const { error } = await supabase
+    .from('user_info')
+    .update({ account_status: 'inactive' })
+    .eq('id', userInfoId);
+  if (error) throw error;
+}
+
 // ─── Services & Categories (metadata_type scope='service'|'service_category') ─
 
 export interface ServiceRowInput {

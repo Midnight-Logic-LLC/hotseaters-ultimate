@@ -215,7 +215,7 @@ export function BillsPage() {
   const bills: BillInvoice[] = [];
   const companies: BillCompany[] = [];
   const trials: BillTrial[] = [];
-  const payments: BillPayment[] = [];
+  const payments = useMemo<BillPayment[]>(() => [], []);
   const isLoading = false;
 
   // Payment aggregation

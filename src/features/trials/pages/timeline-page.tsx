@@ -4,49 +4,45 @@
  * Port of HotSeatersMVP/src/pages/Timeline.jsx.
  *
  * Architecture invariants (CLAUDE.md RULES B/C/D):
- *   - This file is a React page component; it imports hooks only — no stores,
- *     no Supabase, no Electric, no PGlite.
- *   - Data from the entity graph flows through useTier1() (Tier-1).
- *   - Tier-2 trial/service data is stubbed as empty arrays pending the
- *     trials-store Tier-2 integration.
+ *   - Page component: imports hooks only — no stores, no Supabase, no PGlite.
+ *   - Data from useTimelineData (Tier-A PGlite) and useTier1.
+ *   - All sub-components imported by name — no stubs remain.
  *
  * Visual + functional parity with bible:
  *   - Page title: "Trial Timeline"
  *   - Subtitle: "Timeline view of scheduled trials"
- *   - Sub-components not yet ported: rendered as clearly-labelled stubs.
- *   - All CSS tokens, visible strings, and layout structure match the bible.
+ *   - Full toolbar, Gantt, sidebar, header, bars, mobile list view,
+ *     landscape prompt, legend — all wired.
  *   - Empty-state icon + copy: "No scheduled services to display".
- *   - Legend: Pre-Trial, In Trial, HSH Pre-Trial, HSH In Trial, Deal
- *     Pre-Trial, Deal In Trial, Time Off.
+ *   - Legend: Pre-Trial, In Trial, HSH Pre-Trial, HSH In Trial,
+ *     Deal Pre-Trial, Deal In Trial, Time Off.
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+} from 'react';
 import { GanttChart as GanttChartIcon, ChevronDown, ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { useTier1 } from '@/app/tier1-provider';
+import { useTimelineData } from '../hooks/use-timeline-data';
+import { TimelineToolbar } from '../components/timeline-toolbar';
+import { TimelineSidebar } from '../components/timeline-sidebar';
+import { TimelineHeader } from '../components/timeline-header';
+import { TimelineBars } from '../components/timeline-bars';
+import { MobileTimelineListView } from '../components/mobile-timeline-list-view';
+import { MobileLandscapePrompt } from '../components/mobile-landscape-prompt';
+import {
+  getTimelineData,
+  computeUnitWidth,
+  computeFitZoom,
+} from '../components/timeline-position-utils';
+import type { TimeScale, GroupBy, MobileViewMode } from '../components/timeline-toolbar';
+import type { SidebarService, TrialGroup, ConsultantGroup } from '../components/timeline-sidebar';
 
-// ─── Stub helpers ────────────────────────────────────────────────────────────
-
-/** Rendered in place of every sub-component that isn't yet ported. */
-function ComingSoonStub({ name }: { name: string }) {
-  return (
-    <div
-      style={{
-        padding: '8px 12px',
-        border: '1px dashed var(--theme-stone-300)',
-        borderRadius: '6px',
-        color: 'var(--theme-stone-500)',
-        fontSize: '12px',
-        background: 'var(--theme-stone-50)',
-        textAlign: 'center',
-      }}
-    >
-      {name} — Coming soon
-    </div>
-  );
-}
-
-// ─── Device detection (lightweight, no external dep) ─────────────────────────
+// ─── Device detection ─────────────────────────────────────────────────────────
 
 function useDeviceType() {
   const [width, setWidth] = useState(() =>
@@ -57,13 +53,10 @@ function useDeviceType() {
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
-  return {
-    isMobile: width < 768,
-    isDesktop: width >= 1024,
-  };
+  return { isMobile: width < 768, isDesktop: width >= 1024 };
 }
 
-// ─── Legend ──────────────────────────────────────────────────────────────────
+// ─── Legend ───────────────────────────────────────────────────────────────────
 
 const LEGEND_ITEMS = [
   { color: '#93C5FD', label: 'Pre-Trial (Hourly)' },
@@ -72,86 +65,113 @@ const LEGEND_ITEMS = [
   { color: '#A855F7', label: 'HSH In Trial (Daily Min)' },
   { color: '#D1D5DB', label: 'Deal Pre-Trial (Hourly)' },
   { color: '#6B7280', label: 'Deal In Trial (Daily Min)' },
-  { color: '#34D399', label: 'Time Off' }, // emerald-400
+  { color: '#34D399', label: 'Time Off' },
 ] as const;
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function TimelinePage() {
-  // ── Tier-1 (user, company, pipelineStages) ────────────────────────────────
-  const { userInfo, isLoading: tier1Loading } = useTier1();
+  // ── Data ──────────────────────────────────────────────────────────────────
+  const tld = useTimelineData();
+  const {
+    userInfo,
+    pipelineStages,
+    trials,
+    trialServices,
+    trialSegments,
+    trialServiceAssignments,
+    clients,
+    consultants,
+    timeOffs,
+    canEditDates,
+    isLoading,
+  } = tld;
 
-  // ── Tier-2 stubs (trials store pending) ──────────────────────────────────
-  // These are intentionally empty until the trials-store Tier-2 integration
-  // lands. The page renders the empty-state correctly in the interim.
-  const trials: unknown[] = [];
-
-  // ── Local UI state (mirrors bible 1:1) ───────────────────────────────────
-  const [isFullWidth, setIsFullWidth] = useState(false);
-  const [showRevenueChart, setShowRevenueChart] = useState(false);
-  const [showLegend, setShowLegend] = useState(false);
-  const [mobileViewMode, setMobileViewMode] = useState<'list' | 'gantt'>('list');
-  const [isPortrait, setIsPortrait] = useState(() =>
-    typeof window !== 'undefined'
-      ? window.innerWidth < window.innerHeight
-      : false,
-  );
+  // ── UI state (mirrors bible 1:1) ──────────────────────────────────────────
+  const [expandedTrials, setExpandedTrials] = useState<Set<string>>(new Set());
+  const [expandedNestedTrials, setExpandedNestedTrials] = useState<Set<string>>(new Set());
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [groupBy, setGroupBy] = useState<GroupBy>('trial');
+  const [timeScale, setTimeScale] = useState<TimeScale>('week');
   const [infoWidth, setInfoWidth] = useState(240);
   const [isResizing, setIsResizing] = useState(false);
+  const [isFitMode, setIsFitMode] = useState(true);
+  const [isFullWidth, setIsFullWidth] = useState(false);
+  const [hideDeals, setHideDeals] = useState(false);
+  const [hidePreTrial, setHidePreTrial] = useState(false);
+  const [hideContinued, setHideContinued] = useState(false);
+  const [showRevenueChart, setShowRevenueChart] = useState(false);
+  const [showMine, setShowMine] = useState(false);
+  const [showLegend, setShowLegend] = useState(false);
+  const [_selectedService, setSelectedService] = useState<SidebarService | null>(null);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   const timelineContainerRef = useRef<HTMLDivElement>(null);
+  const timelineHeaderContainerRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const trialListRef = useRef<HTMLDivElement>(null);
 
   const { isMobile, isDesktop } = useDeviceType();
 
-  // ── Prefs: load from userInfo once tier-1 ready ──────────────────────────
-  const [prefsLoaded, setPrefsLoaded] = useState(false);
-  useEffect(() => {
-    if (userInfo && !prefsLoaded) {
-      const prefs = (userInfo as { preferences?: Record<string, unknown> })
-        .preferences ?? {};
-      setIsFullWidth((prefs.schedule_full_width as boolean | undefined) ?? false);
-      setShowRevenueChart(
-        (prefs.schedule_show_revenue_chart as boolean | undefined) ?? false,
-      );
-      setMobileViewMode(
-        ((prefs.schedule_mobile_view as string | undefined) ?? 'list') as
-          | 'list'
-          | 'gantt',
-      );
-      setPrefsLoaded(true);
-    }
-  }, [userInfo, prefsLoaded]);
+  const [isPortrait, setIsPortrait] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < window.innerHeight : false,
+  );
+  const [mobileViewMode, setMobileViewMode] = useState<MobileViewMode>(() =>
+    typeof window !== 'undefined' && window.innerWidth < window.innerHeight ? 'list' : 'timeline',
+  );
 
-  // ── Orientation listener ─────────────────────────────────────────────────
+  // ── Orientation listener ──────────────────────────────────────────────────
   useEffect(() => {
-    const handler = () =>
-      setIsPortrait(window.innerWidth < window.innerHeight);
+    const handler = () => {
+      const portrait = window.innerWidth < window.innerHeight;
+      setIsPortrait(portrait);
+      setMobileViewMode(portrait ? 'list' : 'timeline');
+    };
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
 
-  // ── Hide bottom tab bar in mobile landscape (bible behaviour) ────────────
+  // ── Hide bottom tab bar in mobile landscape ───────────────────────────────
   useEffect(() => {
     const shouldHide = !isDesktop && !isPortrait;
-    if (shouldHide) {
-      document.body.classList.add('hide-bottom-tab-bar');
-    } else {
-      document.body.classList.remove('hide-bottom-tab-bar');
-    }
+    document.body.classList.toggle('hide-bottom-tab-bar', shouldHide);
     return () => document.body.classList.remove('hide-bottom-tab-bar');
   }, [isDesktop, isPortrait]);
 
-  // ── Resize handle for sidebar divider ────────────────────────────────────
+  // ── Load prefs from userInfo once ────────────────────────────────────────
+  useEffect(() => {
+    if (userInfo && !prefsLoaded) {
+      const prefs =
+        (userInfo as { preferences?: Record<string, unknown> }).preferences ?? {};
+      setIsFullWidth((prefs.schedule_full_width as boolean | undefined) ?? false);
+      setGroupBy(
+        ((prefs.schedule_view_by as string | undefined) ?? 'trial') as GroupBy,
+      );
+      setTimeScale(
+        ((prefs.schedule_time_scale as string | undefined) ?? 'week') as TimeScale,
+      );
+      setHideDeals((prefs.schedule_hide_deals as boolean | undefined) ?? false);
+      setHidePreTrial((prefs.schedule_hide_pre_trial as boolean | undefined) ?? false);
+      setHideContinued((prefs.schedule_hide_continued as boolean | undefined) ?? false);
+      setShowRevenueChart(
+        (prefs.schedule_show_revenue_chart as boolean | undefined) ?? false,
+      );
+      setShowMine((prefs.schedule_show_mine as boolean | undefined) ?? false);
+      setPrefsLoaded(true);
+    }
+  }, [userInfo, prefsLoaded]);
+
+  // ── Sidebar resize ────────────────────────────────────────────────────────
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(0);
 
-  const handleMouseDown = useCallback(
+  const handleResizeMouseDown = useCallback(
     (e: React.MouseEvent | React.TouchEvent) => {
       setIsResizing(true);
-      const touchEvent = e as React.TouchEvent;
+      const te = e as React.TouchEvent;
       const clientX =
-        'touches' in e && touchEvent.touches.length > 0
-          ? touchEvent.touches[0]!.clientX
+        'touches' in e && te.touches.length > 0
+          ? te.touches[0]!.clientX
           : (e as React.MouseEvent).clientX;
       resizeStartXRef.current = clientX;
       resizeStartWidthRef.current = infoWidth;
@@ -168,9 +188,8 @@ export function TimelinePage() {
         'touches' in e && te.touches.length > 0
           ? te.touches[0]!.clientX
           : (e as MouseEvent).clientX;
-      const delta = clientX - resizeStartXRef.current;
       setInfoWidth(
-        Math.max(100, Math.min(400, resizeStartWidthRef.current + delta)),
+        Math.max(100, Math.min(400, resizeStartWidthRef.current + (clientX - resizeStartXRef.current))),
       );
     };
     const handleEnd = () => setIsResizing(false);
@@ -188,19 +207,187 @@ export function TimelinePage() {
     };
   }, [isResizing]);
 
-  // ── Derived: "are we still loading core data?" ───────────────────────────
-  // Mirrors bible's coreDataLoading gate: !prefsLoaded || !userInfo?.company_id
-  const coreDataLoading =
-    !prefsLoaded || !userInfo?.company_id || tier1Loading;
+  // ── Expand/collapse ───────────────────────────────────────────────────────
+  const toggleTrial = useCallback((id: string) => {
+    setExpandedTrials((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
-  // ── No scheduled services (Tier-2 stub means this is always true) ────────
-  // The empty-state branch in the bible uses allServices.length === 0.
-  const hasServices = trials.length > 0;
+  const toggleNestedTrial = useCallback((consultantId: string, trialId: string) => {
+    const compositeId = `${consultantId}-${trialId}`;
+    setExpandedNestedTrials((prev) => {
+      const next = new Set(prev);
+      if (next.has(compositeId)) next.delete(compositeId);
+      else next.add(compositeId);
+      return next;
+    });
+  }, []);
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  // ── Build enriched services (bible pattern) ───────────────────────────────
+  type EnrichedService = SidebarService & {
+    trial: TrialGroup['trial'];
+    client: { id: string; firm_name?: string | null } | null;
+    service_phase?: string | null;
+  };
+
+  const allServices = useMemo(() => {
+    return (trialServices
+      .map((ts) => {
+        const trial = trials.find((t) => t.id === ts.trial_id);
+        if (!trial?.start_date) return null;
+        const client = clients.find((c) => (c as { id: string }).id === (trial as { client_id?: string }).client_id) ?? null;
+        const assignments = trialServiceAssignments.filter(
+          (a) => a.trial_service_id === ts.id,
+        );
+        const consultantsList = assignments
+          .map((a) => consultants.find((c) => c.id === a.consultant_id))
+          .filter((c): c is NonNullable<typeof c> => c != null);
+        return {
+          id: ts.id,
+          service_name: (ts as { service_name?: string | null }).service_name ?? (ts as { service_id?: string | null }).service_id ?? 'Service',
+          start_date: ts.start_date,
+          end_date: ts.end_date,
+          service_phase: (ts as { service_phase?: string | null }).service_phase ?? null,
+          trial: {
+            id: trial.id,
+            case_name: (trial as { case_name?: string | null }).case_name ?? null,
+            start_date: trial.start_date,
+            end_date: (trial as { end_date?: string | null }).end_date ?? null,
+            pipeline_stage_id: (trial as { pipeline_stage_id?: string | null }).pipeline_stage_id ?? null,
+            completion_type: (trial as { completion_type?: string | null }).completion_type ?? null,
+          },
+          client,
+          consultants: consultantsList,
+          consultant: consultantsList[0] ?? null,
+        } satisfies EnrichedService;
+      })
+      .filter((s) => s !== null)) as EnrichedService[];
+  }, [trialServices, trials, clients, trialServiceAssignments, consultants]);
+
+  // ── Filter services ───────────────────────────────────────────────────────
+  const filteredServices = useMemo<EnrichedService[]>(() => {
+    return allServices.filter((svc) => {
+      if (hideDeals) {
+        const stage = pipelineStages.find(
+          (s) => s.id === svc.trial.pipeline_stage_id,
+        );
+        if (stage?.type === 'sales') return false;
+      }
+      if (hideContinued && svc.trial.completion_type === 'case_continued') return false;
+      if (hidePreTrial && svc.service_phase === 'pre_trial') return false;
+      if (showMine && userInfo?.id) {
+        const assigned = trialServiceAssignments.some(
+          (a) => a.trial_service_id === svc.id && a.consultant_id === userInfo.id,
+        );
+        if (!assigned) return false;
+      }
+      return true;
+    });
+  }, [allServices, hideDeals, hideContinued, hidePreTrial, showMine, userInfo?.id, pipelineStages, trialServiceAssignments]);
+
+  // ── Timeline geometry ─────────────────────────────────────────────────────
+  const timeline = useMemo(
+    () => getTimelineData(filteredServices, timeScale),
+    [filteredServices, timeScale],
+  );
+  const unitWidth = useMemo(
+    () => computeUnitWidth(zoomLevel, timeline.daysPerUnit),
+    [zoomLevel, timeline.daysPerUnit],
+  );
+
+  // ── Fit-to-window zoom ────────────────────────────────────────────────────
+  const handleZoomFit = useCallback(() => {
+    if (!timelineContainerRef.current || timeline.units === 0) return;
+    const fitZoom = computeFitZoom(
+      timelineContainerRef.current.offsetWidth,
+      timeline.units,
+      timeline.daysPerUnit,
+    );
+    setZoomLevel(Math.max(0.01, Math.min(1, fitZoom)));
+    setIsFitMode(true);
+  }, [timeline.units, timeline.daysPerUnit]);
+
+  useEffect(() => {
+    if (!isFitMode || filteredServices.length === 0) return;
+    const timer = setTimeout(handleZoomFit, 100);
+    return () => clearTimeout(timer);
+  }, [isFitMode, filteredServices.length, timeline.units, infoWidth, timeScale, isFullWidth, isMobile, mobileViewMode, isPortrait, handleZoomFit]);
+
+  // ── Scroll sync (header ↔ body) ───────────────────────────────────────────
+  useEffect(() => {
+    const body = timelineContainerRef.current;
+    const header = timelineHeaderContainerRef.current;
+    if (!body || !header) return;
+    const onBodyScroll = () => { header.scrollLeft = body.scrollLeft; };
+    body.addEventListener('scroll', onBodyScroll);
+    return () => body.removeEventListener('scroll', onBodyScroll);
+  }, []);
+
+  // ── Build trial / consultant groups ───────────────────────────────────────
+  const { sortedTrialGroups, sortedConsultantGroups } = useMemo(() => {
+    // Trial groups
+    const trialGroupMap: Record<string, TrialGroup> = {};
+    for (const svc of filteredServices) {
+      const { trial, client } = svc;
+      if (!trial.id) continue;
+      if (!trialGroupMap[trial.id]) {
+        trialGroupMap[trial.id] = { trial, client, services: [] };
+      }
+      trialGroupMap[trial.id]!.services.push(svc);
+    }
+    const sortedTrialGroups = Object.values(trialGroupMap).sort(
+      (a, b) =>
+        new Date(a.trial.start_date ?? '').getTime() -
+        new Date(b.trial.start_date ?? '').getTime(),
+    );
+
+    // Consultant groups
+    const consultantGroupMap: Record<string, ConsultantGroup> = {};
+    for (const svc of filteredServices) {
+      const cList = svc.consultants ?? [];
+      const relevant = showMine
+        ? cList.filter((c) => c.id === userInfo?.id)
+        : cList.length > 0
+        ? cList
+        : [{ id: 'unassigned', first_name: 'Unassigned', last_name: '' }];
+      for (const c of relevant) {
+        if (!consultantGroupMap[c.id]) {
+          consultantGroupMap[c.id] = { consultant: c, services: [] };
+        }
+        consultantGroupMap[c.id]!.services.push(svc);
+      }
+    }
+    const sortedConsultantGroups = Object.values(consultantGroupMap).sort((a, b) => {
+      if (a.consultant.first_name === 'Unassigned') return 1;
+      if (b.consultant.first_name === 'Unassigned') return -1;
+      return (a.consultant.last_name ?? '').localeCompare(b.consultant.last_name ?? '');
+    });
+
+    return { sortedTrialGroups, sortedConsultantGroups };
+  }, [filteredServices, showMine, userInfo?.id]);
+
+  // ── Active time-offs ──────────────────────────────────────────────────────
+  const activeTimeOffs = useMemo(() => {
+    const all = timeOffs.filter(
+      (to) =>
+        to.start_date &&
+        to.end_date &&
+        (to.status === 'Approved' || to.status === 'Pending'),
+    );
+    return showMine ? all.filter((to) => to.consultant_id === userInfo?.id) : all;
+  }, [timeOffs, showMine, userInfo?.id]);
+
+  // ── Loading gate ──────────────────────────────────────────────────────────
+  const coreDataLoading = !prefsLoaded || !userInfo?.company_id || isLoading;
+  const hasServices = filteredServices.length > 0;
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   if (coreDataLoading) {
-    // Mirrors bible's <PageLoader message="Loading timeline..." />
     return (
       <div
         style={{
@@ -233,7 +420,7 @@ export function TimelinePage() {
             : {}
         }
       >
-        {/* ── Page header (hidden on mobile, matches bible lg:flex) ── */}
+        {/* Page header (hidden on mobile) */}
         <div
           className="schedule-page-header hidden lg:flex flex-col md:flex-row justify-between items-start md:items-center mb-8"
           style={{ gap: 'var(--theme-card-gap)' }}
@@ -261,24 +448,54 @@ export function TimelinePage() {
           </div>
         </div>
 
-        {/* ── Toolbar stub ── */}
+        {/* Toolbar */}
         <div className="mb-2">
-          <ComingSoonStub name="TimelineToolbar" />
+          <TimelineToolbar
+            headerRef={headerRef}
+            groupBy={groupBy}
+            onGroupByChange={setGroupBy}
+            hideDeals={hideDeals}
+            onHideDealsChange={setHideDeals}
+            hidePreTrial={hidePreTrial}
+            onHidePreTrialChange={setHidePreTrial}
+            hideContinued={hideContinued}
+            onHideContinuedChange={setHideContinued}
+            showRevenueChart={showRevenueChart}
+            onShowRevenueChartChange={setShowRevenueChart}
+            timeScale={timeScale}
+            onTimeScaleChange={(v) => { setTimeScale(v); }}
+            zoomLevel={zoomLevel}
+            onZoomLevelChange={(v) => { setZoomLevel(v); setIsFitMode(false); }}
+            onZoomFit={handleZoomFit}
+            isFitMode={isFitMode}
+            isFullWidth={isFullWidth}
+            onFullWidthChange={() => setIsFullWidth((v) => !v)}
+            showMine={showMine}
+            onToggleMine={() => setShowMine((v) => !v)}
+            onOpenFilterSheet={() => {/* TODO: filter sheet */}}
+            mobileViewMode={mobileViewMode}
+            onMobileViewModeChange={setMobileViewMode}
+            isMobile={isMobile}
+            isPortrait={isPortrait}
+          />
         </div>
 
-        {/* ── Mobile list view / portrait prompt / desktop Gantt ── */}
+        {/* Content */}
         {isMobile && mobileViewMode === 'list' ? (
-          /* Mobile list view stub */
-          <div className="flex-1 min-h-0">
-            <ComingSoonStub name="MobileTimelineListView" />
+          <div className="flex-1 min-h-0 overflow-auto">
+            <MobileTimelineListView
+              sortedTrialGroups={sortedTrialGroups}
+              pipelineStages={pipelineStages}
+              activeTimeOffs={activeTimeOffs}
+              onSelectTrial={() => {/* TODO: TrialSummaryModal */}}
+              onSelectService={setSelectedService}
+            />
           </div>
         ) : isMobile && isPortrait ? (
-          /* Landscape prompt stub */
-          <div className="flex-1 min-h-0">
-            <ComingSoonStub name="MobileLandscapePrompt" />
+          <div className="flex-1 min-h-0 flex items-center justify-center">
+            <MobileLandscapePrompt />
           </div>
         ) : (
-          /* Desktop / landscape Gantt card */
           <Card
             className="overflow-hidden flex-1 min-h-0 flex flex-col"
             style={{
@@ -298,16 +515,8 @@ export function TimelinePage() {
               }}
             >
               {hasServices ? (
-                /* ── Gantt body (stubbed sub-components) ── */
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    flex: 1,
-                    minHeight: 0,
-                  }}
-                >
-                  {/* Top row: sidebar label column + header */}
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                  {/* Header row */}
                   <div className="flex flex-shrink-0">
                     {!isMobile && (
                       <div
@@ -316,39 +525,30 @@ export function TimelinePage() {
                           flexShrink: 0,
                           backgroundColor: 'white',
                           zIndex: 7,
-                          overflow: 'visible',
                         }}
-                      >
-                        {showRevenueChart && (
-                          <div style={{ height: '96px', marginTop: '8px' }}>
-                            <ComingSoonStub name="RevenueChartLabels" />
-                          </div>
-                        )}
-                      </div>
+                      />
                     )}
                     <div
+                      ref={timelineHeaderContainerRef}
                       className="no-scrollbar flex-1 min-w-0"
-                      style={{
-                        overflowX: 'auto',
-                        overflowY: 'hidden',
-                        pointerEvents: 'none',
-                      }}
+                      style={{ overflowX: 'auto', overflowY: 'hidden', pointerEvents: 'none' }}
                     >
-                      <div
-                        style={{ minWidth: 'max-content', position: 'relative' }}
-                      >
-                        {showRevenueChart && (
-                          <ComingSoonStub name="TimelineRevenueChart" />
-                        )}
-                        <ComingSoonStub name="TimelineHeader" />
+                      <div style={{ minWidth: 'max-content', position: 'relative' }}>
+                        <TimelineHeader
+                          timeline={timeline}
+                          timeScale={timeScale}
+                          unitWidth={unitWidth}
+                          isDesktop={isDesktop}
+                        />
                       </div>
                     </div>
                   </div>
 
-                  {/* Bottom row: sidebar + bars */}
+                  {/* Body row */}
                   <div className="flex flex-1 min-h-0">
                     {!isMobile && (
                       <div
+                        ref={trialListRef}
                         className="no-scrollbar"
                         style={{
                           width: `${infoWidth}px`,
@@ -360,20 +560,21 @@ export function TimelinePage() {
                           position: 'relative',
                         }}
                       >
-                        <ComingSoonStub name="TimelineSidebar" />
-                        {/* Resize handle */}
-                        <div
-                          onMouseDown={handleMouseDown}
-                          onTouchStart={handleMouseDown}
-                          style={{
-                            position: 'absolute',
-                            right: 0,
-                            top: 0,
-                            bottom: 0,
-                            width: '4px',
-                            cursor: 'col-resize',
-                            zIndex: 10,
-                          }}
+                        <TimelineSidebar
+                          groupBy={groupBy}
+                          sortedTrialGroups={sortedTrialGroups}
+                          sortedConsultantGroups={sortedConsultantGroups}
+                          expandedTrials={expandedTrials}
+                          expandedNestedTrials={expandedNestedTrials}
+                          toggleTrial={toggleTrial}
+                          toggleNestedTrial={toggleNestedTrial}
+                          pipelineStages={pipelineStages}
+                          allServices={filteredServices}
+                          onSelectService={setSelectedService}
+                          infoWidth={infoWidth}
+                          onResizeMouseDown={handleResizeMouseDown}
+                          activeTimeOffs={activeTimeOffs}
+                          consultants={consultants}
                         />
                       </div>
                     )}
@@ -381,19 +582,31 @@ export function TimelinePage() {
                       ref={timelineContainerRef}
                       className="overflow-auto flex-1 min-w-0 min-h-0"
                     >
-                      <div
-                        style={{ minWidth: 'max-content', position: 'relative' }}
-                      >
-                        <ComingSoonStub name="TimelineBars" />
+                      <div style={{ minWidth: 'max-content', position: 'relative' }}>
+                        <TimelineBars
+                          groupBy={groupBy}
+                          sortedTrialGroups={sortedTrialGroups}
+                          sortedConsultantGroups={sortedConsultantGroups}
+                          expandedTrials={expandedTrials}
+                          timeline={timeline}
+                          unitWidth={unitWidth}
+                          pipelineStages={pipelineStages}
+                          canEditDates={canEditDates}
+                          trialSegments={trialSegments}
+                          activeTimeOffs={activeTimeOffs}
+                          consultants={consultants}
+                          onSelectService={setSelectedService}
+                          onSelectTrial={() => {/* TODO: TrialSummaryModal */}}
+                        />
                       </div>
                     </div>
                   </div>
 
-                  {/* Legend (desktop only) */}
+                  {/* Legend */}
                   {isDesktop && (
                     <div className="pt-4 mt-2 border-t border-stone-200 flex-shrink-0">
                       <button
-                        onClick={() => setShowLegend(!showLegend)}
+                        onClick={() => setShowLegend((v) => !v)}
                         className="flex items-center gap-1.5 text-xs font-semibold text-stone-500 uppercase tracking-wider hover:text-stone-700 transition-colors"
                       >
                         {showLegend ? (
@@ -406,17 +619,12 @@ export function TimelinePage() {
                       {showLegend && (
                         <div className="flex items-center gap-6 flex-wrap mt-3">
                           {LEGEND_ITEMS.map((item) => (
-                            <div
-                              key={item.label}
-                              className="flex items-center gap-2"
-                            >
+                            <div key={item.label} className="flex items-center gap-2">
                               <div
                                 className="w-4 h-4 rounded"
                                 style={{ backgroundColor: item.color }}
                               />
-                              <span className="text-sm text-stone-600">
-                                {item.label}
-                              </span>
+                              <span className="text-sm text-stone-600">{item.label}</span>
                             </div>
                           ))}
                         </div>
@@ -425,7 +633,6 @@ export function TimelinePage() {
                   )}
                 </div>
               ) : (
-                /* ── Empty state (bible copy verbatim) ── */
                 <div
                   className="text-center py-12"
                   style={{ color: 'var(--theme-stone-500)' }}

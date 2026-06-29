@@ -1,6 +1,6 @@
 # Plan — page-parity-verification-hardening
 
-_Generated: 2026-05-29 (Claude Opus 4.8)_
+_Generated: 2026-05-29 (Claude Opus 4.8) — Updated: 2026-06-28 (claude-sonnet-4-6, /kbd-analyze findings)_
 
 ---
 
@@ -79,9 +79,10 @@ server.** The deployed-vs-deployed drift path (mechanism 1) has no blocker.
 
 | # | Change ID | Title | Depends on |
 |---|-----------|-------|-----------|
-| 11 | change-V11 | Drift remediation: fix every parity defect surfaced in V03–V10 (copy/color/missing-section/font/deep-link). Per RULE 0.3, fix systemic primitive bugs in the primitive, not per-page | V03–V10 |
+| 11 | change-V11 | Drift remediation: fix every parity defect surfaced in V03–V10 (copy/color/missing-section/font/deep-link). Per RULE 0.3, fix systemic primitive bugs in the primitive, not per-page. **Includes 3 pre-confirmed CSS bugs from /kbd-analyze: (S-1) marketing page font override via applyThemeVars, (S-2) missing [role="dialog"] theming selectors in index.css, (S-3) iOS standalone @media + Quill classes verification.** | V03–V10 |
+| 11a | change-V11a | **NEW (from /kbd-analyze 2026-06-28)** — Schema gap migrations: create Supabase migrations for 4 bible entity tables missing from the port: `deal_note`, `lead_activity`, `favorites_list`, and investigate `sample_data`. Apply via `psql` (RULE 1.1). | None (independent) |
 | 12 | change-V12 | Pay down 37 `react-hooks/exhaustive-deps` warnings on heavy ported pages (HSH projections, dashboard widgets) | V03–V10 |
-| 13 | change-V13 | Final gate: full gate trio green + full `pnpm test:bible-parity` + `pnpm test:visual-parity` ≤5% drift on every surface at 1440×900 + 375×667; Lighthouse a11y ≥90 on key pages | V11, V12 |
+| 13 | change-V13 | Final gate: full gate trio green + full `pnpm test:bible-parity` + `pnpm test:visual-parity` ≤5% drift on every surface at 1440×900 + 375×667; Lighthouse a11y ≥90 on key pages | V11, V11a, V12 |
 
 ---
 

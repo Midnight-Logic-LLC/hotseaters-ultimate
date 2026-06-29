@@ -417,7 +417,7 @@ export function LeadRadarPage() {
                 color: 'var(--theme-stone-600)',
               }}
             >
-              Track potential leads and follow up before they go cold
+              Track potential trials and opportunities from external sources
             </p>
           </div>
         </div>

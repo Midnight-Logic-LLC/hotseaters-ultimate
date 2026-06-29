@@ -231,16 +231,16 @@ export function InvoicesPage() {
   const isMobile = useIsMobile();
 
   // ── Tier-2 data stubs (replace with billing store hook when landed) ─────────
-  const invoices: Invoice[] = [];
-  const clients: Client[] = [];
-  const trials: Trial[] = [];
+  const invoices = useMemo<Invoice[]>(() => [], []);
+  const clients = useMemo<Client[]>(() => [], []);
+  const trials = useMemo<Trial[]>(() => [], []);
   const timeEntries: unknown[] = [];
   const expenses: unknown[] = [];
   const subcontractAssignments: unknown[] = [];
   const hiringCompanies: Array<{ id: string; name?: string; firm_name?: string }> = [];
   const hshTrials: Trial[] = [];
   const isBillingDataLoading = false;
-  const billingData = { loaded: true } as Record<string, unknown>;
+  const billingData = useMemo<Record<string, unknown>>(() => ({ loaded: true }), []);
 
   void userInfo;
   void company;
