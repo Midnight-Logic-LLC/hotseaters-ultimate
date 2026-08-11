@@ -47,6 +47,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Required for Azure Workload Identity Federation: the job must be able
+      # to request the GitHub OIDC token that azure/login exchanges for Azure
+      # credentials.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
